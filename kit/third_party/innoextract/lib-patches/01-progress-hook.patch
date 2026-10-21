@@ -1,0 +1,38 @@
+--- a/src/util/console.cpp
++++ b/src/util/console.cpp
+@@ -346,7 +346,13 @@
+ 	  start_time(boost::posix_time::microsec_clock::universal_time()),
+ 	  last_status(-1.f), last_time(0), last_rate(0.f) { }
+ 
++bool (*progress::hook)(boost::uint64_t delta) = NULL;
++
+ bool progress::update(boost::uint64_t delta, bool force) {
++	
++	if(hook && !hook(delta)) {
++		throw cancelled();
++	}
+ 	
+ 	if(!show_progress) {
+ 		return false;
+--- a/src/util/console.hpp
++++ b/src/util/console.hpp
+@@ -113,6 +113,19 @@
+ public:
+ 	
+ 	/*!
++	 * Thrown by \ref update when \ref hook asks to stop.
++	 * (recomp: added for the launcher's in-process innoextract.)
++	 */
++	struct cancelled { };
++	
++	/*!
++	 * Called with every \ref update's delta, whether or not the bar is shown;
++	 * returning false makes \ref update throw \ref cancelled.
++	 * (recomp: added for the launcher's in-process innoextract.)
++	 */
++	static bool (*hook)(boost::uint64_t delta);
++	
++	/*!
+ 	 * \param max_value       Maximumum progress values.
+ 	 *                        If this value is \c 0, the progress bar will be unbounded.
+ 	 * \param show_value_rate Display the rate at which the progress changes.

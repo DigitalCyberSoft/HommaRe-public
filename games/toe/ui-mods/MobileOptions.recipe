@@ -1,0 +1,10 @@
+# Made by tools/mobile_options_mod.py --game toe; applied by kit/host/ui_mods.cpp.
+recipe	2
+name	MobileOptions-toe
+out	UserMODs/MobileOptions.h5u
+date	2031-01-01 00:00:00
+layer	data/data.pak
+layer	data/a2p1-data.pak
+file	UI/uiconsts.(UIGameConstsH5).xdb	fd525160edf2f4c80ac6cf15f16138630456b13b663daf145f270b1479634254
+@	1032	1
+*								<Hide>true</Hide>

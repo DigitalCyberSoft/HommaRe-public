@@ -1,0 +1,53 @@
+# Made by tools/touch_ui_mod.py --game hof; applied by kit/host/ui_mods.cpp.
+recipe	2
+name	TouchUI-hof
+out	data/zz-touch-ui.pak
+date	2031-01-01 00:00:00
+layer	data/data.pak
+layer	data/p0-data.pak
+layer	data/p1-data.pak
+layer	data/p2-data.pak
+layer	data/p3c-data.pak
+layer	dataa1/a1-data.pak
+layer	dataa1/a1p1-data.pak
+file	UI/Common/Creatures/DragFrame.(BackgroundSimpleTexture).xdb	c76902ed6d3c53ec846087ef6411595a54e1b95ebc607049e270314e2929b4d3	UI/Common/Creatures/Selection.(BackgroundSimpleTexture).xdb
+@	1	1
+*<BackgroundSimpleTexture ObjectRecordID="7731002">
+@	3	1
+*	<Texture href="DragFrame.(Texture).xdb#xpointer(/Texture)"/>
+file	UI/Common/Creatures/DragFrame.(Texture).dds	a4987fbc53a92bfda59a23720533ecf52e1c86875e17e619cba3e984d52f4a58	UI/Common/Creatures/Selection.(Texture).dds
+turn	left
+file	UI/Common/Creatures/DragFrame.(Texture).xdb	8eaf23c179b4def6bd1353a307663c325393161f769a02bbea17979bdf5f6675	UI/Common/Creatures/Selection.(Texture).xdb
+@	1	3
+*<Texture ObjectRecordID="7731001">
+*	<SrcName href="/UI/Garrison/Stroke_icon-turned.TGA"/>
+*	<DestName href="DragFrame.(Texture).dds"/>
+@	8	2
+*	<Width>72</Width>
+*	<Height>70</Height>
+file	UI/Common/Creatures/DragFrameBack.(BackgroundSimpleTexture).xdb	68a8641c688106b13e8c680e46657914d023a0439b95baa34293c0502e38acc9	UI/Common/Creatures/SelectionBack.(BackgroundSimpleTexture).xdb
+@	1	1
+*<BackgroundSimpleTexture ObjectRecordID="7731004">
+@	3	1
+*	<Texture href="DragFrameBack.(Texture).xdb#xpointer(/Texture)"/>
+file	UI/Common/Creatures/DragFrameBack.(Texture).dds	a8872fa91f5c6a7bf900ca0a70a805bf3376fa7ff163a48eb1c2e7e7dc1d99ee	UI/Common/Creatures/SelectionBack.(Texture).dds
+turn	left
+file	UI/Common/Creatures/DragFrameBack.(Texture).xdb	6bc9ecde205e3f9e7150ff4274870b6b2978e0149fd6dabedb87e87951641228	UI/Common/Creatures/SelectionBack.(Texture).xdb
+@	1	3
+*<Texture ObjectRecordID="7731003">
+*	<SrcName href="/UI/Garrison/drag_icon_back-turned.tga"/>
+*	<DestName href="DragFrameBack.(Texture).dds"/>
+@	8	2
+*	<Width>72</Width>
+*	<Height>70</Height>
+file	UI/Common/Creatures/DragIcon.(WindowSimpleShared).xdb	baaebc0bcc838c19513c5fe84b20c34ce1cdea514ed89bd467ade6d6a01fbf3f
+@	6	2
+*	<Background href="DragFrameBack.(BackgroundSimpleTexture).xdb#xpointer(/BackgroundSimpleTexture)"/>
+*	<Foreground href="DragFrame.(BackgroundSimpleTexture).xdb#xpointer(/BackgroundSimpleTexture)"/>
+@	29	2
+*				<x>72</x>
+*				<y>70</y>
+file	UI/Common/Creatures/DragIconCreatureIcon.(WindowSimple).xdb	bde827619e433edcdf73bdecbb654acb45cc9422b1db1d3d1ca310f0e3f3a070
+@	12	2
+*				<x>7</x>
+*				<y>9</y>

@@ -1,0 +1,17 @@
+# Made by tools/mobile_options_mod.py --game base; applied by kit/host/ui_mods.cpp.
+recipe	2
+name	MobileOptions
+out	UserMODs/MobileOptions.h5u
+date	2031-01-01 00:00:00
+layer	data/data.pak
+layer	data/p0-data.pak
+layer	data/p1-data.pak
+layer	data/p2-data.pak
+layer	data/p3c-data.pak
+layer	DataLS/p5-data.pak
+layer	DataLS/p6-data.pak
+layer	DataLS/p7-data.pak
+layer	DataLS/p8-data.pak
+file	UI/uiconsts.(UIGameConstsH5).xdb	50430d4b19a828919fa7def7693e0fb809927098703e3e25675341fbe4d43838
+@	996	1
+*								<Hide>true</Hide>

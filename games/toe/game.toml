@@ -1,0 +1,172 @@
+# game.toml - what the kit needs to know about Tribes of the East
+# (GOG 3.1 v3, Russian, a standalone install, bin/H5_Game.exe 3.1.2.99: the
+# 2025 MSVC 14.29 rebuild of the second expansion). Reads
+# profiles/autoexec_a2.cfg; its granny2.dll is the base game's code with an
+# Authenticode signature added (only the checksum and certificate differ).
+# Values marked "sentinel" are not identified yet: they point into the
+# zero-filled padding after .rsrc (0x0126f408-0x0126ffff), which the game never
+# references, so the kit's hooks compile and never fire. Replace each one with a
+# real address as bring-up finds it.
+
+[game]
+id = "homm5-toe"
+name = "Heroes of Might and Magic V: Tribes of the East"
+app_name = "HommaRe-ToE"
+bundle_id = "io.github.hommare.toe"
+previous_app_names = ["Heroes5ToE"]
+previous_bundle_ids = ["io.github.homm5-native-mac.toe"]
+executable = "H5_Game.exe"
+sha256 = "3eb6fce81071f48631360202d81d41c67b09d8b1807105b1f22c402e15d16268"
+image_base = 0x00400000
+entry_point = 0x00949fe3
+# The game runs from bin/ and reads ..\data; original/ links to a flattened
+# view (bin/ files beside data/, profiles/...) so ".." at the root clamps to it.
+guest_root = 'C:\Heroes5'
+# The Russian release: profile and save names are ANSI in Windows-1251.
+ansi_codepage = 1251
+developer_exe = "original/H5_Game.exe"
+windows_version = "5.1.2600"
+# The image ends at 0x01305000, above the kit's default heap base (0x01000000).
+heap_base = 0x01400000
+# The arena reaches past 0x50000000 for granny2.dll, which has to sit at its
+# own base (see [modules.aux.granny2]); the extra heap stays below 1 GB.
+# 0x10000000-0x10400000 is kept for DLLs translated beside the exe.
+guest_size = 0x50100000
+heap_extra_base = 0x10400000
+heap_extra_size = 0x2fc00000
+
+# CPUID reports SSE and SSE2: the game's and granny2's vectorised skinning,
+# vertex and animation paths instead of x87 (+26% fps on the zoomed-out map,
+# 2026-10-20). RECOMP_CPUID_SSE=0 turns it off for a run.
+cpuid_sse = true
+
+[translate]
+listings = "analysis/decompiled/H5_Game.exe"
+globals = "globals.toml"
+animation_counter = 0x0126ff00  # sentinel
+volatile_reads = []
+# Thread bodies Ghidra misses get listed here as bring-up finds them.
+entry_points = []
+# Native code linked with the translation: the shared touch adapter, settings
+# save, map camera, the phone's interface and Hor+ (native/*.c). header (native/overrides.h) holds the
+# FN_<addr> replacements every translated chunk includes; addresses
+# (native/addresses.h) this game's addresses, which only these sources include.
+native = { header = "native/overrides.h", addresses = "native/addresses.h", sources = ["../../native/overrides.c", "../../native/touch.c", "../../native/save.cpp", "../../native/camera.c", "../../native/phone_hud.c", "../../native/horplus.c", "../../native/ui_bounds.c", "../../native/granny.c", "../../native/lighting.c", "../../native/scene.c", "../../native/gpu_skin.cpp", "../../native/phone_layout.c", "../../native/render_split.c", "../../native/tap_attack.c"] }
+# A Direct3D 9 game: no DirectDraw lock to track, so stores skip the watch/dirty check.
+store_hooks = false
+# As in the base game: flags are followed over the jumps inside a function
+# (CMP; Jcc computes only what is read after it), and the eight registers live
+# in C locals inside each translated body.
+flag_liveness = "cfg"
+reg_cache = true
+# As in the base game (game.toml there): lazy buffers by page protection, guest
+# memory at a fixed address (macOS), and the CALL continuation hint for RET.
+write_track = "protect"
+fixed_guest_base = true
+ret_hint = true
+lean_calls = true
+
+# RAD Game Tools' Granny 2 (bin/granny2.dll, VC6, 2004): models and skeletal
+# animation; H5_Game.exe imports 46 of its 772 exports. Translated like the
+# game. It imports only KERNEL32 and MessageBoxA.
+# It must stay at its preferred base 0x50000000, not a rebased copy: the
+# game's .gr2 files carry raw pointers to granny2's built-in type
+# definitions as the exporter saw them (0x50055080 and its neighbours), and
+# the loader's type comparison (50001de0) follows them. A copy
+# rebased to 0x10200000 crashed there on the first animation
+# (bin/Animations/069F5387-..., run 2026-10-17).
+[modules.aux.granny2]
+name = "granny2.dll"
+path = "original/granny2.dll"
+sha256 = "b40c1636c298ba0af1bfda8cc6db38c73924a2f85397976e40cf2fc2365aae00"
+base = 0x50000000
+size = 0x86000
+listings = "analysis/decompiled/granny2.dll"
+
+[hooks]
+# All sentinels until bring-up identifies them.
+frame_clock_begin = 0x0126ff10
+frame_clock_wait = 0x0126ff14
+frame_clock_wait_clamp = 0x0126ff18
+frame_clock_clamp_deadline = 0x0126ff20
+frame_clock_wait_deadline = 0x0126ff24
+cursor_surface_ptrs = [0x0126ff30, 0x0126ff34]
+mouse_vtable = 0x0126ff40
+mouse_device_ptr = 0x0126ff44
+mouse_device_right = 0x0126ff48
+camera = 0x0126ff50
+sprites = []
+
+[mods]
+builtin = "none"
+
+# "Exit to Windows" is not where a Mac or an iPad goes (see the base game's
+# game.toml [texts]).
+[texts]
+pak = "data/zz-port-texts.pak"
+files = [
+    "Text/ExitMenu/ExitTheGame.txt",
+    "UI/EscMenu/QuitToWindows.txt",
+    "UI/EscMenu/TTQuit.txt",
+    "UI/ExitGameQuestion/Header.txt",
+    "UI/ExitGameQuestion/Question.txt",
+    "UI/MainMenu2/TTQuit.txt",
+    "UI/CombatReplayScreen/TTQuitFromReplay.txt",
+    # The buttons' click, at a quarter of its volume.
+    "Sounds/_(Sound)/Interface/General/standart_click.xdb",
+    "Sounds/_(Sound)/Interface/General/standart_disabled_click.xdb",
+]
+replace = { "в  Windows" = "в систему", "в Windows" = "в систему", "to Windows" = "to Desktop", "<VolumeBase>1</VolumeBase>" = "<VolumeBase>0.25</VolumeBase>" }
+
+[controls]
+pad = "off"
+
+# Heroes V shows its info blocks on hover: a finger that rests hovers instead
+# of right-clicking, a second finger right-clicks (design notes 1.1).
+# The full keyboard stays folded away until asked for.
+[touch]
+keypad = "hidden"
+gestures = "hover"
+# A finger drag pans with the game's wheel-button drag (camera_strafe_mouse /
+# camera_forward_mouse), which moves the camera a little per mouse count: a
+# pan scales its counts so the map keeps up with the finger. Measured in the
+# simulator, 2026-10-18 (campaign map 1, Битва полов): the camera's pan, its wheel
+# zoom and its Delete/Insert turn all answer against the fingers.
+pan_gain = 28
+invert = ["panx", "pany", "rotate"]
+
+# A new profile starts at the screen's own size ("screen": 2752x2064 on a
+# 13-inch iPad, 2796x1290 on an iPhone 15 Pro Max), not the game's 1024x768
+# (the imported copy's default profile is edited at launch). The interface is
+# drawn at it; the 3D at the launcher's render quality, upscaled by MetalFX.
+[ios]
+# A strategy map wants the width: an iPhone plays it in landscape only.
+portrait = false
+# On an iPhone only, the corner menus' mod (the layout itself is native). The
+# game anchors its screens to the edges itself. On every iOS device the
+# dragged creature's icon is framed for a finger and the screen resolution is
+# out of the options; everywhere the dialogue scenes span the whole screen.
+# All are made on the device from the player's install (ui-mods/<name>.recipe,
+# kit/host/ui_mods.cpp; tools/ui_recipes.py writes them).
+ui_mods = ["Widescreen", "PhoneUI", "TouchUI", "MobileOptions"]
+cfg_defaults = { "profiles/default_profile/user_a2.cfg" = { gfx_resolution = "screen", ui_use_hwcursor = "1" } }
+
+# The dialogue scenes across the whole screen on a Mac too.
+[macos]
+ui_mods = ["Widescreen"]
+
+[launcher]
+title = "Heroes of Might and Magic V: Tribes of the East"
+install_names = ["Heroes of Might and Magic V", "Heroes V", "HoMM5"]
+min_free_mb = 300
+
+[setup]
+required_dirs = ["bin", "data", "profiles"]
+
+[bundle]
+exclude = ["__redist", "commonappdata", "tmp", "Editor", "Editor Documentation", "*.pdf"]
+
+[settings]
+rows = ["window", "frame_limit", "performance_overlay", "filtering"]
+page = "tabs"
+scaling = "smooth"

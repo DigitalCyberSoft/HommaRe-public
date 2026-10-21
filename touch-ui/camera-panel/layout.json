@@ -1,0 +1,72 @@
+{
+ "variant": "4x1-vertical",
+ "canvas": [
+  461,
+  1324
+ ],
+ "source": "camera-4x1v-1.jpg",
+ "narrowedBy": 268,
+ "sprites": {
+  "btn-rotate-left": {
+   "x": 109,
+   "y": 78,
+   "w": 283,
+   "h": 283,
+   "center": [
+    249.8,
+    218.8
+   ],
+   "radius": 140.0
+  },
+  "btn-rotate-right": {
+   "x": 110,
+   "y": 364,
+   "w": 277,
+   "h": 277,
+   "center": [
+    248.2,
+    502.2
+   ],
+   "radius": 137.0
+  },
+  "btn-zoom-in": {
+   "x": 108,
+   "y": 647,
+   "w": 285,
+   "h": 285,
+   "center": [
+    249.8,
+    788.8
+   ],
+   "radius": 141.0
+  },
+  "btn-zoom-out": {
+   "x": 106,
+   "y": 938,
+   "w": 285,
+   "h": 285,
+   "center": [
+    248.2,
+    1079.8
+   ],
+   "radius": 141.0
+  },
+  "btn-collapse": {
+   "x": -9,
+   "y": 1168,
+   "w": 161,
+   "h": 161,
+   "center": [
+    71.2,
+    1247.8
+   ],
+   "radius": 79.0
+  },
+  "frame": {
+   "x": 29,
+   "y": 0,
+   "w": 433,
+   "h": 1324
+  }
+ }
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>@RECOMP_APP_NAME@</string>
+    <key>CFBundleDisplayName</key>
+    <string>@RECOMP_GAME_NAME@</string>
+    <key>CFBundleIdentifier</key>
+    <string>@RECOMP_BUNDLE_ID@</string>
+    <key>CFBundleExecutable</key>
+    <string>@RECOMP_APP_NAME@</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>@RECOMP_BUNDLE_BUILD_VERSION@</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@RECOMP_BUNDLE_SHORT_VERSION@</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <!-- A game: macOS Game Mode (CPU and GPU priority, lower controller latency) in full screen. -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.games</string>
+    <key>LSSupportsGameMode</key>
+    <true/>
+    <!-- What the app was called before a rename (game.toml previous_*): the launcher
+         takes its remembered folders and choices from the former defaults. -->
+    <key>RecompPreviousAppNames</key>
+    <array>@RECOMP_PREVIOUS_APP_NAMES_PLIST@</array>
+    <key>RecompPreviousBundleIDs</key>
+    <array>@RECOMP_PREVIOUS_BUNDLE_IDS_PLIST@</array>
+</dict>
+</plist>

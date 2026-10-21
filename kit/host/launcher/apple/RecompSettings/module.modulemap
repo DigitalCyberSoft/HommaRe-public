@@ -1,0 +1,14 @@
+// The player's settings file (mods/settings_file.h) for the Swift launcher,
+// which sets the game's frame and energy choices before the game runs.
+module RecompSettingsFile {
+    header "../../../../mods/settings_file.h"
+    export *
+}
+
+// innoextract as a library (third_party/innoextract/lib, build-ios.sh): the
+// iOS launcher installs from GOG installers in-process with it. Only builds
+// that link the library (RECOMP_INNOEXTRACT_LIB) import it.
+module RecompInnoextract {
+    header "../../../../third_party/innoextract/lib/recomp_innoextract.h"
+    export *
+}

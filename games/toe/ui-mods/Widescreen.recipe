@@ -1,0 +1,414 @@
+# Made by tools/widescreen_mod.py --game toe --wide-dialogues; applied by kit/host/ui_mods.cpp.
+recipe	2
+name	Widescreen-toe
+out	UserMODs/Widescreen.h5u
+date	2030-06-01 12:00:00
+layer	data/data.pak
+layer	data/a2p1-data.pak
+file	UI/DialogueScreen.(WindowScreen).xdb	b495cfd9b7495c98bb7112430da38ae1a1ce601c815d9629188cae1cd23af302
+@	57	1
+*	<HorAlign>ALIGN_SCREEN</HorAlign>
+file	UI/DialogueScreen.(WindowScreenShared).xdb	48bd711d1a4d9b9cc25aa288fa1dca964e8ae707a060e5e630a3346cbcafc92c
+@	10	2
+new	UI/DialogueScreen/DialoguePanel-Wide.(BackgroundTiledTexture).xdb
++<?xml version="1.0" encoding="UTF-8"?>
++<BackgroundTiledTexture>
++	<ClassTypeID>285694786</ClassTypeID>
++	<Texture href="/UI/DialogueScreen/DialoguePanel.(Texture).xdb#xpointer(/Texture)"/>
++	<Color>-1</Color>
++	<rLT>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rLT>
++	<rRT>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rRT>
++	<rLB>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rLB>
++	<rRB>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rRB>
++	<rT>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rT>
++	<rL>
++		<Size>
++			<x>190</x>
++			<y>256</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>190</x2>
++			<y2>256</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rL>
++	<rR>
++		<Size>
++			<x>116</x>
++			<y>256</y>
++		</Size>
++		<Maps>
++			<x1>908</x1>
++			<y1>0</y1>
++			<x2>1024</x2>
++			<y2>256</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rR>
++	<rB>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rB>
++	<rF>
++		<Size>
++			<x>718</x>
++			<y>256</y>
++		</Size>
++		<Maps>
++			<x1>190</x1>
++			<y1>0</y1>
++			<x2>908</x2>
++			<y2>256</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rF>
++</BackgroundTiledTexture>
+file	UI/DialogueScreen/DialoguePanel.(WindowSimple).xdb	fe792567db5fe6282564575c4284c258058b92716d14da96ddfb735c469faa60
+@	22	2
+*			<First>EPA_MARGIN</First>
+*			<Second>true</Second>
+@	37	1
+*			<Second>true</Second>
+@	44	1
+*			<Second>true</Second>
+file	UI/DialogueScreen/DialoguePanel.(WindowSimpleShared).xdb	4a6a1b645f07a44a25f206015018daae89832c03031fe4661682fd428b2a9557
+@	4	1
+*	<Background href="DialoguePanel-Wide.(BackgroundTiledTexture).xdb#xpointer(/BackgroundTiledTexture)"/>
+new	UI/DialogueScreen/DialogueTop-Wide.(BackgroundTiledTexture).xdb
++<?xml version="1.0" encoding="UTF-8"?>
++<BackgroundTiledTexture>
++	<ClassTypeID>285694786</ClassTypeID>
++	<Texture href="/UI/DialogueScreen/DialogueTop.(Texture).xdb#xpointer(/Texture)"/>
++	<Color>-1</Color>
++	<rLT>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rLT>
++	<rRT>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rRT>
++	<rLB>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rLB>
++	<rRB>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rRB>
++	<rT>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rT>
++	<rL>
++		<Size>
++			<x>200</x>
++			<y>64</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>200</x2>
++			<y2>64</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rL>
++	<rR>
++		<Size>
++			<x>184</x>
++			<y>64</y>
++		</Size>
++		<Maps>
++			<x1>840</x1>
++			<y1>0</y1>
++			<x2>1024</x2>
++			<y2>64</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rR>
++	<rB>
++		<Size>
++			<x>0</x>
++			<y>0</y>
++		</Size>
++		<Maps>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rB>
++	<rF>
++		<Size>
++			<x>640</x>
++			<y>64</y>
++		</Size>
++		<Maps>
++			<x1>200</x1>
++			<y1>0</y1>
++			<x2>840</x2>
++			<y2>64</y2>
++		</Maps>
++		<Rect>
++			<x1>0</x1>
++			<y1>0</y1>
++			<x2>0</x2>
++			<y2>0</y2>
++		</Rect>
++		<Rotate>0</Rotate>
++	</rF>
++</BackgroundTiledTexture>
+file	UI/DialogueScreen/DialogueTop.(WindowSimple).xdb	cb0e7718871e505aa6d729ae4300aecae1f5e58a82c8d43b6ead74beee30e45a
+@	22	2
+*			<First>EPA_MARGIN</First>
+*			<Second>true</Second>
+@	37	1
+*			<Second>true</Second>
+@	44	1
+*			<Second>true</Second>
+file	UI/DialogueScreen/DialogueTop.(WindowSimpleShared).xdb	b035ed19b9fa5df75881a25bfd150cd3901962b219e409a419bb125a9d11b70f
+@	4	1
+*	<Background href="DialogueTop-Wide.(BackgroundTiledTexture).xdb#xpointer(/BackgroundTiledTexture)"/>
+file	UI/DialogueScreen/HeroFace.(WindowSimple).xdb	1fe62e972812bb348bc7d33e26cf2ac759331f82d6f0b3ddc8774b02d88423e3
+@	12	1
+*				<x>-429</x>
+@	22	2
+*			<First>ERA_CENTER</First>
+*			<Second>true</Second>
+file	UI/DialogueScreen/HeroName.(WindowTextView).xdb	3dbbc4c484cd416e96525562d9acaf366229abe51f9aa230d3374714f38a638d
+@	12	1
+*				<x>-79</x>
+@	22	2
+*			<First>ERA_CENTER</First>
+*			<Second>true</Second>
+file	UI/DialogueScreen/HeroText.(WindowTextView).xdb	638acd1f2403e44b5b27c232f4a6c02613631f0885defd6ecb1b534203382dd6
+@	12	1
+*				<x>-79</x>
+@	22	2
+*			<First>ERA_CENTER</First>
+*			<Second>true</Second>
+file	UI/DialogueScreen/SkipScene.(WindowMSButton).xdb	e3195c37f446bde72ccddf9ac527f1a6557c4aa5e77b5670cefda7af959857ac
+@	25	1
+*				<x>408</x>
+@	35	2
+*			<First>ERA_CENTER</First>
+*			<Second>true</Second>

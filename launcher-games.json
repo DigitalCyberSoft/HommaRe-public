@@ -1,0 +1,218 @@
+{
+  "title": "HommaRe",
+  "tagline": {
+    "en": "Native port for macOS and iOS",
+    "ru": "Нативный порт для macOS и iOS",
+    "cs": "Nativní port pro macOS a iOS",
+    "de": "Nativer Port für macOS und iOS",
+    "es": "Port nativo para macOS e iOS",
+    "fr": "Portage natif pour macOS et iOS",
+    "it": "Port nativo per macOS e iOS",
+    "hu": "Natív port macOS-re és iOS-re",
+    "pl": "Natywny port na macOS i iOS",
+    "zh-Hans": "适用于 macOS 和 iOS 的原生移植版"
+  },
+  "legal": {
+    "en": "An unofficial fan port, not affiliated with Ubisoft. No game files are included: play your own GOG copy.",
+    "ru": "Неофициальный фанатский порт, не связан с Ubisoft. Файлы игры не входят в приложение — нужна ваша копия с GOG.",
+    "cs": "Neoficiální fanouškovský port, bez vazby na Ubisoft. Soubory hry nejsou součástí — potřebujete vlastní kopii z GOG.",
+    "de": "Ein inoffizieller Fan-Port, nicht mit Ubisoft verbunden. Spieldateien sind nicht enthalten: Spiele mit deiner eigenen GOG-Kopie.",
+    "es": "Un port no oficial hecho por fans, sin relación con Ubisoft. No incluye archivos del juego: juega con tu propia copia de GOG.",
+    "fr": "Un portage non officiel réalisé par des fans, sans lien avec Ubisoft. Aucun fichier du jeu n’est inclus : jouez avec votre propre copie GOG.",
+    "it": "Un port amatoriale non ufficiale, non affiliato a Ubisoft. I file del gioco non sono inclusi: gioca con la tua copia GOG.",
+    "hu": "Nem hivatalos rajongói port, a Ubisofthoz nem kapcsolódik. A játék fájljait nem tartalmazza: a saját GOG-példányoddal játssz.",
+    "pl": "Nieoficjalny port fanowski, niezwiązany z Ubisoftem. Pliki gry nie są dołączone — graj na własnej kopii z GOG.",
+    "zh-Hans": "非官方的玩家移植版，与 Ubisoft 无关。不含任何游戏文件：请使用你自己的 GOG 版本。"
+  },
+  "installNames": ["Heroes of Might and Magic V", "Heroes V", "HoMM5", "Heroes 5", "Tribes of the East"],
+  "exclude": ["__redist", "commonappdata", "tmp", "Editor", "Editor Documentation", "FanDocuments", "*.pdf", "*.part"],
+  "installers": [
+    {
+      "id": "gog-homm5",
+      "gogId": "1207661143",
+      "title": {
+        "en": "Heroes V and Hammers of Fate",
+        "ru": "Heroes V и Владыки Севера",
+        "cs": "Heroes V a Hammers of Fate",
+        "de": "Heroes V und Hammers of Fate",
+        "es": "Heroes V y Hammers of Fate",
+        "fr": "Heroes V et Hammers of Fate",
+        "it": "Heroes V e Hammers of Fate",
+        "hu": "Heroes V és Hammers of Fate",
+        "pl": "Heroes V i Kuźnia Przeznaczenia",
+        "zh-Hans": "英雄无敌V 与 命运之锤"
+      },
+      "folder": "Heroes of Might and Magic V",
+      "manifests": ["gog-1207661143-ru.json", "gog-1207661143-en.json"],
+      "games": ["homm5", "homm5-hof"]
+    },
+    {
+      "id": "gog-homm5-toe",
+      "gogId": "1207661193",
+      "title": {
+        "en": "Tribes of the East",
+        "ru": "Повелители Орды",
+        "cs": "Tribes of the East",
+        "de": "Tribes of the East",
+        "es": "Tribes of the East",
+        "fr": "Tribes of the East",
+        "it": "Tribes of the East",
+        "hu": "Tribes of the East",
+        "pl": "Dzikie Hordy",
+        "zh-Hans": "东方部落"
+      },
+      "folder": "Heroes of Might and Magic V - Tribes of the East",
+      "manifests": ["gog-1207661193-ru.json", "gog-1207661193-en.json"],
+      "games": ["homm5-toe"]
+    }
+  ],
+  "games": [
+    {
+      "id": "homm5",
+      "module": "homm5",
+      "title": {
+        "en": "Heroes of Might and Magic V",
+        "ru": "Heroes of Might and Magic V",
+        "cs": "Heroes of Might and Magic V",
+        "de": "Heroes of Might and Magic V",
+        "es": "Heroes of Might and Magic V",
+        "fr": "Heroes of Might and Magic V",
+        "it": "Heroes of Might and Magic V",
+        "hu": "Heroes of Might and Magic V",
+        "pl": "Heroes of Might and Magic V",
+        "zh-Hans": "魔法门之英雄无敌V"
+      },
+      "subtitle": {
+        "en": "The original game",
+        "ru": "Оригинальная игра",
+        "cs": "Původní hra",
+        "de": "Das Originalspiel",
+        "es": "El juego original",
+        "fr": "Le jeu original",
+        "it": "Il gioco originale",
+        "hu": "Az eredeti játék",
+        "pl": "Oryginalna gra",
+        "zh-Hans": "原版游戏"
+      },
+      "year": "2006",
+      "version": "1.60",
+      "blurb": {
+        "en": "Ashan at war: six campaigns for the Haven, Inferno, Necropolis, Sylvan, Academy and Dungeon factions.",
+        "ru": "Война за Асхан: шесть кампаний — Орден Порядка, Инферно, Некрополис, Лесной союз, Академия и Лига Теней.",
+        "cs": "Ashan ve válce: šest kampaní za frakce Útočiště, Inferno, Nekropole, Sylván, Akademie a Žalář.",
+        "de": "Ashan im Krieg: sechs Kampagnen für die Fraktionen Zuflucht, Inferno, Nekropolis, Sylvan, Akademie und Kerker.",
+        "es": "Ashan en guerra: seis campañas para las facciones Refugio, Inferno, Necrópolis, Silvanos, Academia y Mazmorra.",
+        "fr": "Ashan en guerre : six campagnes pour les factions Havre, Inferno, Nécropole, Sylve, Académie et Donjon.",
+        "it": "Ashan in guerra: sei campagne per le fazioni Rifugio, Inferno, Necropoli, Silvani, Accademia e Dungeon.",
+        "hu": "Háborúban Ashan: hat hadjárat a Menedék, Inferno, Nekropolisz, Sylvan, Akadémia és Kazamata frakciók számára.",
+        "pl": "Ashan w ogniu wojny: sześć kampanii dla frakcji Przystań, Inferno, Nekropolia, Sylwan, Akademia i Loch.",
+        "zh-Hans": "战火中的亚山：圣堂、地狱、墓园、森林、学院和地下城六大派系的六场战役。"
+      },
+      "gogId": "1207661143",
+      "exe": ["bin/H5_Game.exe", "H5_Game.exe"],
+      "sha256": ["820786b0f85c62ca96a1a5b18d03d60185047ae8dab09ef6f0b299e3abcfba7c"],
+      "requiredDirs": ["data", "profiles"],
+      "art": ["splash.bmp"],
+      "artCrop": [0, 0, 1, 0.6],
+      "accent": "#E3BA6E"
+    },
+    {
+      "id": "homm5-hof",
+      "module": "homm5-hof",
+      "title": {
+        "en": "Hammers of Fate",
+        "ru": "Владыки Севера",
+        "cs": "Hammers of Fate",
+        "de": "Hammers of Fate",
+        "es": "Hammers of Fate",
+        "fr": "Hammers of Fate",
+        "it": "Hammers of Fate",
+        "hu": "Hammers of Fate",
+        "pl": "Kuźnia Przeznaczenia",
+        "zh-Hans": "命运之锤"
+      },
+      "subtitle": {
+        "en": "First expansion",
+        "ru": "Первое дополнение",
+        "cs": "První datadisk",
+        "de": "Erstes Add-on",
+        "es": "Primera expansión",
+        "fr": "Première extension",
+        "it": "Prima espansione",
+        "hu": "Első kiegészítő",
+        "pl": "Pierwszy dodatek",
+        "zh-Hans": "第一部资料片"
+      },
+      "year": "2006",
+      "version": "2.1",
+      "blurb": {
+        "en": "The dwarven Fortress joins the war with rune magic, three new campaigns, caravans and the random map generator.",
+        "ru": "В войну вступают гномы Северных кланов: рунная магия, три новые кампании, караваны и генератор случайных карт.",
+        "cs": "Do války vstupuje trpasličí Pevnost: runová magie, tři nové kampaně, karavany a generátor náhodných map.",
+        "de": "Die zwergische Festung zieht in den Krieg: Runenmagie, drei neue Kampagnen, Karawanen und der Zufallskarten-Generator.",
+        "es": "La Fortaleza de los enanos entra en guerra: magia rúnica, tres campañas nuevas, caravanas y el generador de mapas aleatorios.",
+        "fr": "La Forteresse des nains entre en guerre : magie des runes, trois nouvelles campagnes, caravanes et générateur de cartes aléatoires.",
+        "it": "La Fortezza dei nani entra in guerra: magia runica, tre nuove campagne, carovane e il generatore di mappe casuali.",
+        "hu": "Háborúba lép a törpék Erődje: rúnamágia, három új hadjárat, karavánok és véletlenszerű térképgenerátor.",
+        "pl": "Do wojny dołącza krasnoludzka Forteca: magia run, trzy nowe kampanie, karawany i generator losowych map.",
+        "zh-Hans": "矮人要塞加入战争：符文魔法、三场全新战役、商队以及随机地图生成器。"
+      },
+      "gogId": "1207661143",
+      "exe": ["bina1/H5_Game.exe"],
+      "sha256": ["c15cc3c68a5bd1f3111d7d2fda7ef7607dbe96d1aedadaf463b50cbe41b40730"],
+      "requiredDirs": ["data", "dataa1", "profiles"],
+      "art": ["splasha1.bmp"],
+      "artCrop": [0, 0.19, 1, 0.63],
+      "accent": "#93BCE0"
+    },
+    {
+      "id": "homm5-toe",
+      "module": "homm5-toe",
+      "title": {
+        "en": "Tribes of the East",
+        "ru": "Повелители Орды",
+        "cs": "Tribes of the East",
+        "de": "Tribes of the East",
+        "es": "Tribes of the East",
+        "fr": "Tribes of the East",
+        "it": "Tribes of the East",
+        "hu": "Tribes of the East",
+        "pl": "Dzikie Hordy",
+        "zh-Hans": "东方部落"
+      },
+      "subtitle": {
+        "en": "Second expansion, standalone",
+        "ru": "Второе дополнение, самостоятельное",
+        "cs": "Druhý datadisk, samostatný",
+        "de": "Zweites Add-on, eigenständig",
+        "es": "Segunda expansión, independiente",
+        "fr": "Deuxième extension, autonome",
+        "it": "Seconda espansione, stand-alone",
+        "hu": "Második kiegészítő, önálló",
+        "pl": "Drugi dodatek, samodzielny",
+        "zh-Hans": "第二部资料片，可独立运行"
+      },
+      "year": "2007",
+      "version": "3.1",
+      "blurb": {
+        "en": "The orcs of the Stronghold, alternative creature upgrades, three campaigns, and widescreen and windowed modes.",
+        "ru": "Орки Великой Орды, альтернативные улучшения существ, три кампании, широкоформатные разрешения и оконный режим.",
+        "cs": "Orkové z Tvrze, alternativní vylepšení jednotek, tři kampaně a širokoúhlý i okenní režim.",
+        "de": "Die Orks der Hochburg, alternative Kreaturen-Aufwertungen, drei Kampagnen sowie Breitbild- und Fenstermodus.",
+        "es": "Los orcos del Bastión, mejoras alternativas de criaturas, tres campañas y modos panorámico y en ventana.",
+        "fr": "Les orques du Bastion, améliorations alternatives des créatures, trois campagnes, modes écran large et fenêtré.",
+        "it": "Gli orchi della Roccaforte, potenziamenti alternativi delle creature, tre campagne e modalità widescreen e in finestra.",
+        "hu": "Az Erődítmény orkjai, alternatív lényfejlesztések, három hadjárat, szélesvásznú és ablakos mód.",
+        "pl": "Orkowie z Twierdzy, alternatywne ulepszenia stworzeń, trzy kampanie oraz tryb panoramiczny i okienkowy.",
+        "zh-Hans": "据点的兽人、生物的替代升级、三场战役，以及宽屏和窗口模式。"
+      },
+      "gogId": "1207661193",
+      "exe": ["bin/H5_Game.exe"],
+      "sha256": ["3eb6fce81071f48631360202d81d41c67b09d8b1807105b1f22c402e15d16268"],
+      "requiredDirs": ["data", "profiles"],
+      "art": ["splasha2.bmp"],
+      "artCrop": [0, 0.22, 1, 0.66],
+      "accent": "#C58AD8"
+    }
+  ]
+}

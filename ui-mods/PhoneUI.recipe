@@ -1,0 +1,17 @@
+# Made by tools/phone_ui_mod.py --game base; applied by kit/host/ui_mods.cpp.
+# Neutral: it replaces an older PhoneUI that moved the windows.
+recipe	2
+name	PhoneUI
+out	phone/UserMODs/PhoneUI.h5u
+date	2031-01-01 00:00:00
+layer	data/data.pak
+layer	data/p0-data.pak
+layer	data/p1-data.pak
+layer	data/p2-data.pak
+layer	data/p3c-data.pak
+layer	DataLS/p5-data.pak
+layer	DataLS/p6-data.pak
+layer	DataLS/p7-data.pak
+layer	DataLS/p8-data.pak
+new	PhoneUI.txt
++The phone layout is native (native/phone_layout.c); tools/phone_ui_mod.py --data-layout writes the mod that moved the windows.

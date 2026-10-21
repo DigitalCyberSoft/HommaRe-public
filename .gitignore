@@ -1,0 +1,31 @@
+# Never commit game files or anything derived from them.
+original
+rebased/
+analysis/
+build/
+dist/
+
+# Local tooling and run output
+.venv/
+.DS_Store
+run-log.txt
+run-summary.txt
+build-log.txt
+*.log
+first-launch/
+analysis-log.txt
+build-log.txt
+analysis-granny-log.txt
+run-log*.txt
+run-prof.txt
+build-log*.txt
+test-log.txt
+test-build-log.txt
+runtime-tests-log.txt
+
+# Side-build symlinks and logs
+rebased
+build-ios-log.txt
+final-*.txt
+ios-*-log.txt
+

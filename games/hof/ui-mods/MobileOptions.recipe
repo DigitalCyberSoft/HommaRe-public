@@ -1,0 +1,15 @@
+# Made by tools/mobile_options_mod.py --game hof; applied by kit/host/ui_mods.cpp.
+recipe	2
+name	MobileOptions-hof
+out	data/zz-mobile-options.pak
+date	2031-01-01 00:00:00
+layer	data/data.pak
+layer	data/p0-data.pak
+layer	data/p1-data.pak
+layer	data/p2-data.pak
+layer	data/p3c-data.pak
+layer	dataa1/a1-data.pak
+layer	dataa1/a1p1-data.pak
+file	UI/uiconsts.(UIGameConstsH5).xdb	3472c0c6cbbb39ea004bf9b05e73bf0f7713381a6928617d8a6e72c0e39373f6
+@	915	1
+*								<Hide>true</Hide>
