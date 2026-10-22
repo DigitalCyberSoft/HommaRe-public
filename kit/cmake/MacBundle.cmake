@@ -91,6 +91,7 @@ function(pop_mac_bundle target)
             --bundle ${POP_BUILD_DIR}/${RECOMP_APP_NAME}.app
             --name ${RECOMP_APP_NAME} --cc ${CMAKE_C_COMPILER} --version ${POP_RECOMP_VERSION}
             --build-root ${POP_BUILD_ROOT} --game-dir ${RECOMP_GAME_DIR}
+            --launcher-dir ${RECOMP_LAUNCHER_CONFIG_DIR}
             ${video_args}
     WORKING_DIRECTORY ${POP_ROOT}
     COMMENT "Finishing ${RECOMP_APP_NAME}.app"

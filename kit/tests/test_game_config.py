@@ -180,6 +180,40 @@ class LoadTests(unittest.TestCase):
             self.assertIn('#define RECOMP_GAME_DIR "%s"' % game.resolve().as_posix(), header)
             self.assertIn('#define RECOMP_KIT_DIR "%s"' % ROOT.resolve().as_posix(), header)
 
+    def test_stage_dir_is_the_install_around_a_bin_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp) / "g"
+            (game / "install/bin").mkdir(parents=True)
+            (game / "globals.toml").write_text((ROOT / "games/stub/globals.toml").read_text())
+            stub = (ROOT / "games/stub/game.toml").read_text().replace(
+                'developer_exe = "original/STUB.EXE"', 'developer_exe = "install/bin/STUB.EXE"')
+            (game / "game.toml").write_text(stub + '\n[setup]\nrequired_dirs = ["bin", "data"]\n')
+            # Without the install's other folders: the executable's own.
+            self.assertEqual(game_config.load(game)["developer_stage_dir"], (game / "install/bin").resolve())
+            (game / "install/data").mkdir()
+            cfg = game_config.load(game)
+            self.assertEqual(cfg["developer_stage_dir"], (game / "install").resolve())
+            self.assertEqual(cfg["developer_game_dir"], (game / "install/bin").resolve())
+            self.assertIn('set(RECOMP_DEVELOPER_STAGE_DIR "%s")' % (game / "install").resolve().as_posix(),
+                          gen_game_config.render_cmake(cfg))
+
+    def test_launcher_config_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp) / "repo/games/x"
+            game.mkdir(parents=True)
+            (game / "globals.toml").write_text((ROOT / "games/stub/globals.toml").read_text())
+            stub = (ROOT / "games/stub/game.toml").read_text()
+            (game / "game.toml").write_text(stub)
+            self.assertEqual(game_config.load(game)["launcher_config_dir"], game.resolve())
+            (game / "game.toml").write_text(stub + '\n[launcher]\nconfig_dir = "../.."\n')
+            cfg = game_config.load(game)
+            self.assertEqual(cfg["launcher_config_dir"], (Path(tmp) / "repo").resolve())
+            self.assertIn('set(RECOMP_LAUNCHER_CONFIG_DIR "%s")' % (Path(tmp) / "repo").resolve().as_posix(),
+                          gen_game_config.render_cmake(cfg))
+            (game / "game.toml").write_text(stub + '\n[launcher]\nconfig_dir = 1\n')
+            with self.assertRaisesRegex(ValueError, "config_dir"):
+                game_config.load(game)
+
     def test_override_header_is_optional_and_must_exist(self):
         """[translate] overrides names the header the generated sources include
         before they define FN_<addr>, which is how a game replaces one

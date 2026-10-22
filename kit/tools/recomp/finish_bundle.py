@@ -42,12 +42,12 @@ def bundle_ffmpeg(contents, libraries):
         subprocess.run(["codesign", "--force", "--sign", "-", str(dest)], check=True)
 
 
-def bundle_installer(contents, game_dir, build_root):
+def bundle_installer(contents, launcher_dir, build_root):
     """The launcher's GOG installer support on the Mac: the install manifests
     (names, sizes and SHA-256 only) and the innoextract helper, built once
     per build tree by third_party/innoextract/build.sh (again when the script
     changes)."""
-    manifests = game_dir / "launcher-manifests"
+    manifests = launcher_dir / "launcher-manifests"
     if not manifests.is_dir() or not (contents / "MacOS").is_dir():
         return
     dest = contents / "Resources/launcher-manifests"
@@ -73,6 +73,9 @@ def main():
     parser.add_argument("--build-root", type=Path, default=ROOT / "build",
                         help="Where this build's outputs live (texture pack, symbols.json)")
     parser.add_argument("--game-dir", type=Path, required=True, help="The game directory (its mods/core is installed)")
+    parser.add_argument("--launcher-dir", type=Path, default=None,
+                        help="Where launcher-games.json, launcher-manifests/ and launcher-splash.jpg are "
+                             "(game.toml [launcher] config_dir; default the game directory)")
     parser.add_argument("--pack", type=Path, default=None)
     parser.add_argument("--ffmpeg-library", type=Path, action="append", default=[],
                         help="FFmpeg shared library to copy into Contents/Frameworks (repeatable)")
@@ -94,12 +97,13 @@ def main():
     # The game's shipped on-screen control layouts, when it has any (spec section 5).
     copy_layouts.copy_layouts(args.game_dir, resources / "controls")
     # The native launcher's list of games, when the game repository has one.
-    games = args.game_dir / "launcher-games.json"
+    launcher_dir = args.launcher_dir or args.game_dir
+    games = launcher_dir / "launcher-games.json"
     if games.is_file():
         shutil.copy(games, resources / "launcher-games.json")
-        bundle_installer(contents, args.game_dir, args.build_root)
+        bundle_installer(contents, launcher_dir, args.build_root)
         # The picture the launcher shows while it looks for the games.
-        splash = args.game_dir / "launcher-splash.jpg"
+        splash = launcher_dir / "launcher-splash.jpg"
         if splash.is_file():
             shutil.copy(splash, resources / "launcher-splash.jpg")
     # The game repository's own icon artwork, when it has one.

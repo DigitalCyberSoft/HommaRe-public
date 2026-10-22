@@ -42,6 +42,7 @@ python kit/tools/build.py --game-dir games/hof --target ios-sim --game-modules -
   - выставляет `RECOMP_MODULE=1`, и `layout.cpp` перестаёт искать checkout.
 - **Сборка общего приложения:** `kit/tools/assemble_games.py --app <приложение базы> --game games/hof --game games/toe [--platform ios-sim|ios]`. Скрипт кладёт модули и ресурсы, затем переподписывает приложение той же подписью (ad hoc для Mac и симулятора).
 - **Лончер:** `launcher-games.json` → `module`. Игра доступна, если её модуль есть в приложении; иначе на ней метка «Скоро».
+- **Отдельная сборка HoF или ToE** (`build.py --game-dir games/toe`, без `--game-modules`): лончер тот же, `[launcher] config_dir = "../.."` в их `game.toml` берёт `launcher-games.json`, манифесты и заставку из корня репозитория. iOS-сборка с файлами игры кладёт в `game/` всю установку: если у exe в его папке нет `[setup] required_dirs`, а у папки выше есть, берётся папка выше (`game_config` `developer_stage_dir`). При первом запуске лончер импортирует её в `Documents/Games`. У базы `game-flat` не меняется. `assemble_games.py` файлы лончера в ресурсы модулей не копирует. Дерево, где раньше была отдельная iOS-сборка, держит в `game/` старые файлы из `bin/`: стейджинг ничего не удаляет, их нужно убрать руками.
 
 Отладочные переключатели:
 - `RECOMP_LAUNCHER_PICK=<id игры>` — выбрать игру в лончере;

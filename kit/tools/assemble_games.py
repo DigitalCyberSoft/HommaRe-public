@@ -24,9 +24,11 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-# Top-level names of a game's app that are not its resources.
+# Top-level names of a game's app that are not its resources. The launcher's
+# files ([launcher] config_dir) are the app's that shows the launcher.
 NOT_RESOURCES = {"Info.plist", "PkgInfo", "_CodeSignature", "Frameworks", "PlugIns", "embedded.mobileprovision",
-                 "game", "Assets.car", "MacOS"}
+                 "game", "Assets.car", "MacOS", "launcher-games.json", "launcher-manifests",
+                 "launcher-splash.jpg", "innoextract-NOTICE.md"}
 
 
 def load_game(game_dir):

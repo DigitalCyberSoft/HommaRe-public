@@ -318,6 +318,11 @@ def load(game_dir):
     for key in ("title", "store"):
         if not isinstance(launcher[key], str):
             raise ValueError("%s: [launcher] %s must be a string" % (source, key))
+    # Where launcher-games.json, launcher-manifests/ and launcher-splash.jpg
+    # are: the game's own directory, or the repository an expansion's
+    # games/<id> sits in (a standalone build of it shows the same launcher).
+    if not isinstance(launcher.setdefault("config_dir", "."), str):
+        raise ValueError("%s: [launcher] config_dir must be a string" % source)
     min_free = launcher.setdefault("min_free_mb", 0)
     if not isinstance(min_free, int) or min_free < 0:
         raise ValueError("%s: [launcher] min_free_mb must be a non-negative integer" % source)
@@ -335,6 +340,15 @@ def load(game_dir):
     # The directory holding the executable as the game sees it: when the exe
     # itself is a link into another folder, its own parent would be that folder.
     cfg["developer_game_dir"] = (game_dir / game["developer_exe"]).parent.resolve()
+    # What a bundle carries: the install the executable belongs to. A game that
+    # keeps it in a subfolder (bin/, bina1/ of a GOG install) needs the whole
+    # install, the folder above holding the [setup] required_dirs.
+    stage = cfg["developer_game_dir"]
+    if setup_dirs and not all((stage / d).is_dir() for d in setup_dirs) \
+            and all((stage.parent / d).is_dir() for d in setup_dirs):
+        stage = stage.parent
+    cfg["developer_stage_dir"] = stage
+    cfg["launcher_config_dir"] = (game_dir / launcher["config_dir"]).resolve()
     cfg["listings_path"] = (game_dir / translate.get("listings", "analysis")).resolve()
     # [translate] overrides: a header the generated sources include before they
     # define FN_<addr>, so a game can replace one translated function with a

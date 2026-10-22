@@ -91,19 +91,20 @@ function(pop_ios_bundle target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${POP_ROOT}/tools/recomp/baseline/classic-modes.json
             $<TARGET_BUNDLE_CONTENT_DIR:${target}>/classic-modes.json
     VERBATIM)
-  # The native launcher's list of games, when the game repository has one.
-  if(EXISTS ${RECOMP_GAME_DIR}/launcher-games.json)
+  # The native launcher's list of games, when the game repository has one
+  # ([launcher] config_dir: an expansion's is its base game's).
+  if(EXISTS ${RECOMP_LAUNCHER_CONFIG_DIR}/launcher-games.json)
     add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RECOMP_GAME_DIR}/launcher-games.json
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RECOMP_LAUNCHER_CONFIG_DIR}/launcher-games.json
               $<TARGET_BUNDLE_CONTENT_DIR:${target}>/launcher-games.json
       VERBATIM)
   endif()
   # Installing from GOG installers (LauncherInstaller.swift): the install
   # manifests (names, sizes and SHA-256 only) beside launcher-games.json, and
   # the licences of innoextract and the libraries built into the app with it.
-  if(EXISTS ${RECOMP_GAME_DIR}/launcher-manifests)
+  if(EXISTS ${RECOMP_LAUNCHER_CONFIG_DIR}/launcher-manifests)
     add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_directory ${RECOMP_GAME_DIR}/launcher-manifests
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${RECOMP_LAUNCHER_CONFIG_DIR}/launcher-manifests
               $<TARGET_BUNDLE_CONTENT_DIR:${target}>/launcher-manifests
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${POP_ROOT}/third_party/innoextract/NOTICE.md
               $<TARGET_BUNDLE_CONTENT_DIR:${target}>/innoextract-NOTICE.md
@@ -144,9 +145,9 @@ function(pop_ios_bundle target)
     endif()
   endforeach()
   # The picture the launcher shows while it looks for the games.
-  if(EXISTS ${RECOMP_GAME_DIR}/launcher-splash.jpg)
+  if(EXISTS ${RECOMP_LAUNCHER_CONFIG_DIR}/launcher-splash.jpg)
     add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RECOMP_GAME_DIR}/launcher-splash.jpg
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RECOMP_LAUNCHER_CONFIG_DIR}/launcher-splash.jpg
               $<TARGET_BUNDLE_CONTENT_DIR:${target}>/launcher-splash.jpg
       VERBATIM)
   endif()

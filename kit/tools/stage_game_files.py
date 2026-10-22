@@ -73,7 +73,14 @@ def main():
     parser.add_argument("--dest", type=Path, required=True)
     args = parser.parse_args()
     cfg = game_config.load(args.game_dir)
-    n = stage(args.source, args.dest, cfg["game"]["executable"], cfg["bundle"]["exclude"], kept(cfg))
+    # The executable's place in the source: at its top, or in its bin/ when the
+    # source is a whole install (game_config developer_stage_dir).
+    executable = cfg["game"]["executable"]
+    try:
+        executable = cfg["developer_exe_path"].relative_to(args.source.resolve())
+    except ValueError:
+        pass
+    n = stage(args.source, args.dest, executable, cfg["bundle"]["exclude"], kept(cfg))
     print("staged %s -> %s (%d files copied)" % (args.source, args.dest, n))
 
 
