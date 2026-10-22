@@ -114,10 +114,16 @@ haven't been tested yet: reports welcome.
 
 ## Download
 
+> [!NOTE]
+> **There are no ready-made builds, and none are planned for now.** The app carries the
+> game's own code, recompiled from the executable, so each player builds it from their
+> own copy of the game. The build takes no game data: you give the finished app your GOG
+> installers on the device itself.
+
 | Platform | How to get it |
 |---|---|
-| Mac (Apple silicon) | Coming soon. Until then, [build it yourself](#building-from-source). |
-| iPad and iPhone | Coming soon (not on the App Store). Build it yourself with Xcode. |
+| Mac (Apple silicon) | [Build it yourself](#building-from-source) on a Mac with your game installed. |
+| iPad and iPhone | Build it yourself on that Mac with Xcode and install it on your device. |
 | Windows, Linux, Android | Not planned for now: the original game already runs on Windows. |
 
 ### System requirements
@@ -131,6 +137,8 @@ haven't been tested yet: reports welcome.
   The app asks iOS for more memory than most apps. The game plays in landscape.
 
 ## Quick start
+
+First [build the app](#building-from-source) for your device.
 
 ### Mac
 
@@ -275,8 +283,6 @@ normally. Leave with *Exit → OK* once after creating a profile.
 
 ## What's next
 
-- Ready-made downloads for Mac, and an IPA for iPad and iPhone.
-- Updates from GitHub, without reinstalling.
 - GOG's other languages (German, French, Polish and more): their installers are needed to
   check the files.
 - Graphics quality inside the game's own Options.
@@ -347,8 +353,12 @@ fails a build that would.
 
 ### Building from source
 
-The repository contains no game code: the build translates **your own** executables. The
-generated code, analysis and game files are ignored by git. Never commit or share them.
+The repository contains no game code: the build translates **your own** executables, so
+the Mac you build on needs the game installed (the build reads its executables:
+`H5_Game.exe` and `granny2.dll`). The app that comes out carries no game data and no mod made from
+it: on the device you install the game into it from your GOG installers, as in
+[Quick start](#quick-start). The generated code, analysis and game files are ignored by
+git. Never commit or share them, nor the app you build: it contains the translated game.
 
 Supported executables:
 
@@ -379,7 +389,11 @@ and checks the result:
 ```
 
 `--target ios-sim` builds for the iOS Simulator, and `--target ios` for a device, with
-`RECOMP_IOS_TEAM` set to your Apple developer team. `--overlay` keeps the kit's
+`RECOMP_IOS_TEAM` set to your Apple developer team. A bundle id belongs to the team that
+registered it first, so for a device build change `bundle_id` in `game.toml`,
+`games/hof/game.toml` and `games/toe/game.toml` to a prefix of your own (keeping the
+`.hof` and `.toe` endings). The repository has no signing keys or profiles: Xcode signs
+with your team. `--overlay` keeps the kit's
 performance overlay (F11). Translation takes about 10–15 minutes per game and
 compilation about 25 minutes per game and platform on an M1 Max; later builds are
 incremental. Use `--regenerate` with `kit/tools/build.py` after changing the translator.
