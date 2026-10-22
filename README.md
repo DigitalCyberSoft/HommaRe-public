@@ -440,9 +440,11 @@ Full license texts are in `kit/NOTICE` and `kit/third_party/`.
 
 ## License
 
-HommaRe's own code and artwork are under the MIT License (`LICENSE`). recomp-kit is
-under the MIT License too (`kit/LICENSE`). Third-party components keep their own
-licenses, listed above. Heroes of Might and Magic V is not covered by either.
+HommaRe's own code and artwork are under the MIT License (`LICENSE`). recomp-kit in
+`kit/` is under the MIT License too (`kit/LICENSE`, `kit/NOTICE`). Third-party
+components in `kit/third_party/` keep their own licenses, listed above. Heroes of
+Might and Magic V is not covered by either: no game files are included, and nothing
+here relicenses them.
 
 ## Legal notice
 

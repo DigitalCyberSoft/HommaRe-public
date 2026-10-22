@@ -100,9 +100,11 @@ static int tap_enabled(void) {
 static int g_state;              /* TAP_*; the host thread reads it */
 static volatile int g_hold;      /* a finger rested on the field and lifted */
 
-/* Where the last touch put the cursor (native/touch.c, under the baton). */
+/* Where the last touch put the cursor (native/touch.c, under the baton), and
+ * how many touches have placed it. */
 static int g_placed;
 static float g_placed_x, g_placed_y;
+static uint32_t g_placed_count;
 
 static int park_enabled(void) {
     static int on = -1;
@@ -172,6 +174,7 @@ static int g_armed;         /* this frame built the strike we want */
 static int g_move = -1;     /* TAP_MOVE: the candidate to walk to */
 static int g_parked;        /* this turn's frames see nothing under the cursor */
 static uint32_t g_turn;     /* the stack whose turn the parking last looked at */
+static uint32_t g_turn_placed; /* g_placed_count when that turn started */
 
 void HOMM5_TAP_FN_ACTION(X86 *c);
 void HOMM5_TAP_FN_CLICK(X86 *c);
@@ -409,19 +412,26 @@ static int cursor_left_by_touch(void) {
 }
 
 /* Whether this frame of the battle sees nothing under the cursor. A turn
- * starts parked when the cursor is still where a touch left it; the pointer
- * moving ends it. */
+ * starts parked when the cursor is still where a touch left it; a new touch
+ * or the pointer moving ends it. A touch writes the cursor and the place it
+ * left it alike, so only its count tells a new one: where the game's own
+ * refresh from GetCursorPos lands on the same pixel (an iPad, 2x), the
+ * cursor stays where the touch put it and would have kept the turn parked. */
 static int parked(uint32_t scr) {
     if (!park_enabled())
         return 0;
     const uint32_t active = rd32(scr + SCR_ACTIVE);
+    const uint32_t placed = __atomic_load_n(&g_placed_count, __ATOMIC_ACQUIRE);
     if (active != g_turn) {
         g_turn = active;
+        g_turn_placed = placed;
         g_parked = active && cursor_left_by_touch();
         if (trace() && g_parked)
             fprintf(stderr, "[tap-attack] new turn: cursor parked\n");
-    } else if (g_parked && !cursor_left_by_touch()) {
+    } else if (g_parked && (placed != g_turn_placed || !cursor_left_by_touch())) {
         g_parked = 0;
+        if (trace())
+            fprintf(stderr, "[tap-attack] cursor unparked\n");
     }
     return g_parked;
 }
@@ -607,6 +617,7 @@ void homm5_tap_pointer_placed(float x, float y) {
     g_placed = 1;
     g_placed_x = x;
     g_placed_y = y;
+    __atomic_add_fetch(&g_placed_count, 1u, __ATOMIC_RELEASE);
 }
 
 /* runtime/native_seam.h: a finger rested on the battlefield and lifted. The
