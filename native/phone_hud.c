@@ -342,28 +342,146 @@ static void mapping_set(const Mapping *m) {
  * the game itself writes meanwhile (a new screen size) is kept, not undone. */
 static int g_mapped; /* mappings of ours in force */
 static Mapping g_plain_saved;
+/* The mappings ours wrote since the outermost began, for its end. */
+static Mapping g_written[16];
+static int g_written_count;
+static float g_text_k; /* the scale of the panel being drawn (texts, below) */
 
 static Mapping plain_mapping(void) {
     return g_mapped ? g_plain_saved : mapping_now();
 }
 
+/* A scope of ours as its native frame holds it, and as the list of those in
+ * force keeps it: the guest thread (its CPU) and where its stack stood. */
 typedef struct {
     Mapping back, set;
+    X86 *cpu;
+    uint32_t esp;
+    float text_k;   /* the panel scale when it began */
+    uint32_t serial; /* 0: not in the list (full) */
 } Scope;
 
-static void scope_enter(Scope *sc, const Mapping *m) {
+enum { MAPPING_FIELDS = sizeof(Mapping) / sizeof(float), SCOPES_MAX = 32 };
+static Scope g_scopes[SCOPES_MAX];
+static int g_scope_count;
+
+static void scope_remove(int i) {
+    memmove(&g_scopes[i], &g_scopes[i + 1], (size_t)(g_scope_count - i - 1) * sizeof g_scopes[0]);
+    --g_scope_count;
+}
+
+static void scope_undo(const Scope *sc);
+
+/* Scopes whose guest frame is gone. A guest exception the game catches
+ * further out resumes there by longjmp (kit/runtime/seh.cpp), past the native
+ * code that would have ended them: a save loaded from a click unwinds the
+ * click's handler so, and its mapping (the origin moved in by the safe area)
+ * stayed in force for everything after - a battle's stack counters went off
+ * the screen and the spellbook took clicks a safe area's width to the right.
+ * On one thread a frame that still runs sits above (a higher ESP than) the
+ * code it calls, so a scope of this thread entered at or below the ESP of the
+ * code running now has ended. */
+static void scopes_unwound(X86 *c) {
+    const uint32_t esp = c->r[R_ESP];
+    for (int i = g_scope_count - 1; i >= 0; --i) {
+        if (g_scopes[i].cpu != c || g_scopes[i].esp > esp)
+            continue;
+        const Scope dead = g_scopes[i];
+        scope_remove(i);
+        g_text_k = dead.text_k;
+        scope_undo(&dead);
+        static int told;
+        if (told < 8) {
+            ++told;
+            fprintf(stderr, "[hud] a mapping scope unwound by a guest exception ended (origin %.1f,%.1f)\n",
+                    dead.set.ox, dead.set.oy);
+        }
+    }
+}
+
+static void scope_enter(X86 *c, Scope *sc, const Mapping *m) {
+    static uint32_t serial;
+    scopes_unwound(c);
     sc->back = mapping_now();
-    if (g_mapped++ == 0)
+    if (g_mapped++ == 0) {
         g_plain_saved = sc->back;
+        g_written_count = 0;
+    }
+    if (g_written_count < 16)
+        g_written[g_written_count++] = *m;
     sc->set = *m;
+    sc->cpu = c;
+    sc->esp = c->r[R_ESP];
+    sc->text_k = g_text_k;
+    sc->serial = 0;
+    if (g_scope_count < SCOPES_MAX) {
+        sc->serial = ++serial ? serial : ++serial;
+        g_scopes[g_scope_count++] = *sc;
+    }
     mapping_set(m);
 }
 
-static void scope_leave(const Scope *sc) {
+/* Ends this scope, and first any of its thread begun inside it that a guest
+ * exception caught inside it left behind. */
+static void scope_leave(X86 *c, const Scope *sc) {
+    if (sc->serial) {
+        int at = -1;
+        for (int i = 0; i < g_scope_count && at < 0; ++i)
+            if (g_scopes[i].serial == sc->serial)
+                at = i;
+        for (int i = g_scope_count - 1; at >= 0 && i > at; --i) {
+            if (g_scopes[i].cpu != c)
+                continue;
+            const Scope dead = g_scopes[i];
+            scope_remove(i);
+            g_text_k = dead.text_k;
+            scope_undo(&dead);
+        }
+        if (at >= 0)
+            scope_remove(at);
+    }
+    scope_undo(sc);
+}
+
+/* Each field still as this scope set it goes back; one the game wrote
+ * meanwhile (a new screen size) stays. Scopes need not end in the order they
+ * began: while a save loads, the loading screen draws inside its scope and
+ * the new screens are placed inside theirs, and one may end while the other's
+ * mapping is in force. So the outermost end also puts back the plain value of
+ * every field still holding one of ours: left there, a root's narrowed
+ * virtual screen became everyone's. */
+static void scope_undo(const Scope *sc) {
     const Mapping now = mapping_now();
-    if (!memcmp(&now, &sc->set, sizeof now))
-        mapping_set(&sc->back);
-    --g_mapped;
+    Mapping out = now;
+    float *o = &out.vw;
+    const float *n = &now.vw, *set = &sc->set.vw, *back = &sc->back.vw;
+    for (int i = 0; i < MAPPING_FIELDS; ++i)
+        if (n[i] == set[i])
+            o[i] = back[i];
+    if (--g_mapped == 0) {
+        const float *plain = &g_plain_saved.vw;
+        int stray = 0;
+        for (int i = 0; i < MAPPING_FIELDS; ++i) {
+            if (o[i] == plain[i])
+                continue;
+            for (int k = 0; k < g_written_count; ++k)
+                if (o[i] == (&g_written[k].vw)[i]) {
+                    o[i] = plain[i];
+                    stray = 1;
+                    break;
+                }
+        }
+        static int told;
+        if (stray && told < 8) {
+            ++told;
+            fprintf(stderr,
+                    "[hud] scopes ended out of order; mapping put back to virtual %.0fx%.0f, "
+                    "origin %.1f,%.1f (was %.0fx%.0f, %.1f,%.1f)\n",
+                    out.vw, out.vh, out.ox, out.oy, now.vw, now.vh, now.ox, now.oy);
+        }
+    }
+    if (memcmp(&out, &now, sizeof now))
+        mapping_set(&out);
 }
 
 static int trace_hud(void) {
@@ -984,10 +1102,10 @@ static void hud_place(X86 *c, uint32_t root) {
     Mapping m = {h.w, h.h, h.w * h.plain.rw / h.plain.vw, h.h * h.plain.rh / h.plain.vh, h.ox,
                  h.oy};
     Scope sc;
-    scope_enter(&sc, &m);
+    scope_enter(c, &sc, &m);
     HOMM5_FN_SCREEN_PLACE(c);
     note_free_windows(root);
-    scope_leave(&sc);
+    scope_leave(c, &sc);
     remember_placed(root, &h);
     if (trace_hud())
         fprintf(stderr, "[hud] %s root %08x placed: %.0fx%.0f from %.1f,%.1f, panels at %.2f\n",
@@ -1058,17 +1176,37 @@ static int g_root_depth; /* the depth its root was drawn at */
 static Hud g_drawing;
 static int g_drawing_on;
 
+/* Where each draw under way began (its thread and guest stack): one a guest
+ * exception unwound (scopes_unwound) never counts itself out. */
+enum { DRAWS_MAX = 64 };
+static X86 *g_draw_cpu[DRAWS_MAX];
+static uint32_t g_draw_esp[DRAWS_MAX];
+
 static void draw_plain(X86 *c) {
+    if (g_draw_depth >= 0 && g_draw_depth < DRAWS_MAX) {
+        g_draw_cpu[g_draw_depth] = c;
+        g_draw_esp[g_draw_depth] = c->r[R_ESP];
+    }
     ++g_draw_depth;
     HOMM5_FN_WINDOW_DRAW(c);
     --g_draw_depth;
 }
 
+/* Draws of this thread that began at or below the ESP running now have ended,
+ * and with them the interface they drew. */
+static void draws_unwound(X86 *c) {
+    while (g_draw_depth > 0 && g_draw_depth <= DRAWS_MAX && g_draw_cpu[g_draw_depth - 1] == c &&
+           g_draw_esp[g_draw_depth - 1] <= c->r[R_ESP])
+        --g_draw_depth;
+    if (g_drawing_on && g_draw_depth <= g_root_depth)
+        g_drawing_on = 0;
+}
+
 static void draw_mapped(X86 *c, const Mapping *m) {
     Scope sc;
-    scope_enter(&sc, m);
+    scope_enter(c, &sc, m);
     draw_plain(c);
-    scope_leave(&sc);
+    scope_leave(c, &sc);
 }
 
 /* Texts. A window's text is laid out once (00e453f0: its glyphs' pixel size
@@ -1076,7 +1214,7 @@ static void draw_mapped(X86 *c, const Mapping *m) {
  * placed, so a text laid out with the plain mapping stays small in a panel and
  * its alignment slips. Each layout's scale is noted, and a panel's texts are
  * laid out again at the panel's scale as they are drawn. */
-static float g_text_k = 1.0f; /* the scale of the panel being drawn */
+static float g_text_k = 1.0f;
 static struct {
     uint32_t text;
     float k;
@@ -1241,6 +1379,8 @@ static void window_draw(X86 *c) {
         HOMM5_FN_WINDOW_DRAW(c);
         return;
     }
+    draws_unwound(c);
+    scopes_unwound(c);
     if (g_draw_depth == 0) { /* a frame's interface begins */
         find_roots();
 #ifdef HOMM5_ADDR_SET_PARENT_RECT
@@ -1302,12 +1442,12 @@ static void window_draw(X86 *c) {
         const Mapping m = panel_mapping(&g_drawing, &pn);
         const float back = g_text_k;
         Scope sc;
-        scope_enter(&sc, &m);
+        scope_enter(c, &sc, &m);
         g_text_k = pn.k;
         text_at_scale(c, part);
         draw_plain(c);
         g_text_k = back;
-        scope_leave(&sc);
+        scope_leave(c, &sc);
         return;
     }
     if (g_drawing_on)
@@ -1324,9 +1464,9 @@ void homm5_simple_draw(X86 *c) {
     if (wide_ui() && g_drawing_on && g_draw_depth == g_root_depth + 1 &&
         follows_picture(&g_drawing, c->r[R_ECX] - SIMPLE_DRAW)) {
         Scope sc;
-        scope_enter(&sc, &g_drawing.plain);
+        scope_enter(c, &sc, &g_drawing.plain);
         HOMM5_FN_SIMPLE_DRAW(c);
-        scope_leave(&sc);
+        scope_leave(c, &sc);
         return;
     }
     if (wide_ui() && g_drawing_on && g_draw_depth == g_root_depth + 1 &&
@@ -1334,11 +1474,11 @@ void homm5_simple_draw(X86 *c) {
         const Mapping m = panel_mapping(&g_drawing, &pn);
         const float back = g_text_k;
         Scope sc;
-        scope_enter(&sc, &m);
+        scope_enter(c, &sc, &m);
         g_text_k = pn.k;
         HOMM5_FN_SIMPLE_DRAW(c);
         g_text_k = back;
-        scope_leave(&sc);
+        scope_leave(c, &sc);
         return;
     }
     HOMM5_FN_SIMPLE_DRAW(c);
@@ -1551,9 +1691,9 @@ static void hud_mouse(X86 *c, void (*orig)(X86 *)) {
     }
     const Mapping m = hud_mapping(&h);
     Scope sc;
-    scope_enter(&sc, &m);
+    scope_enter(c, &sc, &m);
     orig(c);
-    scope_leave(&sc);
+    scope_leave(c, &sc);
 }
 
 void homm5_screen_mouse_0(X86 *c) { hud_mouse(c, HOMM5_FN_SCREEN_MOUSE_0); }
@@ -1574,9 +1714,9 @@ static void hud_tips(X86 *c, void (*orig)(X86 *)) {
     }
     const Mapping m = hud_mapping(&h);
     Scope sc;
-    scope_enter(&sc, &m);
+    scope_enter(c, &sc, &m);
     orig(c);
-    scope_leave(&sc);
+    scope_leave(c, &sc);
 }
 
 void homm5_tooltip_timer(X86 *c) { hud_tips(c, HOMM5_FN_TOOLTIP_TIMER); }
