@@ -64,6 +64,12 @@
 #ifndef HOMM5_RET_ANCHOR_Y
 #define HOMM5_RET_ANCHOR_Y 0x00e3b84d
 #endif
+/* What makes a battle's stack counter (ID_STACKINFO_WINDOW) and adds it to
+ * the battle screen; Tribes of the East's is 00739b00. Hammers of Fate has
+ * its own HOMM5_COUNTER_WINDOW (native/hof_screen.c). */
+#if !defined(HOMM5_COUNTER_WINDOW) && !defined(HOMM5_FN_COUNTER_MAKE)
+#define HOMM5_FN_COUNTER_MAKE fn_008333f0
+#endif
 
 void homm5_phone_layout_axis(X86 *c, int vertical); /* native/phone_layout.c */
 
@@ -183,6 +189,50 @@ static int placed_from_zero(X86 *c) {
 }
 #endif
 
+#ifdef HOMM5_FN_COUNTER_MAKE
+/* A battle's stack counter in the base game and Tribes of the East: a button
+ * anchored to the left of the screen-wide battle screen, at offset 0 when
+ * 008333f0 makes it and adds it to the screen. 00833530 then moves it over
+ * its creature from the base that first layout gave it, without the axis:
+ * kept in the player's box like the panels, every counter slid right by the
+ * box's margin for good. A window laid out while a counter is made is one,
+ * noted for its later layouts; the box leaves them where the game puts them.
+ * A flag rather than a depth: a guest exception that skipped the reset is
+ * mended by the next counter. */
+void HOMM5_FN_COUNTER_MAKE(X86 *c);
+enum { COUNTERS = 256 };
+static uint32_t g_counters[COUNTERS];
+static int g_counter_next, g_making_counter;
+
+static int known_counter(uint32_t win) {
+    for (int i = 0; i < COUNTERS; ++i)
+        if (g_counters[i] == win)
+            return 1;
+    return 0;
+}
+
+static void note_counter(uint32_t win) {
+    if (known_counter(win))
+        return;
+    g_counters[g_counter_next] = win;
+    g_counter_next = (g_counter_next + 1) % COUNTERS;
+}
+
+void homm5_counter_make(X86 *c) {
+    g_making_counter = 1;
+    HOMM5_FN_COUNTER_MAKE(c);
+    g_making_counter = 0;
+}
+
+static int counter_window(uint32_t win) {
+    if (g_making_counter) {
+        note_counter(win);
+        return 1;
+    }
+    return known_counter(win);
+}
+#endif
+
 /* The axis (00e43650 in the base game): a child window's position along one
  * axis (fastcall: ECX the anchor, EDX its size (in/out); stack: the parent's
  * position and size, the window's offset, its two margins, and where the
@@ -294,7 +344,11 @@ void homm5_anchor_axis(X86 *c) {
             bx = safe_x + (safe_w - box) * 0.5f;
             bw = box;
         }
-        if (!near(bx, span_x) || !near(bw, span_w)) {
+        int keep = 0;
+#ifdef HOMM5_FN_COUNTER_MAKE
+        keep = anchor == EPA_LOW_END && counter_window(c->r[R_EDI]);
+#endif
+        if (!keep && (!near(bx, span_x) || !near(bw, span_w))) {
             static int traced;
             if (trace_wide() && traced < 200) {
                 ++traced;

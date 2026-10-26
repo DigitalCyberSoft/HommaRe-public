@@ -1245,7 +1245,7 @@ struct SkinSettings: View {
     // points with its name), which at 860 pushed the whole column past the page's edges.
     static let size = CGSize(width: 1080, height: 990) // with the touch rows, render quality and the interface bounds
     #else
-    static let size = CGSize(width: 860, height: 890) // with the interface bounds and trackpad rows
+    static let size = CGSize(width: 860, height: 1020) // with the interface bounds and trackpad rows, render quality on two lines
     static let phoneDevice = false
     #endif
 
@@ -1275,11 +1275,13 @@ struct SkinSettings: View {
         Text(text).font(SkinFont.menu(22)).foregroundStyle(SkinColor.navy)
     }
 
-    /// A setting: its name, then its choices side by side.
+    /// A setting: its name, then its choices side by side, wrapping onto a
+    /// second line where a language's words are too long for the page.
     private func row<Choices: View>(_ title: String, @ViewBuilder _ choices: () -> Choices) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             label(title).frame(width: 220, alignment: .leading)
-            HStack(spacing: 22) { choices() }
+            SkinFlow(spacing: 22, lineSpacing: 4) { choices() }
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

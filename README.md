@@ -57,7 +57,7 @@ battery when nothing moves.
   its own profiles and saves. The launcher shows what is installed and starts the one you
   pick.
 - **A launcher that looks like the game.** Its frames, buttons and backdrop are read from
-  your installed game's own data at run time, so the app ships no game art. It speaks the
+  your installed game's own data at run time, so the app ships no game art. It has the
   ten languages of GOG's installers (English, Russian, Czech, German, Spanish, French,
   Italian, Hungarian, Polish and Simplified Chinese) and stands upright on an iPhone.
 - **Installs from your GOG installers, on every device.** Give the launcher GOG's offline
@@ -65,16 +65,16 @@ battery when nothing moves.
   you can also drop them onto the window. It unpacks only what the game needs, checks
   every file's SHA-256 and can resume an interrupted install. GOG's update installers
   (`patch_*.exe`) are applied too, and a game you already installed is found as well.
-- **Ultrawide done right.** On 21:9 the adventure map and battles get a wider view instead
-  of a stretched one (Hor+), the interface moves to the screen edges, and dialogue scenes
+- **Ultrawide support.** On 21:9 the adventure map and battles get a wider view instead
+  of a stretched one, the interface moves to the screen edges, and dialogue scenes
   span the screen. *Interface bounds* keeps the HUD in a 21:9, 16:9 or 4:3 box on very
-  wide screens; screens, backgrounds and the 3D world still fill the whole display. In
+  Mac wide screen; screens, backgrounds and the 3D world still fill the whole display. In
   all three games.
-- **Touch controls built for Heroes.** Heroes V explains everything on *hover*, so a
+- **Touch controls adapted for Heroes.** Heroes V explains everything on *hover*, so a
   finger at rest acts as a hovering mouse: hold to read a tooltip, tap to act. A second
   finger gives the right click; drag to pan, pinch to zoom, twist to turn the camera.
   The system keyboard comes up on a text field, and a drag scrolls a list.
-- **Battles made for a finger.** Tap an enemy and the cells you can strike it from light
+- **Battles with a touch.** Tap an enemy and the cells you can strike it from light
   up; tap one to walk there and strike. The attack cursor shows beside the damage hint,
   as it does under a mouse.
 - **An interface for the iPhone.** The round dial menus become rows of buttons along the
@@ -85,7 +85,7 @@ battery when nothing moves.
 - **Trackpad on a Mac.** Two fingers over the adventure map raise and lower the camera,
   or move it like on an iPad: scroll to pan, pinch to zoom, twist to turn. In battle the
   camera zooms towards the pointer, and lists scroll under your fingers.
-- **Smooth, and kind to the battery.** A 40 fps limit by default (60 or 120 if you like;
+- **Smooth with options to preserver battery.** A 40 fps limit by default (60 or 120 if you like;
   ProMotion iPhones run at 120 Hz so the limit holds). After a minute without input the
   game drops to 30 fps until you touch the mouse, keyboard or screen. An optional energy
   mode lowers the frame limit and render scale in Low Power Mode or when the device is
@@ -290,9 +290,9 @@ normally. Leave with *Exit → OK* once after creating a profile.
 
 - GOG's other languages (German, French, Polish and more): their installers are needed to
   check the files.
-- Graphics quality inside the game's own Options.
-- More speed: more of the game's hottest code made native, and profile-guided
-  optimization.
+- Native mobile pre-map UI for menus
+- Local network
+- iCloud saves sync
 
 There are no dates and no promises: it's ready when it's ready.
 

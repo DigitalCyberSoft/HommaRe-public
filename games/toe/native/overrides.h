@@ -38,6 +38,10 @@ void homm5_fov_for_screen(X86 *c);
  * 00e3d540 here (the rest in native/addresses.h). */
 void homm5_anchor_axis(X86 *c);
 #define FN_00e3d540 homm5_anchor_axis
+/* 00739b00: a battle's stack counter made and added to the battle screen
+ * (the base game's 008333f0). */
+void homm5_counter_make(X86 *c);
+#define FN_00739b00 homm5_counter_make
 
 /* The phone's interface (native/phone_hud.c; addresses and their sources in
  * native/addresses.h): the base game's 00e74f30 (root placement), 00e3dd70

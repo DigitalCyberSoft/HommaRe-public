@@ -50,6 +50,11 @@ void homm5_screen_place(X86 *c);
 #define FN_00e74f30 homm5_screen_place
 void homm5_anchor_axis(X86 *c);
 #define FN_00e43650 homm5_anchor_axis
+/* 008333f0: a battle's stack counter made and added to the battle screen;
+ * native/ui_bounds.c notes it, so the interface bounds leave it where the
+ * game puts it. */
+void homm5_counter_make(X86 *c);
+#define FN_008333f0 homm5_counter_make
 
 /* 00a1a1e0 (projection), 00a18c90 (screen -> ray), 00a19030 (world -> screen)
  * and 00a19940 (the engine's own wide-screen angle): native/horplus.c gives
