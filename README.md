@@ -115,14 +115,14 @@ haven't been tested yet: reports welcome.
 ## Download
 
 > [!NOTE]
-> **There are no ready-made builds, and none are planned for now.** The app carries the
-> game's own code, recompiled from the executable, so each player builds it from their
-> own copy of the game. The build takes no game data: you give the finished app your GOG
-> installers on the device itself.
+> **Mac:** a ready-made build is in [Releases](../../releases/latest)
+> (`HommaRe-<version>-macOS.dmg`). It holds no game data: you give it your own GOG
+> installers. macOS can't verify its developer, so it asks once on the first start (see
+> [Quick start](#quick-start)). **iPad and iPhone:** build it yourself on a Mac.
 
 | Platform | How to get it |
 |---|---|
-| Mac (Apple silicon) | [Build it yourself](#building-from-source) on a Mac with your game installed. |
+| Mac (Apple silicon) | [Download the DMG](../../releases/latest), or [build it yourself](#building-from-source). |
 | iPad and iPhone | Build it yourself on that Mac with Xcode and install it on your device. |
 | Windows, Linux, Android | Not planned for now: the original game already runs on Windows. |
 
@@ -138,10 +138,13 @@ haven't been tested yet: reports welcome.
 
 ## Quick start
 
-First [build the app](#building-from-source) for your device.
-
 ### Mac
 
+0. **Get HommaRe.** Download `HommaRe-<version>-macOS.dmg` from
+   [Releases](../../releases/latest), open it and drag *HommaRe* to *Applications*.
+   macOS can't verify the app's developer, so the first start fails: open *System Settings → Privacy &
+   Security*, scroll down and press *Open Anyway* next to HommaRe. Later starts just work.
+   (Or [build it yourself](#building-from-source).)
 1. **Download your installers from GOG.** In your GOG library, open *Heroes of Might and
    Magic V* (and *Tribes of the East*, if you own it) and download the offline backup
    installers: one `.exe` and one or more `.bin` files for each, and the update
@@ -157,6 +160,8 @@ First [build the app](#building-from-source) for your device.
    settings are kept apart from the game files, so they survive updates and reinstalls.
 
 ### iPad and iPhone
+
+First [build the app](#building-from-source) and install it on your device.
 
 1. **Put the GOG installers on the device**: the `.exe` and `.bin` files, in the Files
    app (on the device or in iCloud Drive), or with Finder from a Mac.
@@ -358,7 +363,7 @@ the Mac you build on needs the game installed (the build reads its executables:
 `H5_Game.exe` and `granny2.dll`). The app that comes out carries no game data and no mod made from
 it: on the device you install the game into it from your GOG installers, as in
 [Quick start](#quick-start). The generated code, analysis and game files are ignored by
-git. Never commit or share them, nor the app you build: it contains the translated game.
+git. Never commit or share them.
 
 Supported executables:
 
