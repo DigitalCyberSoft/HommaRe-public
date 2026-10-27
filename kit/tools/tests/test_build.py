@@ -224,6 +224,23 @@ def test_ios_target_still_needs_macos(capsys):
     assert "The iOS packager runs on macOS" in capsys.readouterr().err
 
 
+def test_unsigned_ios_needs_no_team(monkeypatch):
+    monkeypatch.delenv("RECOMP_IOS_TEAM", raising=False)
+    args, _ = build.parse_args(
+        ["--target", "ios", "--unsigned", "--game-dir", str(build.ROOT / "games/stub")], system="Darwin")
+    assert args.unsigned and args.team == ""
+
+
+@pytest.mark.parametrize("extra", [["--target", "ios"], ["--target", "app", "--unsigned"]])
+def test_unsigned_is_only_for_ios_and_signing_needs_a_team(extra, monkeypatch, capsys):
+    monkeypatch.delenv("RECOMP_IOS_TEAM", raising=False)
+    with pytest.raises(SystemExit) as error:
+        build.parse_args(extra + ["--game-dir", str(build.ROOT / "games/stub")], system="Darwin")
+    assert error.value.code == 2
+    assert ("--unsigned is for --target ios" if "--unsigned" in extra else "needs --team") \
+        in capsys.readouterr().err
+
+
 def test_allow_table_gaps_reaches_the_translator(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(build.subprocess, "run", lambda cmd, **kw: calls.append(cmd))

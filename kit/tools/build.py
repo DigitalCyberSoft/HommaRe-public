@@ -431,6 +431,10 @@ def parse_args(argv, system=None):
     parser.add_argument("--team", default=os.environ.get("RECOMP_IOS_TEAM", ""),
                         help="Apple team id for automatic signing (ios target; default $RECOMP_IOS_TEAM)")
     parser.add_argument("--no-install", action="store_true", help="Build the mobile app without installing it")
+    parser.add_argument("--unsigned", action="store_true",
+                        help="iOS: build for devices without signing it (no team, nothing installed); "
+                             "tools/build_app.py signs it ad hoc with its entitlements and packs an IPA "
+                             "that the player's sideloading tool signs again")
     parser.add_argument("--game-modules", action="store_true",
                         help="Apple: also build the game as a module for a multi-game app, "
                              "with SDL shared (tools/assemble_games.py)")
@@ -446,8 +450,10 @@ def parse_args(argv, system=None):
     args = parser.parse_args(argv)
     if args.push_game and (args.target != "android" or args.no_install):
         parser.error("--push-game requires --target android without --no-install")
-    if args.target == "ios" and not args.stub and not args.team:
-        parser.error("--target ios needs --team or RECOMP_IOS_TEAM")
+    if args.unsigned and args.target != "ios":
+        parser.error("--unsigned is for --target ios")
+    if args.target == "ios" and not args.stub and not args.team and not args.unsigned:
+        parser.error("--target ios needs --team or RECOMP_IOS_TEAM (or --unsigned)")
     if args.stub and (args.config == "Debug" or args.regenerate):
         parser.error("--stub cannot be combined with --config Debug or --regenerate")
     if not args.game_dir.is_absolute():
@@ -509,10 +515,15 @@ def main():
                 if not args.stub and not (args.build_root / "recomp/gen/table.c").is_file():
                     parser.error("No translation in %s/recomp/gen; run tools/build.py --regenerate on macOS first"
                                  % args.build_root)
-                configure(preset, defines + ["-DRECOMP_IOS_TEAM=" + args.team], build_dir=build_dir)
-                extra = ["--", "CODE_SIGNING_ALLOWED=NO"] if args.stub else ["--", "-allowProvisioningUpdates"]
+                # An unsigned build carries no team: nothing in it names the developer.
+                team = "" if args.unsigned else args.team
+                configure(preset, defines + ["-DRECOMP_IOS_TEAM=" + team,
+                                             "-DRECOMP_IOS_UNSIGNED=" + ("ON" if args.unsigned else "OFF")],
+                          build_dir=build_dir)
+                unsigned = args.stub or args.unsigned
+                extra = ["--", "CODE_SIGNING_ALLOWED=NO"] if unsigned else ["--", "-allowProvisioningUpdates"]
                 build(preset, TARGETS["ios"] + module_targets, args.jobs, extra, build_dir=build_dir, config="Release")
-                if not args.stub and not args.no_install:
+                if not unsigned and not args.no_install:
                     app = ios_app_bundle(cfg["game"]["app_name"], args.build_root)
                     device = args.device or pick_device(devicectl_list())
                     install_and_launch(app, cfg["game"]["bundle_id"], device, args.console)

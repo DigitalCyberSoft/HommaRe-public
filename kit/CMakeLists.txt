@@ -144,9 +144,12 @@ endif()
 
 if(IOS)
   set(RECOMP_IOS_TEAM "$ENV{RECOMP_IOS_TEAM}" CACHE STRING "Apple development team for automatic signing")
+  # A device build for sideloading (tools/build.py --unsigned) is signed later,
+  # by the player's tool.
+  option(RECOMP_IOS_UNSIGNED "Build for devices without signing (an IPA for sideloading)" OFF)
   # The simulator runs unsigned builds (the ios-sim preset), so it needs no team.
   if(RECOMP_IOS_TEAM STREQUAL "" AND NOT POP_TRANSLATE STREQUAL "STUB"
-     AND NOT CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+     AND NOT CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator" AND NOT RECOMP_IOS_UNSIGNED)
     message(FATAL_ERROR "iOS builds need a signing team: set RECOMP_IOS_TEAM or pass tools/build.py --team; "
                         "`security find-identity -v -p codesigning` lists them")
   endif()

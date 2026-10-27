@@ -5,6 +5,7 @@ games' modules, no game file and no mod made from one, and check it.
     tools/build_app.py --target app          # build/HommaRe.app (macOS)
     tools/build_app.py --target ios-sim      # build/ios-sim/.../HommaRe.app
     RECOMP_IOS_TEAM=<team> tools/build_app.py --target ios
+    tools/build_app.py --target ios --unsigned   # build/HommaRe-iOS.ipa
 
 Each game (the base game, games/hof, games/toe) is built with
 kit/tools/build.py --game-modules --no-game-files --no-install --release
@@ -16,17 +17,47 @@ installers (innoextract: a helper on the Mac, a library on iOS) and the
 interface mods are made from the recipes when a game starts. Install the iOS
 app with `xcrun devicectl device install app --device <id> <app>` or
 `xcrun simctl install <udid> <app>`.
+
+--unsigned builds the iOS app without a team and packs it for sideloading:
+everything inside is signed ad hoc, the app with ios.entitlements (the memory
+the game needs), and no provisioning profile names a developer. Sideloadly,
+AltStore or SideStore sign it again with the player's Apple ID.
 """
 
 import argparse
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GAMES = [ROOT, ROOT / "games/hof", ROOT / "games/toe"]
 sys.path.insert(0, str(ROOT / "kit/tools"))
 from assemble_games import built_app, load_game  # noqa: E402
+
+
+def sign_ad_hoc(app, entitlements):
+    """Sign the app ad hoc from the inside out; its entitlements ride in the signature."""
+    (app / "embedded.mobileprovision").unlink(missing_ok=True)
+    frameworks = app / "Frameworks"
+    nested = sorted(p for p in frameworks.iterdir() if p.suffix in (".dylib", ".framework")) \
+        if frameworks.is_dir() else []
+    for path in nested:
+        subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(path)], check=True)
+    subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", "--generate-entitlement-der",
+                    "--entitlements", str(entitlements), str(app)], check=True)
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+
+
+def pack_ipa(app, ipa):
+    """Payload/<app> zipped: the IPA a sideloading tool takes."""
+    with tempfile.TemporaryDirectory() as staging:
+        payload = Path(staging) / "Payload"
+        payload.mkdir()
+        subprocess.run(["ditto", str(app), str(payload / app.name)], check=True)
+        ipa.unlink(missing_ok=True)
+        subprocess.run(["ditto", "-c", "-k", "--norsrc", "--keepParent", str(payload), str(ipa)], check=True)
+    print("packed %s" % ipa)
 
 
 def main():
@@ -38,13 +69,19 @@ def main():
     p.add_argument("--overlay", action="store_true",
                    help="keep the kit's performance overlay (F11): build without --release")
     p.add_argument("--skip-build", action="store_true", help="assemble and check what is built already")
+    p.add_argument("--unsigned", action="store_true",
+                   help="iOS: build without a team and pack build/<app>-iOS.ipa for sideloading")
     args = p.parse_args()
+    if args.unsigned and args.target != "ios":
+        p.error("--unsigned is for --target ios")
     platform = {"app": "macos"}.get(args.target, args.target)
 
     if not args.skip_build:
         for game in GAMES:
             cmd = [sys.executable, str(ROOT / "kit/tools/build.py"), "--game-dir", str(game), "--target", args.target,
                    "--game-modules", "--no-game-files", "--no-install"]
+            if args.unsigned:
+                cmd.append("--unsigned")
             if not args.overlay:
                 cmd.append("--release")
             if args.jobs:
@@ -60,11 +97,16 @@ def main():
         cmd += ["--game", str(game)]
     print("+ " + " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=ROOT, check=True)
+    if args.unsigned:
+        sign_ad_hoc(app, ROOT / "ios.entitlements")
     check = [sys.executable, str(ROOT / "tools/check_bundle.py"), str(app)]
     for g in args.game:
         check += ["--game", str(g.expanduser())]
     print("+ " + " ".join(check), flush=True)
-    return subprocess.run(check, cwd=ROOT).returncode
+    code = subprocess.run(check, cwd=ROOT).returncode
+    if args.unsigned and code == 0:
+        pack_ipa(app, ROOT / "build" / (app_name + "-iOS.ipa"))
+    return code
 
 
 if __name__ == "__main__":
