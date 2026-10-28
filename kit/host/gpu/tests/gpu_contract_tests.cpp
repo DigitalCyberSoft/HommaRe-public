@@ -327,6 +327,64 @@ static void test_released_drawables_return() {
     os_unsetenv("RECOMP_VULKAN_RELEASE_IMAGES");
 }
 
+// The presenter makes, resizes and destroys swapchains while other threads
+// (the game's renderer, transfers) keep submitting. The wait for a swapchain's
+// last use must hold the queue as those submits do - vkDeviceWaitIdle did not -
+// without waiting on the device's own lock in the wrong order.
+static void test_swapchain_churn_beside_submits() {
+    auto d = create_default_device();
+    if (!d)
+        return;
+    void *surface = test_native_surface(32, 16);
+    Swapchain probe = surface ? d->create_swapchain(surface, 32, 16) : Swapchain{};
+    if (!probe) {
+        printf("no swapchain on a test surface here: churn test skipped\n");
+        return;
+    }
+    d->destroy(probe);
+    std::atomic<bool> stop{false}, finished{false};
+    std::atomic<int> submits{0}, rounds{0};
+    std::thread submitter([&] {
+        while (!stop) {
+            CommandBuffer cb = d->begin();
+            d->commit(cb);
+            d->wait(cb);
+            ++submits;
+        }
+    });
+    std::thread churn([&] {
+        for (int i = 0; i < 20; ++i) {
+            Swapchain s = d->create_swapchain(surface, 32, 16);
+            if (!s)
+                break;
+            if (Texture t = d->acquire(s))
+                d->release_drawable(s, t);
+            test_resize_native_surface(surface, 48, 24);
+            d->resize(s, 48, 24);
+            if (Texture t = d->acquire(s))
+                d->release_drawable(s, t);
+            test_resize_native_surface(surface, 32, 16);
+            d->destroy(s);
+            ++rounds;
+        }
+        finished = true;
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    while (!finished && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    if (!finished) {
+        fprintf(stderr, "swapchain churn stuck after %d rounds beside %d submits\n", rounds.load(),
+                submits.load());
+        fflush(stderr);
+        _Exit(1);
+    }
+    stop = true;
+    churn.join();
+    submitter.join();
+    CHECK(rounds.load() == 20);
+    CHECK(submits.load() > 0);
+}
+
 int main() {
     os_setenv("RECOMP_GPU_BACKEND", POP_GPU_TEST_BACKEND);
     if (strcmp(default_backend_name(), POP_GPU_TEST_BACKEND) != 0) {
@@ -342,6 +400,7 @@ int main() {
     test_compute_readback_kernel();
     test_swapchain_from_surface();
     test_released_drawables_return();
+    test_swapchain_churn_beside_submits();
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (!g_failures)
         printf("all gpu %s tests passed\n", POP_GPU_TEST_BACKEND);

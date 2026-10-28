@@ -212,6 +212,7 @@ class VulkanDevice final : public Device {
     void one_shot_end_wait(VkCommandBuffer cb);
     void end_completing(uint64_t id);        // with mutex_ held
     void wait_all_submitted();               // every fence so far; shutdown and swapchain teardown
+    void queue_idle(); // vkQueueWaitIdle under queue_mutex_; never with mutex_ held
     void wait_submitted_before(uint64_t id); // submissions older than `id`; bounded under load
     uint64_t submission_watermark();         // next_id_ now: everything submitted so far is older
     void fail(const char *what);

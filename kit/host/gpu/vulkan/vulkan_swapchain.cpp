@@ -46,8 +46,8 @@ static VkPresentModeKHR choose_present_mode(VulkanDevice &d, VkSurfaceKHR surfac
     return want;
 }
 
+// The caller has made the queue idle (queue_idle) when `c` has images already.
 static bool build_swapchain(VulkanDevice &d, VulkanDevice::Chain &c, int width, int height) {
-    vkDeviceWaitIdle(d.device_);
     for (VkImageView v : c.views)
         vkDestroyImageView(d.device_, v, nullptr);
     c.views.clear();
@@ -176,7 +176,7 @@ Swapchain VulkanDevice::create_swapchain(void *native_surface, int width, int he
 }
 
 void VulkanDevice::resize(Swapchain s, int width, int height) {
-    // build_swapchain waits for the device to go idle itself.
+    queue_idle(); // the old images' last presents finish first
     std::lock_guard lock(mutex_);
     auto it = swapchains_.find(s.id);
     if (it != swapchains_.end())
@@ -194,9 +194,16 @@ Texture VulkanDevice::acquire(Swapchain s) {
     auto it = swapchains_.find(s.id);
     if (it == swapchains_.end() || failed_)
         return {};
+    if (it->second->needs_recreate) {
+        lock.unlock();
+        queue_idle(); // as resize: the old images' last presents finish first
+        lock.lock();
+        it = swapchains_.find(s.id);
+        if (it == swapchains_.end() ||
+            !build_swapchain(*this, *it->second, it->second->width, it->second->height))
+            return {};
+    }
     Chain &c = *it->second;
-    if (c.needs_recreate && !build_swapchain(*this, c, c.width, c.height))
-        return {}; // build_swapchain waits for the device to go idle
     VkSemaphore sem = c.acquire_semaphores[c.next_acquire % c.acquire_semaphores.size()];
     uint32_t index = 0;
     VkResult r =
@@ -386,6 +393,7 @@ double VulkanDevice::refresh_period(Swapchain s) {
 }
 
 void VulkanDevice::destroy(Swapchain s) {
+    queue_idle(); // nothing on the queue may still use its images or semaphores
     std::lock_guard lock(mutex_);
     auto it = swapchains_.find(s.id);
     if (it == swapchains_.end())
@@ -393,7 +401,6 @@ void VulkanDevice::destroy(Swapchain s) {
     Chain &c = *it->second;
     for (auto &[tid, idx] : c.acquired)
         textures_.erase(tid);
-    vkDeviceWaitIdle(device_);
     for (VkImageView v : c.views)
         vkDestroyImageView(device_, v, nullptr);
     for (VkSemaphore sem : c.acquire_semaphores)

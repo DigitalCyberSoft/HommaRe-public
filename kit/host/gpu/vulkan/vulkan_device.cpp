@@ -1163,6 +1163,16 @@ CommandStatus VulkanDevice::status(CommandBuffer cb) {
     return recording_.count(cb.id) ? CommandStatus::Pending : CommandStatus::Completed;
 }
 
+// Before a swapchain is rebuilt or destroyed nothing on the queue may still use
+// it. vkDeviceWaitIdle did that, but it requires every queue to be externally
+// synchronised, and other threads (the game's renderer, transfers) submit
+// meanwhile: the wait now holds the queue as a submit does. Not with mutex_
+// held: queue_present takes mutex_ inside queue_mutex_.
+void VulkanDevice::queue_idle() {
+    std::lock_guard lock(queue_mutex_);
+    vkQueueWaitIdle(queue_);
+}
+
 void VulkanDevice::wait_all_submitted() {
     std::unique_lock lock(mutex_);
     retired_cv_.wait(lock, [&] { return submitted_.empty() && completing_.empty(); });
