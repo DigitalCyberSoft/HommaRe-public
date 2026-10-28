@@ -145,6 +145,32 @@ def windows_arch(build_dir) -> str:
     return "x86_64"
 
 
+def stage_windows_innoextract(app_binary: Path, build_dir, staged: Path) -> list:
+    """The innoextract.exe the Windows launcher installs from GOG installers
+    with (host/CMakeLists.txt puts innoextract's own 1.9 build beside the
+    executable), its notice and the licenses its archive carries. A build
+    without the native launcher has none, and an earlier build's goes."""
+    files = []
+    resources = staged / "resources"
+    licenses = resources / "innoextract-license"
+    shutil.rmtree(licenses, ignore_errors=True)
+    helper = app_binary.parent / "innoextract.exe"
+    if not helper.is_file():
+        (staged / "innoextract.exe").unlink(missing_ok=True)
+        (resources / "innoextract-NOTICE.md").unlink(missing_ok=True)
+        return files
+    for source, dest in ((helper, staged / "innoextract.exe"),
+                         (ROOT / "third_party/innoextract/NOTICE.md", resources / "innoextract-NOTICE.md")):
+        shutil.copy2(source, dest)
+        files.append(dest)
+    archive = Path(build_dir) / "innoextract-windows/files/license" if build_dir is not None else None
+    for license in sorted(archive.glob("*.txt")) if archive and archive.is_dir() else ():
+        licenses.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(license, licenses / license.name)
+        files.append(licenses / license.name)
+    return files
+
+
 def stage(app_binary: Path, cfg: dict, out_dir: Path, system=None, build_dir=None, game_dir=None) -> Path:
     """Copy the app and host resources into a folder, plus a Linux tarball or a
     Windows zip.
@@ -229,6 +255,8 @@ def stage(app_binary: Path, cfg: dict, out_dir: Path, system=None, build_dir=Non
             copy(build_dir / "ffmpeg" / libdir / name, staged / name)
         else:
             (staged / name).unlink(missing_ok=True)
+    if system == "Windows":
+        files.extend(stage_windows_innoextract(app_binary, build_dir, staged))
     notice = resources / "ffmpeg-NOTICE.md"
     if video:
         copy(ROOT / "third_party/ffmpeg/NOTICE.md", notice)

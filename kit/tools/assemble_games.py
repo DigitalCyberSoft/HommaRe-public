@@ -42,7 +42,7 @@ DESKTOP = ("linux", "windows")
 # files ([launcher] config_dir) are the app's that shows the launcher.
 NOT_RESOURCES = {"Info.plist", "PkgInfo", "_CodeSignature", "Frameworks", "PlugIns", "embedded.mobileprovision",
                  "game", "Assets.car", "MacOS", "launcher-games.json", "launcher-manifests",
-                 "launcher-splash.jpg", "innoextract-NOTICE.md"}
+                 "launcher-splash.jpg", "innoextract-NOTICE.md", "innoextract-license"}
 
 
 def load_game(game_dir):

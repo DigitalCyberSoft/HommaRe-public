@@ -280,11 +280,25 @@ if(APPLE AND RECOMP_NATIVE_LAUNCHER)
     endif()
   endif()
 endif()
-# The same launcher on Linux, drawn by the host itself (host/launcher/linux/):
-# the canvas launcher's window with the game's own textures and TrueType
-# text, installing from GOG installers with the system's innoextract. Its
-# words are the SwiftUI launcher's, apple/launcher-strings.json, embedded.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND RECOMP_NATIVE_LAUNCHER)
+# The same launcher on Linux and Windows, drawn by the host itself
+# (host/launcher/linux/): the canvas launcher's window with the game's own
+# textures and TrueType text, installing from GOG installers with the
+# system's innoextract (on Windows the innoextract.exe below, beside the app).
+# Its words are the SwiftUI launcher's, apple/launcher-strings.json, embedded.
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32) AND RECOMP_NATIVE_LAUNCHER)
+  if(WIN32)
+    # Windows has no innoextract to run: the app carries innoextract 1.9's own
+    # Windows build (third_party/innoextract/NOTICE.md), pinned by SHA-256,
+    # beside its executable; tools/package_desktop.py packs it and its licenses.
+    set(pop_inno_dir ${CMAKE_BINARY_DIR}/innoextract-windows)
+    if(NOT EXISTS ${pop_inno_dir}/files/innoextract.exe)
+      file(DOWNLOAD https://constexpr.org/innoextract/files/innoextract-1.9/innoextract-1.9-windows.zip
+           ${pop_inno_dir}/innoextract-1.9-windows.zip
+           EXPECTED_HASH SHA256=6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec993065)
+      file(ARCHIVE_EXTRACT INPUT ${pop_inno_dir}/innoextract-1.9-windows.zip DESTINATION ${pop_inno_dir}/files)
+    endif()
+    file(COPY ${pop_inno_dir}/files/innoextract.exe DESTINATION ${POP_OUT})
+  endif()
   set(pop_strings_cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/launcher_strings.cpp)
   add_custom_command(
     OUTPUT ${pop_strings_cpp}
