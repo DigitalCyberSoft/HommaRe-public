@@ -54,6 +54,10 @@ For Linux on 64-bit ARM from an x86-64 Linux host, make the sysroot once with
 --native` builds the test binaries and runs them through qemu-aarch64. qemu-user
 has the host's page size whatever `-p` says, so `d3d9_pages_16384` and
 `d3d9_pages_65536` (`RECOMP_D3D9_HOST_PAGE`) stand in for 16 and 64 KiB kernels.
+qemu writes a core file into `kit/` for every child `seh_tests` aborts on purpose
+unless `ulimit -c 0` is set first. The GPU suites run on lavapipe under qemu when
+`VK_DRIVER_FILES` names the sysroot's `usr/share/vulkan/icd.d/lvp_icd.aarch64.json`
+(the loader cannot open it through qemu's path remapping), but very slowly.
 
 For a Windows cross-build, set `LLVM_MINGW_ROOT`, then run
 `tools/build.py --preset windows-cross --stub --target app` and
