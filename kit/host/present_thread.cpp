@@ -554,7 +554,8 @@ struct Service : std::enable_shared_from_this<Service> {
     uint64_t cpu_prev = 0;
     std::thread::id cpu_thread{};
     void seal(uint64_t id, HostScreenClass cls, bool had_draws, bool prefix_pending = false) {
-        std::lock_guard lock(mutex);
+        std::unique_lock lock(mutex);
+        await_writer(lock); // never seal pixels still being staged
         if (stop || !writing)
             return;
         auto f = std::move(writing);
@@ -680,12 +681,33 @@ struct Service : std::enable_shared_from_this<Service> {
         c->format = format;
         return c;
     }
+    // GPU allocation for the writer happens outside the mutex: under load an
+    // allocation can wait for the device (its transfer lock is held across
+    // one-shot GPU waits), and holding the mutex meanwhile stopped the worker
+    // and every completion callback with it. A writer doing so counts itself in
+    // `writer_unlocked`; it owns what it fills - a reserved target slot, or the
+    // writing frame's target, which only this frame references until it is
+    // sealed - and seal, other writers and stop wait for it on `completed`.
+    unsigned writer_unlocked = 0;
+    void await_writer(std::unique_lock<std::mutex> &lock) { // mutex held
+        completed.wait(lock, [&] { return stop || writer_unlocked == 0; });
+    }
+    void writer_unlock(std::unique_lock<std::mutex> &lock) {
+        ++writer_unlocked;
+        lock.unlock();
+    }
+    void writer_relock(std::unique_lock<std::mutex> &lock) {
+        lock.lock();
+        --writer_unlocked;
+        completed.notify_all();
+    }
     // Apply backpressure before the first write. Dropping an unrendered frame
     // loses persistent surface updates (dirty HUD rectangles, cursor erasure),
     // even if later whole-scene frames can still be displayed. Completed frames
     // may be discarded by the mailbox after their surface contents are retained.
     HostSceneTarget acquire(int gw, int gh, int rw, int rh) {
         std::unique_lock lock(mutex);
+        await_writer(lock);
         if (stop || gw <= 0 || gh <= 0)
             return {};
         if (writing)
@@ -743,6 +765,7 @@ struct Service : std::enable_shared_from_this<Service> {
         auto target = targets[slot];
         if (!target)
             target = std::make_shared<Target>();
+        targets[slot] = target; // reserved: in use while this holds it
         target->device = fake ? nullptr : device;
         const gpu::TextureDesc overlay_desc = !fake && target->scene.overlay
                                                   ? device->describe(target->scene.overlay)
@@ -756,6 +779,7 @@ struct Service : std::enable_shared_from_this<Service> {
                     --fail_allocations;
                 gpu::Texture world, overlay;
                 if (!fake && !failed) {
+                    writer_unlock(lock);
                     world = texture(w, h, gpu::Format::BGRA8);
                     overlay = texture(gw, gh, gpu::Format::BGRA8);
                     failed = !world || !overlay;
@@ -764,6 +788,11 @@ struct Service : std::enable_shared_from_this<Service> {
                             device->destroy(world);
                         if (overlay)
                             device->destroy(overlay);
+                    }
+                    writer_relock(lock);
+                    if (stop) { // the presenter stopped meanwhile: the target goes with it
+                        target->scene = {world, overlay, w, h};
+                        return {};
                     }
                 }
                 if (!failed) {
@@ -1425,7 +1454,8 @@ extern "C" void host_present_stop() {
         s->sweep();
         s->completed.wait(lock, [&] {
             s->sweep();
-            return s->flights.empty() && s->retiring.empty() && s->pending_commands == 0;
+            return s->flights.empty() && s->retiring.empty() && s->pending_commands == 0 &&
+                   s->writer_unlocked == 0;
         });
         s->writing.reset();
         s->history_lease.reset();
@@ -1510,30 +1540,33 @@ extern "C" void host_present_stage_rgba(const uint8_t *rgba, int w, int h) {
     if (!s || !rgba || w <= 0 || h <= 0)
         return;
     s->acquire(w, h, 0, 0);
-    std::lock_guard lock(s->mutex);
+    std::unique_lock lock(s->mutex);
+    s->await_writer(lock);
     if (s->stop || !s->writing || !s->writing->target)
         return;
     s->guest_w = w;
     s->guest_h = h;
     s->writing->diagnostic = {};
     s->writing->staged_pixels = true;
-    auto &t = *s->writing->target;
-    if (s->fake)
+    const auto target = s->writing->target;
+    auto &t = *target;
+    if (s->fake) {
         t.test_pixels.assign(rgba, rgba + size_t(w) * h * 4);
-    else {
-        t.device = s->device;
-        if (!t.pixels || t.pixels_w != w || t.pixels_h != h ||
-            t.pixels_format != gpu::Format::RGBA8) {
-            if (t.pixels)
-                s->device->destroy(t.pixels);
-            t.pixels = s->texture(w, h);
-            t.pixels_format = gpu::Format::RGBA8;
-            t.pixels_w = w;
-            t.pixels_h = h;
-        }
-        if (t.pixels)
-            s->device->upload(t.pixels, {0, 0, w, h}, rgba, w * 4);
+        return;
     }
+    t.device = s->device;
+    s->writer_unlock(lock); // allocation and upload: see Service::writer_unlocked
+    if (!t.pixels || t.pixels_w != w || t.pixels_h != h || t.pixels_format != gpu::Format::RGBA8) {
+        if (t.pixels)
+            s->device->destroy(t.pixels);
+        t.pixels = s->texture(w, h);
+        t.pixels_format = gpu::Format::RGBA8;
+        t.pixels_w = w;
+        t.pixels_h = h;
+    }
+    if (t.pixels)
+        s->device->upload(t.pixels, {0, 0, w, h}, rgba, w * 4);
+    s->writer_relock(lock);
 }
 // Whether a real device is presenting, so a guest-side GPU path has a queue to
 // put its work on and a frame to stage it into.
@@ -1553,18 +1586,24 @@ bool host_present_stage_texture(gpu::Texture src, int w, int h, int guest_w, int
     // backbuffers are not sampled as RGBA, including when a frame slot is reused.
     const auto format = s->device->describe(src).format;
     s->acquire(guest_w, guest_h, 0, 0);
-    std::lock_guard lock(s->mutex);
+    std::unique_lock lock(s->mutex);
+    s->await_writer(lock);
     if (s->stop || !s->writing || !s->writing->target)
         return false;
-    auto &t = *s->writing->target;
+    const auto target = s->writing->target;
+    auto &t = *target;
     t.device = s->device;
     if (!t.pixels || t.pixels_w != w || t.pixels_h != h || t.pixels_format != format) {
+        s->writer_unlock(lock); // allocation: see Service::writer_unlocked
         if (t.pixels)
             s->device->destroy(t.pixels);
         t.pixels = s->texture(w, h, format);
         t.pixels_format = format;
         t.pixels_w = w;
         t.pixels_h = h;
+        s->writer_relock(lock);
+        if (s->stop || !s->writing || s->writing->target != target)
+            return false;
     }
     if (!t.pixels)
         return false;

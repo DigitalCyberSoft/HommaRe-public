@@ -6,9 +6,11 @@
 #pragma once
 #include "../gpu.h"
 
+#include <condition_variable>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace gpu {
@@ -82,6 +84,11 @@ class FakeDevice final : public Device {
     void fail_next_allocations(int n) {
         fail_allocations_ = n;
     }
+    // Texture allocations made on thread `who` wait until this is called again
+    // with another thread (a default id lets them all go): a device whose
+    // allocation is slow, for the presenter's lock test.
+    void hold_allocations_of(std::thread::id who);
+    int allocations_held() const; // allocations waiting at the gate now
     // Hold completion callbacks instead of running them at commit; `complete_all` runs them.
     void set_manual_completion(bool manual) {
         manual_completion_ = manual;
@@ -136,6 +143,10 @@ class FakeDevice final : public Device {
     bool manual_completion_ = false;
     CommandStatus completion_status_ = CommandStatus::Completed;
     double last_min_duration_ = -1;
+    mutable std::mutex gate_mutex_;
+    std::condition_variable gate_cv_;
+    std::thread::id held_thread_{};
+    int held_ = 0;
     std::function<void(double)> last_presented_;
 };
 

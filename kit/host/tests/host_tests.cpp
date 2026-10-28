@@ -6256,6 +6256,58 @@ static void test_slow_gpu_is_not_a_lost_frame() {
         CHECK_EQ(host_present_unique_completed(), 0u);
     }
 }
+// A guest thread's GPU allocation runs outside the presenter's lock: under
+// load an allocation can wait on the device, and while the guest held the lock
+// the worker and every completion callback waited with it. Both allocation
+// paths - a new scene target in acquire, new pixels in stage - are held at a
+// gate here while another thread takes the lock.
+static void test_guest_allocation_outside_presenter_lock() {
+    gpu::FakeDevice device;
+    host_present_set_device(&device);
+    host_present_start_offscreen(8, 8);
+    std::vector<uint8_t> px(32 * 32 * 4, 7);
+    host_present_stage_rgba(px.data(), 8, 8);
+    host_present_test_seal(1, HOST_SCREEN_MENU, false);
+    // Whether the presenter's lock can be taken while the guest allocates.
+    auto lock_is_free = [] {
+        auto read = std::make_shared<std::atomic<bool>>(false);
+        std::thread([read] {
+            (void)host_present_unique_completed(); // takes the presenter's lock
+            *read = true;
+        }).detach(); // a reader stuck behind the lock ends once the gate opens
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!*read && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        return read->load();
+    };
+    for (int size : {16, 24}) {
+        // 16: a new frame, so acquire allocates a scene target. 24 then stages
+        // pixels of another size into that same frame, so stage allocates.
+        std::atomic<bool> done{false};
+        std::thread guest([&] {
+            device.hold_allocations_of(std::this_thread::get_id());
+            host_present_stage_rgba(px.data(), size, size);
+            done = true;
+        });
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!device.allocations_held() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        CHECK(device.allocations_held() > 0);
+        CHECK(lock_is_free());
+        device.hold_allocations_of({});
+        guest.join();
+        CHECK(done.load());
+    }
+    // The staged frame seals whole, after its allocation, and is presented (frame 1
+    // may have been superseded in the mailbox by then: the newest frame wins).
+    host_present_test_seal(2, HOST_SCREEN_MENU, false);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (host_present_test_last_id() != 2 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    CHECK_EQ(host_present_test_last_id(), 2u);
+    host_present_stop();
+    host_present_set_device(g_gpu.get());
+}
 static void test_newest_sealed_wins_and_oldest_drops() {
     host_present_test_begin();
     host_present_test_seal(1);
@@ -7469,6 +7521,7 @@ static void test_presentation_service() {
     test_windowed_drawable_handler_and_completion_fallback();
     test_windowed_duration_pacing_selector();
     test_slow_gpu_is_not_a_lost_frame();
+    test_guest_allocation_outside_presenter_lock();
     test_presenter_menu_ui_and_movie_pixels();
     test_newest_sealed_wins_and_oldest_drops();
     test_repeat_counted_not_completed();
