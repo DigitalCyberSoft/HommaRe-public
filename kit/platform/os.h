@@ -136,6 +136,9 @@ void *os_fdopen(int fd, const char *mode);
 // Process.
 // ---------------------------------------------------------------------------
 int os_exe_path(char *buf, size_t cap); // 0 or -1; NUL-terminated
+// Windows: a windowed program started from a terminal writes stdout and
+// stderr to that terminal, unless they go somewhere already. A no-op elsewhere.
+void os_attach_parent_console(void);
 // The file of the executable or shared library that holds `address` (one of
 // the caller's own functions): how a game module finds its folder. 0 or -1.
 int os_module_path(const void *address, char *buf, size_t cap);

@@ -488,6 +488,28 @@ if(TARGET recomp_gen)
       # Keep staged FFmpeg libraries (and the shared SDL) discoverable beside the executable.
       set_target_properties(recomp_app PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
     endif()
+    if(WIN32)
+      # A windowed program, so no console opens beside it (one started from a
+      # terminal logs there: os_attach_parent_console), with the game's
+      # icon.png as its icon and its name and version in its resources.
+      set_target_properties(recomp_app PROPERTIES WIN32_EXECUTABLE TRUE)
+      set(pop_app_rc ${CMAKE_CURRENT_BINARY_DIR}/generated/app.rc)
+      set(POP_APP_ICON_RESOURCE "")
+      if(EXISTS ${RECOMP_GAME_DIR}/icon.png)
+        set(pop_app_ico ${CMAKE_CURRENT_BINARY_DIR}/generated/app.ico)
+        add_custom_command(
+          OUTPUT ${pop_app_ico}
+          COMMAND ${Python3_EXECUTABLE} ${POP_ROOT}/tools/extract_icon.py
+                  --image ${RECOMP_GAME_DIR}/icon.png --ico ${pop_app_ico}
+          DEPENDS ${RECOMP_GAME_DIR}/icon.png ${POP_ROOT}/tools/extract_icon.py
+          COMMENT "Making the app's icon"
+          VERBATIM)
+        set(POP_APP_ICON_RESOURCE "1 ICON \"${pop_app_ico}\"")
+        set_source_files_properties(${pop_app_rc} PROPERTIES OBJECT_DEPENDS ${pop_app_ico})
+      endif()
+      configure_file(${POP_ROOT}/platform/windows/app.rc.in ${pop_app_rc} @ONLY)
+      target_sources(recomp_app PRIVATE ${pop_app_rc})
+    endif()
   endif()
 
   # The game as a module of a multi-game app (RECOMP_GAME_MODULES): the same
