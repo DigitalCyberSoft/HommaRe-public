@@ -1,9 +1,14 @@
 // native_launcher_sdl.cpp - runs the SwiftUI launcher (native_launcher.h) from
 // the SDL host: finds the window's NSWindow or UIWindow through SDL's window
 // properties and keeps pumping SDL events, which on Apple platforms also runs
-// the run loop the SwiftUI views live on. Builds without the Swift launcher
-// get the stubs at the bottom and keep the canvas launcher.
+// the run loop the SwiftUI views live on. On Linux the launcher draws in the
+// SDL window itself and reads its events (linux/bridge.cpp). Builds without a
+// native launcher get the stubs at the bottom and keep the canvas launcher.
 #include "native_launcher.h"
+
+#if defined(RECOMP_NATIVE_LAUNCHER_SDL)
+#include "linux/bridge.h"
+#endif
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -23,12 +28,20 @@ bool native_available(const std::string &config_path) {
 }
 
 int native_run(SDL_Window *window, const std::string &config_path, const std::string &modules,
-               const std::string &known_exe, const std::string &profile_dir, NativeChoice *out) {
+               const std::string &known_exe, const std::string &profile_dir, NativeChoice *out,
+               gpu::Device *device, void *native_surface) {
+#if defined(RECOMP_NATIVE_LAUNCHER_SDL)
+    native::present_with(device, native_surface);
+    void *native = window;
+#else
+    (void)device;
+    (void)native_surface;
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
 #if defined(SDL_PLATFORM_IOS)
     void *native = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
 #else
     void *native = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+#endif
 #endif
     if (!native || !recomp_native_launcher_begin(native, config_path.c_str(), modules.c_str(),
                                                  known_exe.c_str(), profile_dir.c_str())) {
@@ -40,6 +53,11 @@ int native_run(SDL_Window *window, const std::string &config_path, const std::st
     SDL_ShowWindow(window);
     SDL_RaiseWindow(window);
     int state = 0;
+#if defined(RECOMP_NATIVE_LAUNCHER_SDL)
+    // Each poll waits a little for the window's events and handles them.
+    while ((state = recomp_native_launcher_poll()) == 0) {
+    }
+#else
     while ((state = recomp_native_launcher_poll()) == 0) {
         SDL_Event e;
         if (!SDL_WaitEventTimeout(&e, 50))
@@ -51,6 +69,7 @@ int native_run(SDL_Window *window, const std::string &config_path, const std::st
         if (state)
             break;
     }
+#endif
     if (state == 1 && out) {
         auto s = [](const char *p) { return std::string(p ? p : ""); };
         out->exe = s(recomp_native_launcher_exe());
@@ -69,7 +88,7 @@ bool native_available(const std::string &) {
 }
 
 int native_run(SDL_Window *, const std::string &, const std::string &, const std::string &, const std::string &,
-               NativeChoice *) {
+               NativeChoice *, gpu::Device *, void *) {
     return -1;
 }
 

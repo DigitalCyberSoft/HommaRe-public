@@ -3292,7 +3292,8 @@ int main(int argc, char **argv) {
 #else
             const std::string modules = RECOMP_GAME_ID;
 #endif
-            const int r = launcher::native_run(g_window, native_config, modules, game.exe, saves_dir(), &choice);
+            const int r = launcher::native_run(g_window, native_config, modules, game.exe,
+                                               saves_dir(), &choice, g_gpu.get(), g_surface);
             if (r == 0)
                 return 2;
 #if defined(RECOMP_GAME_MODULES)

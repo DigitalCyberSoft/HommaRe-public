@@ -12,9 +12,10 @@ project(PopulousRecomp LANGUAGES C CXX)
 if(APPLE)
   enable_language(OBJCXX)
 endif()
-# The SwiftUI launcher (host/launcher/apple/) on macOS and iOS; the canvas
-# launcher everywhere else and with this off.
-option(RECOMP_NATIVE_LAUNCHER "Build the SwiftUI launcher on Apple platforms" ON)
+# The SwiftUI launcher (host/launcher/apple/) on macOS and iOS, the same one
+# drawn by the host on Linux (host/launcher/linux/); the canvas launcher
+# everywhere else and with this off.
+option(RECOMP_NATIVE_LAUNCHER "Build the native launcher (SwiftUI on Apple platforms, the host's on Linux)" ON)
 # Several games in one app (Apple, Linux): each game also builds as a module,
 # libgame.<id>.dylib (.so) with recomp_game_main for an entry, and the app the
 # launcher runs in loads the module of the game the player picks

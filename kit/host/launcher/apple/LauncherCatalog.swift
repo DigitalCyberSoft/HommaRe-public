@@ -3,7 +3,7 @@
 enum LauncherCatalog {
     static let json = #"""
 {
- "_comment": "The launcher's own words (L10n in LauncherStrings.swift): key = L10n member ('.ios'/'.mac'/'.iosInstaller' = #if os() variants), one text per language, {name} = the member's arguments listed in 'args'. kit/tools/launcher_strings.py checks it and writes LauncherCatalog.swift from it.",
+ "_comment": "The launcher's own words (L10n in LauncherStrings.swift): key = L10n member ('.ios'/'.mac'/'.iosInstaller' = #if os() variants; '.linux' = the native launcher on Linux, host/launcher/linux/), one text per language, {name} = the member's arguments listed in 'args'. kit/tools/launcher_strings.py checks it and writes LauncherCatalog.swift from it.",
  "languages": [
   {
    "code": "en",
@@ -128,6 +128,18 @@ enum LauncherCatalog {
    "hu": "Megjelenítés a Finderben",
    "pl": "Pokaż w Finderze",
    "zh-Hans": "在访达中显示"
+  },
+  "showInFinder.linux": {
+   "en": "Open folder",
+   "ru": "Открыть папку",
+   "cs": "Otevřít složku",
+   "de": "Ordner öffnen",
+   "es": "Abrir carpeta",
+   "fr": "Ouvrir le dossier",
+   "it": "Apri cartella",
+   "hu": "Mappa megnyitása",
+   "pl": "Otwórz folder",
+   "zh-Hans": "打开文件夹"
   },
   "saves": {
    "en": "Saves",
@@ -1136,6 +1148,18 @@ enum LauncherCatalog {
    "hu": "Az app ezen buildjéből hiányzik az innoextract segédprogram.",
    "pl": "Ta wersja aplikacji nie zawiera narzędzia innoextract.",
    "zh-Hans": "此版本的应用缺少 innoextract 辅助程序。"
+  },
+  "noHelper.linux": {
+   "en": "innoextract is not installed. Install it from your distribution's packages (for example dnf install innoextract or apt install innoextract), then try again.",
+   "ru": "innoextract не установлен. Установите его из пакетов вашего дистрибутива (например, dnf install innoextract или apt install innoextract) и попробуйте снова.",
+   "cs": "innoextract není nainstalován. Nainstalujte jej z balíčků vaší distribuce (například dnf install innoextract nebo apt install innoextract) a zkuste to znovu.",
+   "de": "innoextract ist nicht installiert. Installiere es aus den Paketen deiner Distribution (zum Beispiel dnf install innoextract oder apt install innoextract) und versuche es erneut.",
+   "es": "innoextract no está instalado. Instálalo desde los paquetes de tu distribución (por ejemplo, dnf install innoextract o apt install innoextract) y vuelve a intentarlo.",
+   "fr": "innoextract n’est pas installé. Installez-le depuis les paquets de votre distribution (par exemple dnf install innoextract ou apt install innoextract), puis réessayez.",
+   "it": "innoextract non è installato. Installalo dai pacchetti della tua distribuzione (ad esempio dnf install innoextract o apt install innoextract) e riprova.",
+   "hu": "Az innoextract nincs telepítve. Telepítsd a disztribúciód csomagjaiból (például dnf install innoextract vagy apt install innoextract), majd próbáld újra.",
+   "pl": "innoextract nie jest zainstalowany. Zainstaluj go z pakietów swojej dystrybucji (na przykład dnf install innoextract lub apt install innoextract) i spróbuj ponownie.",
+   "zh-Hans": "未安装 innoextract。请从你的发行版软件包中安装（例如 dnf install innoextract 或 apt install innoextract），然后重试。"
   },
   "missingSlice": {
    "args": [
