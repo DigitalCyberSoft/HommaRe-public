@@ -587,11 +587,11 @@ static std::string &vfetch_prelude_text() {
 }
 int host_d9_vfetch_supported(void) {
     D9Backend *b = backend();
-    return b && b->vfetch() ? 1 : 0;
+    return b ? b->vfetch() : 0;
 }
-void host_d9_vfetch_set_prelude(const char *msl) {
-    if (msl && vfetch_prelude_text().empty())
-        vfetch_prelude_text() = msl;
+void host_d9_vfetch_set_prelude(const char *source) {
+    if (source && vfetch_prelude_text().empty())
+        vfetch_prelude_text() = source;
 }
 const char *host_d9_vfetch_prelude(void) {
     return vfetch_prelude_text().empty() ? nullptr : vfetch_prelude_text().c_str();

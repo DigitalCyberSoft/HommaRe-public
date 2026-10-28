@@ -1,9 +1,14 @@
 /* gpu_skin_math.h - one skinned, lit vertex of the game's format 5 (0x20 bytes:
  * position, normal, two uv pairs, two light colours in TANGENT0/1), computed
  * from the bind pose the way the game's CPU path computes it, so the two can
- * be compared byte for byte. Compiled twice: as C++ into native/gpu_skin.cpp
- * (the reference and check mode) and as Metal Shading Language, embedded as
- * text, in the vertex shaders' fetch (kit d3d9_vfetch).
+ * be compared byte for byte. Compiled three times: as C++ into native/gpu_skin.cpp
+ * (the reference and check mode), and as Metal Shading Language or Vulkan
+ * GLSL, embedded as text, in the vertex shaders' fetch (kit d3d9_vfetch).
+ * GLSL has no pointers: there a pointer into POOL, HEAP or TAB is a word
+ * index into the fetch's buffer d9_b1, d9_b2 or d9_b3, read through
+ * H5_POOL_AT / H5_HEAP_AT / H5_TAB_AT, and a thread array is an array
+ * parameter (H5_IN, H5_OUT). It has no implicit bool either, hence the
+ * explicit comparisons with zero.
  *
  * The game's functions it follows (Tribes of the East addresses; the base
  * game's in brackets, design notes gpu-skinning-plan.md has the formulas):
@@ -32,27 +37,54 @@
 #define GPU_SKIN_MATH_H
 
 #ifdef __METAL_VERSION__
-#define H5_DEV device const
-#define H5_TAB constant
-#define H5_THR thread
+#define H5_PTR device const uint *
+#define H5_TPTR constant uint *
+#define H5_IN(t, name, n) thread t *name
+#define H5_OUT(t, name, n) thread t *name
+#define H5_POOL_AT(p, i) (p)[i]
+#define H5_HEAP_AT(p, i) (p)[i]
+#define H5_TAB_AT(p, i) (p)[i]
+#define H5_I32(x) ((int)(x))
+#define H5_U32(x) ((uint)(x))
+#define H5_PRECISE
 #define H5_FN static inline
 typedef int h5_i32;
 typedef uint h5_u32;
-typedef short h5_i16;
-typedef ushort h5_u16;
 static inline float h5_f(h5_u32 w) { return as_type<float>(w); }
 static inline h5_u32 h5_w(float f) { return as_type<h5_u32>(f); }
+#elif defined(VULKAN)
+#define H5_PTR uint
+#define H5_TPTR uint
+#define H5_IN(t, name, n) t name[n]
+#define H5_OUT(t, name, n) out t name[n]
+#define H5_POOL_AT(p, i) d9_b1[(p) + (i)]
+#define H5_HEAP_AT(p, i) d9_b2[(p) + (i)]
+#define H5_TAB_AT(p, i) d9_b3[(p) + (i)]
+#define H5_I32(x) int(x)
+#define H5_U32(x) uint(x)
+/* The positions as the CPU rounds them: no fused multiply-adds. */
+#define H5_PRECISE precise
+#define H5_FN
+#define h5_i32 int
+#define h5_u32 uint
+float h5_f(h5_u32 w) { return uintBitsToFloat(w); }
+h5_u32 h5_w(float f) { return floatBitsToUint(f); }
 #else
 #include <stdint.h>
 #include <string.h>
-#define H5_DEV const
-#define H5_TAB const
-#define H5_THR
+#define H5_PTR const h5_u32 *
+#define H5_TPTR const h5_u32 *
+#define H5_IN(t, name, n) t *name
+#define H5_OUT(t, name, n) t *name
+#define H5_POOL_AT(p, i) (p)[i]
+#define H5_HEAP_AT(p, i) (p)[i]
+#define H5_TAB_AT(p, i) (p)[i]
+#define H5_I32(x) ((h5_i32)(x))
+#define H5_U32(x) ((h5_u32)(x))
+#define H5_PRECISE
 #define H5_FN static inline
 typedef int32_t h5_i32;
 typedef uint32_t h5_u32;
-typedef int16_t h5_i16;
-typedef uint16_t h5_u16;
 static inline float h5_f(h5_u32 w) {
     float f;
     memcpy(&f, &w, 4);
@@ -93,98 +125,97 @@ static inline h5_u32 h5_w(float f) {
 #define H5_TAB_RSQRT 0      /* word offset of the rsqrt table in TAB */
 #define H5_TAB_CBRT 8192    /* word offset of the cube-root table */
 
-H5_FN h5_i32 h5_s16(h5_i32 x) { return (h5_i32)(h5_i16)(h5_u16)(h5_u32)x; }
+H5_FN h5_i32 h5_s16(h5_i32 x) { return ((x & 0xffff) ^ 0x8000) - 0x8000; }
 H5_FN h5_i32 h5_sat16(h5_i32 x) { return x < -32768 ? -32768 : x > 32767 ? 32767 : x; }
 H5_FN h5_i32 h5_mulhi(h5_i32 a, h5_i32 b) { return (a * b) >> 16; }
 /* PSLLW: a 16-bit shift left, wrapping. */
-H5_FN h5_i32 h5_shl16(h5_i32 x, h5_u32 n) { return h5_s16((h5_i32)(((h5_u32)x & 0xffffu) << n)); }
-H5_FN h5_u32 h5_satu8(h5_i32 x) { return x < 0 ? 0u : x > 255 ? 255u : (h5_u32)x; }
-/* Word k of a packed 4 x i16 vector stored as two words. */
-H5_FN h5_i32 h5_word(H5_DEV h5_u32 *v, h5_u32 k) {
-    return h5_s16((h5_i32)(v[k >> 1] >> ((k & 1u) * 16u)));
+H5_FN h5_i32 h5_shl16(h5_i32 x, h5_u32 n) { return h5_s16(H5_I32((H5_U32(x) & 0xffffu) << n)); }
+H5_FN h5_u32 h5_satu8(h5_i32 x) { return x < 0 ? 0u : x > 255 ? 255u : H5_U32(x); }
+/* Word k of a packed 4 x i16 vector stored as two words (in HEAP). */
+H5_FN h5_i32 h5_word(H5_PTR v, h5_u32 k) {
+    return h5_s16(H5_I32(H5_HEAP_AT(v, k >> 1) >> ((k & 1u) * 16u)));
 }
-H5_FN h5_u32 h5_tab16(H5_TAB h5_u32 *t, h5_u32 i) {
-    return (t[H5_TAB_RSQRT + (i >> 1)] >> ((i & 1u) * 16u)) & 0xffffu;
+H5_FN h5_u32 h5_tab16(H5_TPTR t, h5_u32 i) {
+    return (H5_TAB_AT(t, H5_TAB_RSQRT + (i >> 1)) >> ((i & 1u) * 16u)) & 0xffffu;
 }
-H5_FN h5_u32 h5_tab8(H5_TAB h5_u32 *t, h5_u32 i) {
-    return (t[H5_TAB_CBRT + (i >> 2)] >> ((i & 3u) * 8u)) & 0xffu;
+H5_FN h5_u32 h5_tab8(H5_TPTR t, h5_u32 i) {
+    return (H5_TAB_AT(t, H5_TAB_CBRT + (i >> 2)) >> ((i & 3u) * 8u)) & 0xffu;
 }
 
 /* One bone's R(M): the normal's words through the rotated rows, saturating
  * (00557470's PMULHW / PADDSW sequence). n[3] is zero. */
-H5_FN void h5_rotate(H5_THR h5_i32 *n, H5_DEV h5_u32 *m, H5_THR h5_i32 *r) {
+H5_FN void h5_rotate(H5_IN(h5_i32, n, 4), H5_PTR m, H5_OUT(h5_i32, r, 4)) {
     const h5_i32 a1[4] = {n[2], h5_s16(n[0] + n[3]), n[1], n[2]};
     const h5_i32 a2[4] = {n[1], n[2], h5_s16(n[0] + n[3]), n[1]};
-    for (h5_u32 k = 0; k < 4; ++k) {
-        const h5_i32 s = h5_sat16(h5_mulhi(n[k], h5_word(m, k)) + h5_mulhi(a1[k], h5_word(m, 4 + k)));
-        r[k] = h5_sat16(s + h5_mulhi(a2[k], h5_word(m + 4, k)));
+    for (h5_u32 k = 0u; k < 4u; ++k) {
+        const h5_i32 s = h5_sat16(h5_mulhi(n[k], h5_word(m, k)) + h5_mulhi(a1[k], h5_word(m, 4u + k)));
+        r[k] = h5_sat16(s + h5_mulhi(a2[k], h5_word(m + 4u, k)));
     }
 }
 
 /* The skinned normal: rec is the mesh record's normal, wb the four weight
  * bytes, bone the four bone bytes, pali the i16 palette (6 words a bone). */
-H5_FN h5_u32 h5_normal(h5_u32 rec, h5_u32 wb, h5_u32 bone, H5_DEV h5_u32 *pali, h5_u32 nbones,
-                       H5_TAB h5_u32 *tab) {
+H5_FN h5_u32 h5_normal(h5_u32 rec, h5_u32 wb, h5_u32 bone, H5_PTR pali, h5_u32 nbones, H5_TPTR tab) {
     h5_i32 n[4];
-    for (h5_u32 k = 0; k < 3; ++k)
-        n[k] = h5_s16((h5_i32)(((rec >> (8u * k)) & 0xffu) << 8) - 0x8000);
+    for (h5_u32 k = 0u; k < 3u; ++k)
+        n[k] = h5_s16(H5_I32(((rec >> (8u * k)) & 0xffu) << 8) - 0x8000);
     n[3] = 0;
     const h5_u32 w1 = (wb >> 8) & 0xffu, w2 = (wb >> 16) & 0xffu;
-    const h5_u32 last = nbones ? nbones - 1u : 0u;
+    const h5_u32 last = nbones != 0u ? nbones - 1u : 0u;
     h5_i32 w[4];
-    if (!w1) {
+    if (w1 == 0u) {
         h5_u32 b = bone & 0xffu;
         b = b < nbones ? b : last;
         h5_i32 r[4];
         h5_rotate(n, pali + b * 6u, r);
-        for (h5_u32 k = 0; k < 4; ++k)
-            w[k] = h5_shl16(r[k], 3);
+        for (h5_u32 k = 0u; k < 4u; ++k)
+            w[k] = h5_shl16(r[k], 3u);
     } else {
-        const h5_u32 nb = w2 ? 3u : 2u;
+        const h5_u32 nb = w2 != 0u ? 3u : 2u;
         h5_i32 sum[4] = {0, 0, 0, 0};
-        for (h5_u32 j = 0; j < nb; ++j) {
+        for (h5_u32 j = 0u; j < nb; ++j) {
             h5_u32 b = (bone >> (8u * j)) & 0xffu;
             b = b < nbones ? b : last;
-            const h5_i32 wt = (h5_i32)(((wb >> (8u * j)) & 0xffu) << 6);
+            const h5_i32 wt = H5_I32(((wb >> (8u * j)) & 0xffu) << 6);
             h5_i32 r[4];
             h5_rotate(n, pali + b * 6u, r);
-            for (h5_u32 k = 0; k < 4; ++k) {
-                const h5_i32 p = h5_mulhi(h5_shl16(r[k], 4), wt);
-                sum[k] = j ? h5_sat16(sum[k] + p) : p;
+            for (h5_u32 k = 0u; k < 4u; ++k) {
+                const h5_i32 p = h5_mulhi(h5_shl16(r[k], 4u), wt);
+                sum[k] = j != 0u ? h5_sat16(sum[k] + p) : p;
             }
         }
-        for (h5_u32 k = 0; k < 4; ++k)
-            w[k] = h5_shl16(sum[k], 3);
+        for (h5_u32 k = 0u; k < 4u; ++k)
+            w[k] = h5_shl16(sum[k], 3u);
     }
-    const h5_u32 len2 = (h5_u32)(w[0] * w[0] + w[1] * w[1]) + (h5_u32)(w[2] * w[2] + w[3] * w[3]);
-    const h5_i32 rs = (h5_i32)h5_tab16(tab, len2 >> 18);
-    h5_u32 out = rec & 0xff000000u;
-    for (h5_u32 k = 0; k < 4; ++k) {
-        const h5_u32 bias = k < 3 ? 0x8080u : 0u;
-        const h5_u32 v = (((h5_u32)h5_shl16(h5_mulhi(w[k], rs), 5) + bias) & 0xffffu) >> 8;
-        out |= v << (8u * k);
+    const h5_u32 len2 = H5_U32(w[0] * w[0] + w[1] * w[1]) + H5_U32(w[2] * w[2] + w[3] * w[3]);
+    const h5_i32 rs = H5_I32(h5_tab16(tab, len2 >> 18));
+    h5_u32 o = rec & 0xff000000u;
+    for (h5_u32 k = 0u; k < 4u; ++k) {
+        const h5_u32 bias = k < 3u ? 0x8080u : 0u;
+        const h5_u32 v = ((H5_U32(h5_shl16(h5_mulhi(w[k], rs), 5u)) + bias) & 0xffffu) >> 8;
+        o |= v << (8u * k);
     }
-    return out;
+    return o;
 }
 
 /* N.D of a packed normal with the decode bias, as PMADDWD + PADDD + PSRAD 15,
  * then the low word. */
-H5_FN h5_i32 h5_ndot(h5_u32 nrm, H5_DEV h5_u32 *bias, H5_DEV h5_u32 *dir) {
+H5_FN h5_i32 h5_ndot(h5_u32 nrm, H5_PTR bias, H5_PTR dir) {
     h5_i32 d = 0;
-    for (h5_u32 k = 0; k < 4; ++k) {
-        const h5_i32 nk = h5_s16((h5_i32)(((nrm >> (8u * k)) & 0xffu) * 257u) - h5_word(bias, k));
+    for (h5_u32 k = 0u; k < 4u; ++k) {
+        const h5_i32 nk = h5_s16(H5_I32(((nrm >> (8u * k)) & 0xffu) * 257u) - h5_word(bias, k));
         d += nk * h5_word(dir, k);
     }
     return d >> 15;
 }
 
-/* 005866e0: the two directional colours of one normal. */
-H5_FN void h5_directional(h5_u32 nrm, H5_DEV h5_u32 *part, H5_THR h5_u32 *o0, H5_THR h5_u32 *o1) {
+/* 005866e0: the two directional colours of one normal, o[0] and o[1]. */
+H5_FN void h5_directional(h5_u32 nrm, H5_PTR part, H5_OUT(h5_u32, o, 2)) {
     const h5_i32 s = h5_s16(h5_ndot(nrm, part + H5_PART_BIAS, part + H5_PART_DIR));
     const h5_i32 pos = s >= 0 ? s : 0;
     const h5_i32 neg = s < 0 ? h5_s16(~s) : -1;
-    h5_u32 a = 0, b = 0;
-    for (h5_u32 k = 0; k < 4; ++k) {
+    h5_u32 a = 0u, b = 0u;
+    for (h5_u32 k = 0u; k < 4u; ++k) {
         const h5_i32 base = h5_word(part + H5_PART_BASE, k);
         const h5_i32 x0 = h5_s16(h5_s16(base + h5_mulhi(h5_word(part + H5_PART_C0, k), pos)) +
                                  h5_mulhi(h5_word(part + H5_PART_SEC, k), neg));
@@ -193,119 +224,124 @@ H5_FN void h5_directional(h5_u32 nrm, H5_DEV h5_u32 *part, H5_THR h5_u32 *o0, H5
         a |= h5_satu8(x0 >> 4) << (8u * k);
         b |= h5_satu8(x1 >> 4) << (8u * k);
     }
-    *o0 = a;
-    *o1 = b;
+    o[0] = a;
+    o[1] = b;
 }
 
 /* 00587510: per byte (c * m) >> 8. */
 H5_FN h5_u32 h5_modulate(h5_u32 c, h5_u32 m) {
-    h5_u32 o = 0;
-    for (h5_u32 k = 0; k < 4; ++k)
+    h5_u32 o = 0u;
+    for (h5_u32 k = 0u; k < 4u; ++k)
         o |= ((((c >> (8u * k)) & 0xffu) * ((m >> (8u * k)) & 0xffu)) >> 8) << (8u * k);
     return o;
 }
 
 /* 00587100: the lights [first, first + count) of the part added up on the
  * mesh record's normal (words 0..2; the fourth never reaches the vertex). */
-H5_FN void h5_point(h5_u32 nrm, H5_DEV h5_u32 *part, h5_u32 first, h5_u32 count, H5_THR h5_i32 *acc) {
+H5_FN void h5_point(h5_u32 nrm, H5_PTR part, h5_u32 first, h5_u32 count, H5_OUT(h5_i32, acc, 3)) {
     acc[0] = acc[1] = acc[2] = 0;
-    for (h5_u32 j = 0; j < count; ++j) {
-        H5_DEV h5_u32 *l = part + H5_PART_LIGHTS + (first + j) * 4u;
+    for (h5_u32 j = 0u; j < count; ++j) {
+        H5_PTR l = part + H5_PART_LIGHTS + (first + j) * 4u;
         h5_i32 d = 0;
-        for (h5_u32 k = 0; k < 3; ++k)
-            d += h5_s16((h5_i32)(((nrm >> (8u * k)) & 0xffu) * 257u) - 0x8000) * h5_word(l, k);
+        for (h5_u32 k = 0u; k < 3u; ++k)
+            d += h5_s16(H5_I32(((nrm >> (8u * k)) & 0xffu) * 257u) - 0x8000) * h5_word(l, k);
         d = h5_sat16(d >> 15);
         d = d > 0 ? d : 0;
-        for (h5_u32 k = 0; k < 3; ++k)
-            acc[k] = h5_sat16(acc[k] + h5_sat16((d * h5_word(l + 2, k) + 0x1000) >> 13));
+        for (h5_u32 k = 0u; k < 3u; ++k)
+            acc[k] = h5_sat16(acc[k] + h5_sat16((d * h5_word(l + 2u, k) + 0x1000) >> 13));
     }
 }
 
 /* 00586180: a colour lifted to "gamma 3", the light added, back through the
  * cube-root table. */
-H5_FN h5_u32 h5_combine(h5_u32 c, H5_THR h5_i32 *acc, H5_TAB h5_u32 *tab) {
-    h5_u32 o = 0;
-    for (h5_u32 k = 0; k < 3; ++k) {
-        const h5_i32 x = (h5_i32)((((c >> (8u * k)) & 0xffu) * 257u) >> 1);
-        const h5_i32 x2 = h5_shl16(h5_mulhi(x, x), 1);
-        const h5_i32 x3 = h5_shl16(h5_mulhi(x2, x), 1);
-        const h5_u32 lo = ((((h5_u32)(x2 * x)) & 0xffffu) >> 2) | 0x4000u;
-        const h5_u32 y = ((h5_u32)h5_sat16(x3 + acc[k]) & 0xffffu) >> 1;
-        const h5_u32 idx = y ? y : lo;
+H5_FN h5_u32 h5_combine(h5_u32 c, H5_IN(h5_i32, acc, 3), H5_TPTR tab) {
+    h5_u32 o = 0u;
+    for (h5_u32 k = 0u; k < 3u; ++k) {
+        const h5_i32 x = H5_I32((((c >> (8u * k)) & 0xffu) * 257u) >> 1);
+        const h5_i32 x2 = h5_shl16(h5_mulhi(x, x), 1u);
+        const h5_i32 x3 = h5_shl16(h5_mulhi(x2, x), 1u);
+        const h5_u32 lo = ((H5_U32(x2 * x) & 0xffffu) >> 2) | 0x4000u;
+        const h5_u32 y = (H5_U32(h5_sat16(x3 + acc[k])) & 0xffffu) >> 1;
+        const h5_u32 idx = y != 0u ? y : lo;
         o |= h5_tab8(tab, idx & 0x7fffu) << (8u * k);
     }
     return o;
 }
 
-/* Bone b's 3x4 float rows applied to p, in the game's order of terms. */
-H5_FN void h5_bone(H5_DEV h5_u32 *m, float x, float y, float z, H5_THR float *o) {
-    o[0] = y * h5_f(m[1]) + x * h5_f(m[0]) + z * h5_f(m[2]) + h5_f(m[3]);
-    o[1] = x * h5_f(m[4]) + y * h5_f(m[5]) + z * h5_f(m[6]) + h5_f(m[7]);
-    o[2] = x * h5_f(m[8]) + y * h5_f(m[9]) + z * h5_f(m[10]) + h5_f(m[11]);
+/* Bone b's 3x4 float rows (in HEAP) applied to p, in the game's order of terms. */
+H5_FN float h5_row(H5_PTR m, h5_u32 i) { return h5_f(H5_HEAP_AT(m, i)); }
+H5_FN void h5_bone(H5_PTR m, float x, float y, float z, H5_OUT(float, o, 3)) {
+    H5_PRECISE float o0 = y * h5_row(m, 1u) + x * h5_row(m, 0u) + z * h5_row(m, 2u) + h5_row(m, 3u);
+    H5_PRECISE float o1 = x * h5_row(m, 4u) + y * h5_row(m, 5u) + z * h5_row(m, 6u) + h5_row(m, 7u);
+    H5_PRECISE float o2 = x * h5_row(m, 8u) + y * h5_row(m, 9u) + z * h5_row(m, 10u) + h5_row(m, 11u);
+    o[0] = o0;
+    o[1] = o1;
+    o[2] = o2;
 }
 
 /* The vertex MAP word m names, as the 8 words of a format 5 vertex. */
-H5_FN void h5_skin_vertex(h5_u32 m, H5_DEV h5_u32 *pool, H5_DEV h5_u32 *heap, H5_TAB h5_u32 *tab,
-                          H5_THR h5_u32 *w) {
-    H5_DEV h5_u32 *part = heap + (m >> 16) * H5_PART_WORDS;
-    H5_DEV h5_u32 *v = pool + (part[H5_PART_POOL] + (m & 0xffffu)) * 16u;
-    const h5_u32 nbones = part[H5_PART_BONES];
-    const h5_u32 last = nbones ? nbones - 1u : 0u;
-    H5_DEV h5_u32 *palf = heap + part[H5_PART_PALF];
-    const float x = h5_f(v[0]), y = h5_f(v[1]), z = h5_f(v[2]);
-    const h5_u32 wb = v[12], bone = v[13];
-    float p[3];
-    if (!((wb >> 8) & 0xffu)) {
+H5_FN void h5_skin_vertex(h5_u32 m, H5_PTR pool, H5_PTR heap, H5_TPTR tab, H5_OUT(h5_u32, w, 8)) {
+    H5_PTR part = heap + (m >> 16) * H5_PART_WORDS;
+    H5_PTR v = pool + (H5_HEAP_AT(part, H5_PART_POOL) + (m & 0xffffu)) * 16u;
+    const h5_u32 nbones = H5_HEAP_AT(part, H5_PART_BONES);
+    const h5_u32 last = nbones != 0u ? nbones - 1u : 0u;
+    H5_PTR palf = heap + H5_HEAP_AT(part, H5_PART_PALF);
+    const float x = h5_f(H5_POOL_AT(v, 0u)), y = h5_f(H5_POOL_AT(v, 1u)), z = h5_f(H5_POOL_AT(v, 2u));
+    const h5_u32 wb = H5_POOL_AT(v, 12u), bone = H5_POOL_AT(v, 13u);
+    H5_PRECISE float p[3];
+    if (((wb >> 8) & 0xffu) == 0u) {
         h5_u32 b = bone & 0xffu;
         b = b < nbones ? b : last;
         h5_bone(palf + b * 12u, x, y, z, p);
     } else {
         p[0] = p[1] = p[2] = 0.0f;
-        for (h5_u32 j = 0; j < 4u && ((wb >> (8u * j)) & 0xffu); ++j) {
+        for (h5_u32 j = 0u; j < 4u && ((wb >> (8u * j)) & 0xffu) != 0u; ++j) {
             h5_u32 b = (bone >> (8u * j)) & 0xffu;
             b = b < nbones ? b : last;
             float q[3];
             h5_bone(palf + b * 12u, x, y, z, q);
-            const float wt = h5_f(v[8 + j]);
+            const float wt = h5_f(H5_POOL_AT(v, 8u + j));
             p[0] = q[0] * wt + p[0];
             p[1] = q[1] * wt + p[1];
             p[2] = q[2] * wt + p[2];
         }
     }
-    const h5_u32 flags = part[H5_PART_FLAGS];
-    const h5_u32 nrm = h5_normal(v[3], wb, bone, heap + part[H5_PART_PALI], nbones, tab);
-    h5_u32 o0, o1;
-    if (flags & H5_FLAG_BAKED) {
-        o0 = (flags & H5_FLAG_GRAY) ? 0x404040u : v[7];
-        o1 = (flags & H5_FLAG_GRAY) ? 0x404040u : v[6];
+    const h5_u32 flags = H5_HEAP_AT(part, H5_PART_FLAGS);
+    const h5_u32 rec = H5_POOL_AT(v, 3u);
+    const h5_u32 nrm = h5_normal(rec, wb, bone, heap + H5_HEAP_AT(part, H5_PART_PALI), nbones, tab);
+    h5_u32 o[2];
+    if ((flags & H5_FLAG_BAKED) != 0u) {
+        o[0] = (flags & H5_FLAG_GRAY) != 0u ? 0x404040u : H5_POOL_AT(v, 7u);
+        o[1] = (flags & H5_FLAG_GRAY) != 0u ? 0x404040u : H5_POOL_AT(v, 6u);
     } else {
-        h5_directional(nrm, part, &o0, &o1);
-        if (flags & H5_FLAG_CH13) {
-            o1 = h5_modulate(o1, v[14]);
-            o0 = h5_modulate(o0, v[14]);
+        h5_directional(nrm, part, o);
+        if ((flags & H5_FLAG_CH13) != 0u) {
+            o[1] = h5_modulate(o[1], H5_POOL_AT(v, 14u));
+            o[0] = h5_modulate(o[0], H5_POOL_AT(v, 14u));
         }
-        const h5_u32 ns = part[H5_PART_NLIGHT] & 0xffu, nd = (part[H5_PART_NLIGHT] >> 8) & 0xffu;
+        const h5_u32 nl = H5_HEAP_AT(part, H5_PART_NLIGHT);
+        const h5_u32 ns = nl & 0xffu, nd = (nl >> 8) & 0xffu;
         h5_i32 acc[3];
-        if (flags & H5_FLAG_STATIC) {
-            h5_point(v[3], part, 0u, ns, acc);
-            o0 = h5_combine(o0, acc, tab);
-            o1 = h5_combine(o1, acc, tab);
+        if ((flags & H5_FLAG_STATIC) != 0u) {
+            h5_point(rec, part, 0u, ns, acc);
+            o[0] = h5_combine(o[0], acc, tab);
+            o[1] = h5_combine(o[1], acc, tab);
         }
-        if (flags & H5_FLAG_DYN) {
-            h5_point(v[3], part, ns, nd, acc);
-            o0 = h5_combine(o0, acc, tab);
-            o1 = h5_combine(o1, acc, tab);
+        if ((flags & H5_FLAG_DYN) != 0u) {
+            h5_point(rec, part, ns, nd, acc);
+            o[0] = h5_combine(o[0], acc, tab);
+            o[1] = h5_combine(o[1], acc, tab);
         }
     }
-    const h5_u32 alpha = part[H5_PART_ALPHA];
+    const h5_u32 alpha = H5_HEAP_AT(part, H5_PART_ALPHA);
     w[0] = h5_w(p[0]);
     w[1] = h5_w(p[1]);
     w[2] = h5_w(p[2]);
     w[3] = nrm;
-    w[4] = v[4];
-    w[5] = v[5];
-    w[6] = (alpha & 0xffu) << 24 | (o1 & 0xffffffu);
-    w[7] = ((alpha >> 8) & 0xffu) << 24 | (o0 & 0xffffffu);
+    w[4] = H5_POOL_AT(v, 4u);
+    w[5] = H5_POOL_AT(v, 5u);
+    w[6] = (alpha & 0xffu) << 24 | (o[1] & 0xffffffu);
+    w[7] = ((alpha >> 8) & 0xffu) << 24 | (o[0] & 0xffffffu);
 }
 
 #endif

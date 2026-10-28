@@ -3060,10 +3060,11 @@ static d9ffp::Textures ffp_textures(const D9Pipeline &pl) {
 
 // Vertex fetch (runtime/native_seam.h).
 extern "C" int d3d9_vfetch_supported(void) {
-    return gpu_on() && host_d9_vfetch_supported();
+    return gpu_on() ? host_d9_vfetch_supported() : 0;
 }
-extern "C" uint32_t d3d9_vfetch_pool(uint32_t addr, uint32_t stride, const char *msl, int check) {
-    if (!d3d9_vfetch_supported() || !stride || !msl || !g_com_objects)
+extern "C" uint32_t d3d9_vfetch_pool(uint32_t addr, uint32_t stride, const char *source,
+                                     int check) {
+    if (!d3d9_vfetch_supported() || !stride || !source || !g_com_objects)
         return 0;
     for (const auto &u : *g_com_objects) {
         ComObj *o = u.get();
@@ -3075,7 +3076,7 @@ extern "C" uint32_t d3d9_vfetch_pool(uint32_t addr, uint32_t stride, const char 
         g_vfetch.stride = stride;
         g_vfetch.nverts = (uint32_t)(o->blob.size() / stride);
         g_vfetch.check = check;
-        host_d9_vfetch_set_prelude(msl);
+        host_d9_vfetch_set_prelude(source);
         LOGW("d3d9: vertex fetch for buffer %u (%u vertices of %u bytes)%s", o->id, g_vfetch.nverts,
              stride, check ? ", checked" : "");
         return g_vfetch.nverts;

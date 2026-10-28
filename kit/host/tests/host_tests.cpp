@@ -10728,6 +10728,166 @@ static void test_d3d9_volume_renderer() {
     host_d9_texture_drop(rt_id);
 }
 
+// Vertex fetch (host_d9_vfetch_*): where b0 maps a vertex, the shader takes
+// the fetch's position (b1) and colour (b2 | b3) over the buffer's red, and
+// the check buffer receives the words with the draw's tag; the buffers are
+// rewritten in place between frames.
+static void test_d3d9_vfetch_renderer() {
+    const int lang = host_d9_vfetch_supported();
+    if (!lang) {
+        printf("d3d9 GPU: this backend has no vertex fetch\n");
+        return;
+    }
+    static const char msl[] = R"MSL(
+static inline bool d9_vfetch(uint vid, device const uint *b0, device const uint *b1,
+                             device const uint *b2, constant uint *b3, thread uint *w) {
+    const uint m = b0[vid];
+    if (m == 0u)
+        return false;
+    for (uint k = 0; k < 3; ++k)
+        w[k] = b1[vid * 3 + k];
+    w[3] = b2[m - 1] | b3[0];
+    return true;
+}
+)MSL";
+    static const char glsl[] = R"GLSL(
+bool d9_vfetch(uint vid, out uint w[4]) {
+    const uint m = d9_b0[vid];
+    if (m == 0u)
+        return false;
+    for (uint k = 0u; k < 3u; ++k)
+        w[k] = d9_b1[vid * 3u + k];
+    w[3] = d9_b2[m - 1u] | d9_b3[0];
+    return true;
+}
+)GLSL";
+    host_d9_vfetch_set_prelude(lang == HOST_D9_VFETCH_GLSL ? glsl : msl);
+    const uint32_t RT = 90301, VB = 90302;
+    HostD9TextureDesc rt{RT, HOST_D9_TEX_2D, 8, 8, 1, 21, HOST_D9_USAGE_RENDERTARGET};
+    host_d9_texture_define(&rt);
+    struct V {
+        float x, y, z;
+        uint32_t color;
+    };
+    const V tri[3] = {
+        {-1, 1, 0.5f, 0xffff0000u}, {3, 1, 0.5f, 0xffff0000u}, {-1, -3, 0.5f, 0xffff0000u}};
+    host_d9_buffer_upload(VB, sizeof tri, 0, (const uint8_t *)tri, sizeof tri);
+    uint32_t map[3] = {}, pos[9], colors[2] = {0x0000ff00u, 0x000000ffu}, mask = 0xff000000u;
+    for (int i = 0; i < 3; ++i)
+        memcpy(&pos[i * 3], &tri[i], 12);
+    std::vector<uint32_t> check(3 * 5, 0);
+    auto put = [](uint32_t k, const void *bytes, uint32_t offset, uint32_t size, uint32_t total) {
+        host_d9_buffer_upload(HOST_D9_VFETCH_BUFFER(k), total | HOST_D9_UPLOAD_INPLACE, offset,
+                              (const uint8_t *)bytes, size);
+    };
+    put(0, map, 0, sizeof map, sizeof map);
+    put(1, pos, 0, sizeof pos, sizeof pos);
+    put(2, colors, 0, sizeof colors, sizeof colors);
+    put(3, &mask, 0, 4, 4);
+    put(4, check.data(), 0, (uint32_t)check.size() * 4, (uint32_t)check.size() * 4);
+
+    // vs_1_1: dcl_position v0; dcl_color v1; mov oPos, v0; mov oD0, v1.
+    std::vector<uint8_t> vs =
+        d9_words({0xFFFE0101u, 0x0000001Fu, 0x80000000u, 0x900F0000u, 0x0000001Fu, 0x8000000Au,
+                  0x900F0001u, 0x00000001u, 0xC00F0000u, 0x90E40000u, 0x00000001u, 0xD00F0000u,
+                  0x90E40001u, 0x0000FFFFu});
+    std::vector<uint8_t> ps =
+        d9_words({0xFFFF0101u, 0x00000001u, 0x800F0000u, 0x90E40000u, 0x0000FFFFu});
+    const uint8_t decl[24] = {0,    0, 0,  0, 2,  0, 0,  0,  // POSITION, FLOAT3 at 0
+                              0,    0, 12, 0, 4,  0, 10, 0,  // COLOR, D3DCOLOR at 12
+                              0xff, 0, 0,  0, 17, 0, 0,  0};
+    D9Pipeline pl;
+    pl.rs[7] = 0;  // ZENABLE
+    pl.rs[22] = 1; // CULLMODE none
+    HostD9Draw d{};
+    d.target.color[0] = {RT, 0, 0};
+    d.viewport[2] = d.viewport[3] = 8;
+    d.depth_range[1] = 1.0f;
+    d.vs = vs.data();
+    d.vs_size = (uint32_t)vs.size();
+    d.ps = ps.data();
+    d.ps_size = (uint32_t)ps.size();
+    d.decl = decl;
+    d.decl_size = sizeof decl;
+    d.decl_id = 3;
+    d.stream[0] = {VB, 0, (uint32_t)sizeof(V)};
+    d.primitive = 4;
+    d.primitive_count = 1;
+    d.sampler_state = &pl.sampler_state[0][0];
+    d.render_state = pl.rs;
+    d.render_state_set = (const uint8_t *)pl.rs_set;
+    d.vfetch = 2;
+    struct Seen {
+        std::vector<uint32_t> words;
+        uint32_t tag = 0;
+        int visits = 0;
+    } seen;
+    auto visit = [](const uint32_t *w, uint32_t count, uint32_t tag, void *user) {
+        Seen *s = (Seen *)user;
+        s->words.assign(w, w + count);
+        s->tag = tag;
+        ++s->visits;
+    };
+    uint8_t p[4];
+
+    // Nothing mapped: the buffer's own vertices, and nothing fetched.
+    d.vfetch_tag = 7;
+    host_d9_draw(&d);
+    d9_pixel(RT, 3, 3, p);
+    CHECK_EQ(p[2], 255);
+    CHECK_EQ(p[1], 0);
+    host_d9_vfetch_check(visit, &seen);
+    CHECK_EQ(seen.visits, 1);
+    CHECK_EQ(seen.tag, 7u);
+    CHECK_EQ(seen.words.size(), check.size());
+    for (uint32_t w : seen.words)
+        CHECK_EQ(w, 0u);
+    host_d9_vfetch_check(visit, &seen); // no frame since
+    CHECK_EQ(seen.visits, 1);
+
+    // Every vertex mapped to colour 0, green.
+    for (uint32_t &m : map)
+        m = 1;
+    put(0, map, 0, sizeof map, sizeof map);
+    d.vfetch_tag = 8;
+    host_d9_draw(&d);
+    d9_pixel(RT, 3, 3, p);
+    CHECK_EQ(p[2], 0);
+    CHECK_EQ(p[1], 255);
+    host_d9_vfetch_check(visit, &seen);
+    CHECK_EQ(seen.visits, 2);
+    CHECK_EQ(seen.tag, 8u);
+    for (uint32_t v = 0; v < 3 && seen.words.size() == check.size(); ++v) {
+        for (uint32_t k = 0; k < 3; ++k)
+            CHECK_EQ(seen.words[v * 5 + k], pos[v * 3 + k]);
+        CHECK_EQ(seen.words[v * 5 + 3], 0xff00ff00u);
+        CHECK_EQ(seen.words[v * 5 + 4], 8u);
+    }
+
+    // Colour 0 rewritten in place: blue.
+    put(2, &colors[1], 0, 4, sizeof colors);
+    d.vfetch_tag = 9;
+    host_d9_draw(&d);
+    d9_pixel(RT, 3, 3, p);
+    CHECK_EQ(p[0], 255);
+    CHECK_EQ(p[1], 0);
+    host_d9_vfetch_check(visit, &seen);
+    CHECK_EQ(seen.tag, 9u);
+    if (seen.words.size() == check.size())
+        CHECK_EQ(seen.words[3], 0xff0000ffu);
+
+    // A draw without vertex fetch reads the buffer as it is.
+    d.vfetch = 0;
+    host_d9_draw(&d);
+    d9_pixel(RT, 3, 3, p);
+    CHECK_EQ(p[2], 255);
+    CHECK_EQ(p[0], 0);
+    for (uint32_t k = 0; k < 5; ++k)
+        host_d9_buffer_drop(HOST_D9_VFETCH_BUFFER(k));
+    host_d9_buffer_drop(VB);
+    host_d9_texture_drop(RT);
+}
+
 // Optional private-fixture proof: upload every byte, then rasterize each Z/mip
 // through the volume sampler. No private file names or bytes enter the source.
 static void test_d3d9_dds_volume(const char *path) {
@@ -11480,6 +11640,7 @@ int main(int argc, char **argv) {
             return 2;
         }
         test_d3d9_gpu_renderer();
+        test_d3d9_vfetch_renderer();
         test_d3d9_volume_renderer();
         printf("d3d9 GPU: %d checks, %d failures\n", g_checks, g_failures);
         return g_failures ? 1 : 0;
