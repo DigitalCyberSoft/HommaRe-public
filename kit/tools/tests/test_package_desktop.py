@@ -46,6 +46,38 @@ def test_stage_includes_core_manifests_for_builtin_plugins(tmp_path):
         assert tar.extractfile("StubRecomp/resources/mods/core/display/mod.toml").read() == manifest.read_bytes()
 
 
+def test_stage_carries_linux_ui_mods_seed_and_launcher(tmp_path):
+    exe = tmp_path / "recomp_app"
+    exe.write_bytes(b"\x7fELF")
+    game = tmp_path / "game"
+    (game / "ui-mods").mkdir(parents=True)
+    for name in ("Widescreen", "PhoneUI"):
+        (game / "ui-mods" / (name + ".recipe")).write_text(name)
+    (game / "seed.cfg").write_text("seed")
+    (game / "launcher-manifests").mkdir()
+    (game / "launcher-manifests/base.json").write_text("{}")
+    (game / "launcher-games.json").write_text('{"games": []}')
+    cfg = {"game": {"app_name": "StubRecomp", "name": "Stub Game", "executable": "STUB.EXE"},
+           "dir": str(game), "launcher_config_dir": game,
+           "linux": {"ui_mods": ["Widescreen"], "profile_files": {"profiles/seed.cfg": "seed.cfg"}}}
+    stale = tmp_path / "out/StubRecomp/resources/ui-mods/TouchUI.recipe"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("an earlier build's")
+    with patch("platform.machine", return_value="x86_64"):
+        out = package_desktop.stage(exe, cfg, tmp_path / "out", system="Linux")
+    resources = out / "resources"
+    assert sorted(p.name for p in (resources / "ui-mods").iterdir()) == ["Widescreen.recipe"]
+    assert (resources / "profile-seed/profiles/seed.cfg").read_text() == "seed"
+    assert (resources / "launcher-games.json").is_file()
+    assert (resources / "launcher-manifests/base.json").is_file()
+    assert not (out / "libSDL3.so.0").exists()
+    with tarfile.open(tmp_path / "out/StubRecomp-linux-x86_64.tar.gz") as tar:
+        names = tar.getnames()
+    assert "StubRecomp/resources/ui-mods/Widescreen.recipe" in names
+    assert "StubRecomp/resources/launcher-manifests/base.json" in names
+    assert "StubRecomp/resources/ui-mods/TouchUI.recipe" not in names
+
+
 @pytest.mark.parametrize("machine,arch", [("x86_64", "x86_64"), ("AMD64", "x86_64"),
                                          ("aarch64", "aarch64"), ("arm64", "aarch64")])
 def test_linux_archive_contents(tmp_path, monkeypatch, machine, arch):

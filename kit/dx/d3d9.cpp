@@ -4765,9 +4765,12 @@ void Dev_UpdateTexture(X86 *c) {
 }
 
 // D3DQUERYTYPE: 8 is EVENT, 9 OCCLUSION. An occlusion query with a GPU
-// renderer counts real samples; without one, or for any other type, the
-// query is finished at once, and an occlusion count is reported as one
-// sample so that nothing the game gates on visibility disappears.
+// renderer counts real samples, and an event is done once the GPU has
+// finished what came before it (Heroes V paces its NOOVERWRITE vertex
+// buffer by events: done early, it overwrites vertices a frame in flight
+// still reads). Without a GPU renderer, or for any other type, the query is
+// finished at once, and an occlusion count is reported as one sample so that
+// nothing the game gates on visibility disappears.
 static const uint32_t D3DQUERYTYPE_EVENT = 8, D3DQUERYTYPE_OCCLUSION = 9;
 static const uint32_t S_FALSE9 = 1;
 static std::unordered_map<uint32_t, uint32_t> &query_state() { // id -> 1 begun, 2 ended
@@ -4775,8 +4778,12 @@ static std::unordered_map<uint32_t, uint32_t> &query_state() { // id -> 1 begun,
     return *m;
 }
 static void query_destroy(ComObj *o) {
-    if (query_state().erase(o->id))
-        host_d9_query_drop(o->id);
+    if (query_state().erase(o->id)) {
+        if (o->dev_type == D3DQUERYTYPE_EVENT)
+            host_d9_event_drop(o->id);
+        else
+            host_d9_query_drop(o->id);
+    }
 }
 void Query_GetType9(X86 *c) {
     ComObj *q = com_this_arg(c);
@@ -4825,6 +4832,9 @@ void Query_Issue(X86 *c) {
             query_state()[q->id] = 2;
             g_query_stats.issued += query_mode() == 1;
         }
+    } else if (q && q->dev_type == D3DQUERYTYPE_EVENT && gpu_on() && (flags & 1)) {
+        host_d9_event_end(q->id);
+        query_state()[q->id] = 2;
     }
     com_ret(c, q ? D3D_OK9 : D3DERR_INVALIDCALL);
 }
@@ -4837,6 +4847,11 @@ void Query_GetData(X86 *c) {
         return;
     }
     uint32_t value = 1;
+    if (q->dev_type == D3DQUERYTYPE_EVENT && gpu_on() && query_state().count(q->id) &&
+        !host_d9_event_done(q->id)) {
+        com_ret(c, S_FALSE9); // not yet
+        return;
+    }
     if (q->dev_type == D3DQUERYTYPE_OCCLUSION && gpu_on() && query_mode() != 2) {
         auto it = query_state().find(q->id);
         if (it != query_state().end()) {

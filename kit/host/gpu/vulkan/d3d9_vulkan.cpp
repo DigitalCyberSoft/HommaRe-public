@@ -660,6 +660,31 @@ class VkRenderer final : public D9Backend {
         if (b.buf.map)
             memcpy(b.buf.map + offset, bytes, size);
     }
+    void buffer_upload_inplace(uint32_t id, uint32_t total, uint32_t offset, const uint8_t *bytes,
+                               uint32_t size) override {
+        auto it = buffers_.find(id);
+        if (it == buffers_.end() || !it->second.buf.map || it->second.buf.size < total ||
+            offset + size > total || !bytes) {
+            buffer_upload(id, total, offset, bytes, size);
+            return;
+        }
+        // A dynamic vertex buffer filled batch by batch (Heroes V appends into
+        // 26 MB under NOOVERWRITE): replacing the whole buffer for every batch
+        // a frame already drew from cost a new allocation and a 26 MB copy
+        // each time. The game writes only what no unfinished frame reads
+        // (event queries tell it which: dx/d3d9.cpp). The Metal renderer
+        // does the same.
+        Buf &b = it->second;
+        if (b.shadow.size() < total)
+            b.shadow.resize(total, 0);
+        memcpy(b.shadow.data() + offset, bytes, size);
+        const uint32_t end = offset + size;
+        for (SpareBuf &s : b.spares) {
+            s.lo = s.hi > s.lo ? std::min(s.lo, offset) : offset;
+            s.hi = std::max(s.hi, end);
+        }
+        memcpy(b.buf.map + offset, bytes, size);
+    }
     void buffer_drop(uint32_t id) override {
         auto it = buffers_.find(id);
         if (it == buffers_.end())
@@ -995,6 +1020,17 @@ class VkRenderer final : public D9Backend {
         end_query_slot();
         query_ = 0;
         queries_[id].ended = true;
+    }
+    uint64_t event_mark() override {
+        return cur_ ? cur_->serial : serial_;
+    }
+    bool event_done(uint64_t mark) override {
+        poll();
+        if (completed_ >= mark)
+            return true;
+        if (cur_ && cur_->serial <= mark)
+            flush(); // D3DGETDATA_FLUSH: the frame the mark is in goes to the GPU
+        return false;
     }
     int query_result(uint32_t id, uint32_t *count) override {
         auto it = queries_.find(id);

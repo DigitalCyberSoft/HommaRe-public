@@ -73,6 +73,15 @@ class D9Backend {
     // 1 with *count set, 0 while its frame is still running, -1 for no result.
     virtual int query_result(uint32_t id, uint32_t *count) = 0;
     virtual void query_drop(uint32_t id) = 0;
+    // Event queries: a mark for the point the command stream has reached, and
+    // whether the GPU has finished everything before it, flushing what is
+    // recorded so a mark the game waits on gets there. A backend without a
+    // GPU timeline has every mark done at once.
+    virtual uint64_t event_mark() { return 0; }
+    virtual bool event_done(uint64_t mark) {
+        (void)mark;
+        return true;
+    }
 
     virtual void probe_next(const char *tag) = 0;
 };

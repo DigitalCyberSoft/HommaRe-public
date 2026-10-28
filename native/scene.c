@@ -8,7 +8,7 @@
  * Switches (native_check.h): 1 (default) native, 0 the original, a alternate
  * every 10 s, c check (the original, memory put back, the native version,
  * compared; the original's results stay). */
-#include <arm_neon.h>
+#include "neon_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

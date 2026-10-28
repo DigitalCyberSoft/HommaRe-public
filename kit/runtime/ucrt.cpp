@@ -30,7 +30,6 @@
 #include <ctime>
 #include <cwctype>
 #include <vector>
-#include <xlocale.h>
 
 namespace {
 
@@ -51,8 +50,14 @@ void ret_f64(X86 *c, double v) {
 
 // A UTF-8 locale for the wide classifiers: the UCRT classifies wchar_t by
 // Unicode whatever the C locale, and the host's "C" locale knows only ASCII.
+// C.UTF-8 is glibc's built-in one; macOS has only the named locales.
 locale_t unicode_locale() {
-    static locale_t loc = newlocale(LC_CTYPE_MASK, "en_US.UTF-8", (locale_t)0);
+    static locale_t loc = [] {
+        for (const char *name : {"C.UTF-8", "en_US.UTF-8"})
+            if (locale_t l = newlocale(LC_CTYPE_MASK, name, (locale_t)0))
+                return l;
+        return ucrt_c_locale();
+    }();
     return loc;
 }
 
@@ -465,14 +470,14 @@ void u_strtod(X86 *c) {
     uint32_t s = arg(c, 0), endp = arg(c, 1);
     std::string text = gm_str(s, 4096);
     char *end = nullptr;
-    double v = strtod_l(text.c_str(), &end, (locale_t)0);
+    double v = strtod_l(text.c_str(), &end, ucrt_c_locale());
     if (endp)
         wr32(endp, s + (uint32_t)(end - text.c_str()));
     ret_f64(c, v);
 }
 void u_atof(X86 *c) {
     std::string text = gm_str(arg(c, 0), 4096);
-    ret_f64(c, strtod_l(text.c_str(), nullptr, (locale_t)0));
+    ret_f64(c, strtod_l(text.c_str(), nullptr, ucrt_c_locale()));
 }
 // A guest wide string's leading ASCII run, for the wide numeric parsers.
 std::string wide_ascii(uint32_t s) {
@@ -492,7 +497,7 @@ void u_wtoi(X86 *c) {
     set_eax(c, (uint32_t)(int32_t)v);
 }
 void u_wtof(X86 *c) {
-    ret_f64(c, strtod_l(wide_ascii(arg(c, 0)).c_str(), nullptr, (locale_t)0));
+    ret_f64(c, strtod_l(wide_ascii(arg(c, 0)).c_str(), nullptr, ucrt_c_locale()));
 }
 std::string itoa_text(int32_t value, int radix) {
     if (radix < 2 || radix > 36)
@@ -844,6 +849,11 @@ const ImportShim shims[] = {
     wr32(c->r[R_ESP] + 4, code);
     imports_dispatch(c, imports_alloc_trampoline("KERNEL32.dll", "ExitProcess", nullptr, 1));
     abort(); // ExitProcess longjmps out of the run; reaching here means it could not
+}
+
+locale_t ucrt_c_locale() {
+    static locale_t loc = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+    return loc;
 }
 
 void ucrt_register() {

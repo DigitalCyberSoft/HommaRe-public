@@ -213,6 +213,15 @@ void host_d9_query_end(uint32_t id);
 int host_d9_query_result(uint32_t id, uint32_t *count);
 void host_d9_query_drop(uint32_t id);
 
+// Event queries: end marks the point the device has reached; done() is 1 once
+// the GPU has finished everything before it (and 1 for an event never
+// marked), 0 while it has not. A game that paces its dynamic buffers by them
+// must not see them done early: it would write over vertices a frame still
+// in flight reads.
+void host_d9_event_end(uint32_t id);
+int host_d9_event_done(uint32_t id);
+void host_d9_event_drop(uint32_t id);
+
 // Diagnostics: log every draw of the next frame and dump its textures, with
 // `tag` in the file names.
 void host_d9_probe_next_frame(const char *tag);

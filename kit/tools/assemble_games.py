@@ -2,7 +2,7 @@
 """Put other games' modules into the app whose launcher picks between them.
 
     tools/assemble_games.py --app build/HommaRe.app \\
-        --game games/hof --game games/toe [--platform macos|ios-sim|ios]
+        --game games/hof --game games/toe [--platform macos|ios-sim|ios|linux]
 
 The app is a RECOMP_GAME_MODULES build (tools/build.py --game-modules): it
 runs its own game and, when the launcher picks another, loads that game's
@@ -11,7 +11,9 @@ game directory built the same way; its module goes into Frameworks and its
 resources (symbols.json, controls, ...) into Resources/games/<app_name>/
 (games/<app_name>/ in a flat iOS bundle), where the module looks for them.
 The app is signed again afterwards with the identity it carries (ad hoc for
-macOS and the simulator).
+macOS and the simulator). On Linux the app is the desktop package's folder
+(build/package/<app_name>): libgame.<id>.so goes into its modules/ and the
+resources into resources/games/<app_name>/; nothing is signed.
 """
 
 import argparse
@@ -40,6 +42,8 @@ def built_app(build_root, app_name, platform):
     """Where tools/build.py leaves a game's own app for this platform."""
     if platform == "macos":
         return build_root / (app_name + ".app")
+    if platform == "linux":
+        return build_root / "package" / app_name  # tools/package_desktop.py
     # The Xcode generator puts its products under the configuration's folder.
     for path in (build_root / platform / "Release" / (app_name + ".app"), build_root / platform / (app_name + ".app")):
         if path.is_dir():
@@ -48,11 +52,11 @@ def built_app(build_root, app_name, platform):
 
 
 def module_path(build_root, game_id, platform):
-    """libgame.<id>.dylib as CMake builds it (host/CMakeLists.txt recomp_game)."""
-    name = "libgame.%s.dylib" % game_id
+    """libgame.<id>.dylib (.so) as CMake builds it (host/CMakeLists.txt recomp_game)."""
+    name = "libgame.%s.%s" % (game_id, "so" if platform == "linux" else "dylib")
     candidates = [build_root / "modules" / name, build_root / platform / "modules" / name,
                   build_root / platform / "modules" / "Release" / name]
-    if platform != "macos":
+    if platform not in ("macos", "linux"):
         candidates = candidates[1:]
     candidates += sorted(build_root.glob("cmake/*/modules/%s" % name))
     candidates += sorted(build_root.glob("cmake/**/Release*/%s" % name))
@@ -66,9 +70,12 @@ def copy_resources(source_app, dest, platform):
     """A game's resources as its own app carries them."""
     shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True)
-    root = source_app / "Contents/Resources" if platform == "macos" else source_app
-    executable = plistlib.loads((root.parent / "Info.plist" if platform == "macos" else root / "Info.plist")
-                                .read_bytes()).get("CFBundleExecutable", "")
+    if platform == "linux":
+        root, executable = source_app / "resources", ""
+    else:
+        root = source_app / "Contents/Resources" if platform == "macos" else source_app
+        executable = plistlib.loads((root.parent / "Info.plist" if platform == "macos" else root / "Info.plist")
+                                    .read_bytes()).get("CFBundleExecutable", "")
     for entry in root.iterdir():
         if entry.name in NOT_RESOURCES or entry.name == executable or entry.name.endswith(".lproj") \
                 or entry.name.startswith("AppIcon") or entry.name.startswith("Icon-"):
@@ -115,15 +122,20 @@ def main():
     parser.add_argument("--game", type=Path, action="append", default=[], help="Another game directory")
     parser.add_argument("--build-root", type=Path, action="append", default=[],
                         help="That game's build root, in --game order (default <game>/build)")
-    parser.add_argument("--platform", choices=("macos", "ios-sim", "ios"), default="macos")
+    parser.add_argument("--platform", choices=("macos", "ios-sim", "ios", "linux"), default="macos")
     args = parser.parse_args()
     app = args.app.resolve()
     if not app.is_dir():
         parser.error("No app at %s" % app)
-    flat = args.platform != "macos"
-    frameworks = app / ("Frameworks" if flat else "Contents/Frameworks")
-    games_dir = app / ("games" if flat else "Contents/Resources/games")
-    if not list(frameworks.glob("libSDL3*.dylib")):
+    linux = args.platform == "linux"
+    flat = args.platform not in ("macos", "linux")
+    if linux:
+        frameworks, games_dir, sdl = app / "modules", app / "resources/games", app / "libSDL3.so.0"
+    else:
+        frameworks = app / ("Frameworks" if flat else "Contents/Frameworks")
+        games_dir = app / ("games" if flat else "Contents/Resources/games")
+        sdl = next(frameworks.glob("libSDL3*.dylib"), None)
+    if not sdl or not sdl.is_file():
         parser.error("%s has no shared SDL: build it with tools/build.py --game-modules" % app)
     frameworks.mkdir(parents=True, exist_ok=True)
     dylibs = []
@@ -134,7 +146,8 @@ def main():
         module = module_path(build_root, game_id, args.platform)
         dest = frameworks / module.name
         shutil.copy2(module, dest)
-        subprocess.run(["install_name_tool", "-id", "@rpath/" + dest.name, str(dest)], check=True)
+        if not linux:
+            subprocess.run(["install_name_tool", "-id", "@rpath/" + dest.name, str(dest)], check=True)
         dylibs.append(dest)
         source_app = built_app(build_root, app_name, args.platform)
         if source_app.is_dir():
@@ -142,7 +155,8 @@ def main():
         else:
             print("warning: no %s; %s gets no resources of its own" % (source_app, game_id), file=sys.stderr)
         print("added %s (%s) from %s" % (game_id, app_name, build_root))
-    sign(app, args.platform, dylibs)
+    if not linux:
+        sign(app, args.platform, dylibs)
 
 
 if __name__ == "__main__":

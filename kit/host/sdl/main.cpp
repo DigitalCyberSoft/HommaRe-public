@@ -69,7 +69,7 @@
 #define SDL_MAIN_HANDLED
 #endif
 #include <SDL3/SDL_main.h> // on iOS this supplies the UIKit entry point and renames main
-#if defined(__APPLE__) && (defined(RECOMP_GAME_MODULE) || defined(RECOMP_GAME_MODULES))
+#if defined(RECOMP_GAME_MODULE) || defined(RECOMP_GAME_MODULES)
 #include <dlfcn.h>
 #endif
 #ifdef __EMSCRIPTEN__
@@ -2547,19 +2547,29 @@ static const char *const kIntroFiles[] = {"video/intro.xml", "video/intro_a1.xml
     return strstr(buf, kIntroMarker) != nullptr;
 }
 
-#if defined(__APPLE__) && defined(RECOMP_GAME_MODULES)
+#if defined(RECOMP_GAME_MODULES)
 // A multi-game app (RECOMP_GAME_MODULES): the other games' modules sit in the
-// app's Frameworks as libgame.<id>.dylib (tools/assemble_games.py).
+// app's Frameworks as libgame.<id>.dylib, on Linux in modules/ beside the
+// executable as libgame.<id>.so (tools/assemble_games.py).
+#ifdef __APPLE__
+static const char kModuleSuffix[] = ".dylib";
+#else
+static const char kModuleSuffix[] = ".so";
+#endif
 static std::string modules_dir() {
     char path[4096];
     if (os_exe_path(path, sizeof path) != 0)
         return "";
     std::string dir = path;
     dir = dir.substr(0, dir.find_last_of('/'));
+#ifdef __APPLE__
     static const std::string mac = "/Contents/MacOS";
     if (dir.size() > mac.size() && dir.compare(dir.size() - mac.size(), mac.size(), mac) == 0)
         return dir.substr(0, dir.size() - mac.size()) + "/Contents/Frameworks";
     return dir + "/Frameworks"; // iOS: a flat bundle
+#else
+    return dir + "/modules";
+#endif
 }
 
 // This game's id and those of the modules beside it, for the launcher.
@@ -2575,7 +2585,7 @@ static std::string available_modules() {
                 return 0;
             },
             &names);
-    static const std::string prefix = "libgame.", suffix = ".dylib";
+    static const std::string prefix = "libgame.", suffix = kModuleSuffix;
     for (const std::string &name : names)
         if (name.size() > prefix.size() + suffix.size() && name.compare(0, prefix.size(), prefix) == 0 &&
             name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
@@ -2587,7 +2597,7 @@ static std::string available_modules() {
 // go (the module brings up its own on the same SDL), then the module's
 // recomp_game_main runs the chosen executable. Only returns when that game does.
 static int run_game_module(const launcher::NativeChoice &choice, const char *argv0) {
-    const std::string path = modules_dir() + "/libgame." + choice.module + ".dylib";
+    const std::string path = modules_dir() + "/libgame." + choice.module + kModuleSuffix;
     void *module = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (!module) {
         fprintf(stderr, RECOMP_APP_NAME ": cannot load %s: %s\n", path.c_str(), dlerror());
@@ -2682,12 +2692,16 @@ static void module_prepare() {
     Dl_info info{};
     if (dladdr(reinterpret_cast<const void *>(&module_prepare), &info) && info.dli_fname) {
         std::string dir = info.dli_fname;
-        dir = dir.substr(0, dir.find_last_of('/')); // Frameworks
-        dir = dir.substr(0, dir.find_last_of('/')); // Contents (macOS) or the app (iOS)
+        dir = dir.substr(0, dir.find_last_of('/')); // Frameworks (modules/ on Linux)
+        dir = dir.substr(0, dir.find_last_of('/')); // Contents (macOS), the app (iOS) or its folder (Linux)
         OsStat st{};
+#ifdef __APPLE__
         const std::string mac = dir + "/Resources/games/" RECOMP_APP_NAME;
         const std::string flat = dir + "/games/" RECOMP_APP_NAME;
         const std::string resources = os_stat(mac.c_str(), &st) == 0 ? mac : flat;
+#else
+        const std::string resources = dir + "/resources/games/" RECOMP_APP_NAME;
+#endif
         if (os_stat(resources.c_str(), &st) == 0 && st.is_dir)
             os_setenv("RECOMP_RESOURCES_DIR", resources.c_str());
     }
@@ -2718,8 +2732,15 @@ static void seed_default_settings() {
         int64_t mac, pad, phone;
     };
     // Encodings: mods/settings_file.h and the launcher (LauncherModel.swift).
+    // The desktop column is a Mac's on Apple, a Linux machine's otherwise:
+    // 40 fps spares a MacBook's battery, a Linux desktop gets its display's 60.
+#ifdef __APPLE__
+    const int64_t desktop_frame_limit = 1; // 40 fps
+#else
+    const int64_t desktop_frame_limit = 2; // 60 fps
+#endif
     static const Default table[] = {
-        {"host.display/frame_limit", 1, 1, 1},       // 40 fps
+        {"host.display/frame_limit", desktop_frame_limit, 1, 1},
         {"host.display/energy_saver", 2, 2, 2},      // never
         {"host.display/render_quality", 4, 3, 4},    // performance; iPad balanced
         {"host.display/idle_frames", 1, 1, 1},       // 30 fps after a minute idle: on
@@ -3266,7 +3287,7 @@ int main(int argc, char **argv) {
         const std::string native_config = host_resource("launcher-games.json");
         if (launcher::native_available(native_config) && native_launcher_wanted(game, asked)) {
             launcher::NativeChoice choice;
-#if defined(__APPLE__) && defined(RECOMP_GAME_MODULES)
+#if defined(RECOMP_GAME_MODULES)
             const std::string modules = available_modules();
 #else
             const std::string modules = RECOMP_GAME_ID;
@@ -3274,7 +3295,7 @@ int main(int argc, char **argv) {
             const int r = launcher::native_run(g_window, native_config, modules, game.exe, saves_dir(), &choice);
             if (r == 0)
                 return 2;
-#if defined(__APPLE__) && defined(RECOMP_GAME_MODULES)
+#if defined(RECOMP_GAME_MODULES)
             // RECOMP_LAUNCHER_VIA_MODULE=1 runs this app's own game through its
             // module too, when the app carries one (a check of the module path).
             const char *via = recomp_env("LAUNCHER_VIA_MODULE");
