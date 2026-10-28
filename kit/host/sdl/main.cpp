@@ -3174,10 +3174,10 @@ int main(int argc, char **argv) {
             auto platform = launcher::make_platform(g_window);
             launcher::RunOptions options;
             options.known = game.exe;
-            options.unplayable =
-                std::string("This device has no usable ") + gpu::default_backend_name() +
-                " graphics, which the game needs" +
-                (strcmp(gpu::default_backend_name(), "vulkan") == 0 ? " (Vulkan 1.1)." : ".");
+            // The backend's name is "none" here whenever none could start:
+            // name the graphics the build draws with instead.
+            options.unplayable = std::string("This device has no usable ") + gpu::graphics_needed() +
+                                 " graphics, which the game needs.";
             if (const char *keys = recomp_env("LAUNCHER_KEYS"))
                 options.keys = keys;
             if (const char *dump = recomp_env("LAUNCHER_DUMP")) {
