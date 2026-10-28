@@ -459,6 +459,16 @@ if(TARGET recomp_gen)
       file(COPY ${RECOMP_GAME_DIR}/mods/core DESTINATION ${web_resources}/mods FILES_MATCHING PATTERN "*.toml"
            PATTERN "*.json" PATTERN "*.lua" PATTERN "*.png" PATTERN "*.bmp" PATTERN "*.txt")
     endif()
+    # game.toml [web] ui_mods: the recipes the page makes the interface mods
+    # from at the game's start (host/ui_mods.cpp), as the desktop apps carry theirs.
+    foreach(recipe IN LISTS RECOMP_WEB_UI_MODS)
+      if(EXISTS "${recipe}")
+        file(COPY "${recipe}" DESTINATION ${web_resources}/ui-mods)
+        set_property(TARGET recomp_app APPEND PROPERTY LINK_DEPENDS "${recipe}")
+      else()
+        message(WARNING "[web] ui_mods: ${recipe} is not there")
+      endif()
+    endforeach()
     # The player page (tools/web_launcher.py --web-build places it beside the launcher).
     set(APP ${RECOMP_APP_NAME})
     set(TITLE ${RECOMP_GAME_NAME})

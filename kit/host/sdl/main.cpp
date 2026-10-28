@@ -3006,6 +3006,16 @@ void web_guest() {
     std::string dir = g_web_exe.substr(0, g_web_exe.find_last_of('/'));
     if (!dir.empty() && os_chdir(dir.c_str()) != 0)
         fprintf(stderr, "[host] could not enter %s\n", dir.c_str());
+    {
+        // As the desktop does before its game starts: game.toml [web] ui_mods
+        // and [texts], made from the imported install into the profile. The
+        // page names the install root above the EXE (RECOMP_GAME_ROOT).
+        const char *root_env = recomp_env("GAME_ROOT");
+        const std::string root = root_env && *root_env ? root_env : dir;
+        host_ui_mods(root, host_layout().profile_dir, host_resource("ui-mods"), false);
+        host_text_overrides(root, host_layout().profile_dir, RECOMP_TEXTS_PAK, RECOMP_TEXTS_FILES,
+                            RECOMP_TEXTS_REPLACE);
+    }
     BootOptions options;
     options.name = "web";
     options.exe = g_web_exe.c_str();

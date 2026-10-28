@@ -21,6 +21,15 @@
   MSYS2) through stb_vorbis 1.22 (`third_party/stb/stb_vorbis.c`), sample-exact
   in its seeks as the FFmpeg path is: FMOD streams and samples in Ogg (Heroes V's
   music) play there instead of being refused. `test_fmod_ogg` runs in every build.
+- The web launcher imports an install whose executable sits below its data (a
+  GOG install's `bin/` beside `data/`): the folder above the executable's is the
+  game's when it, not the executable's, holds the `[setup] required_dirs`, and of
+  two executables as shallow the one in a required folder is the game's. The
+  manifest records where the executable is; the player page starts it there with
+  `RECOMP_GAME_ROOT` on the folder above.
+- `[web] ui_mods` names the interface mods' recipes the web build carries; the
+  web host makes them, and the `[texts]` pak, from the imported install before
+  the game starts, as the desktop does.
 
 ## Renaming an app
 

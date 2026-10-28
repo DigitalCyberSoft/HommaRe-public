@@ -170,7 +170,8 @@ def render_cmake(cfg):
         "%s|%s" % (k, (Path(cfg["dir"]) / v).resolve().as_posix())
         for k, v in sorted(cfg["macos"]["profile_files"].items())))
     # ui_mods as recipe paths (ui-mods/<name>.recipe under the game directory).
-    for section, macro in (("ios", "RECOMP_IOS_UI_MODS"), ("macos", "RECOMP_MACOS_UI_MODS")):
+    for section, macro in (("ios", "RECOMP_IOS_UI_MODS"), ("macos", "RECOMP_MACOS_UI_MODS"),
+                           ("web", "RECOMP_WEB_UI_MODS")):
         lines.append('set(%s "%s")' % (macro, ";".join(
             (Path(cfg["dir"]) / "ui-mods" / (name + ".recipe")).resolve().as_posix()
             for name in cfg[section]["ui_mods"])))
