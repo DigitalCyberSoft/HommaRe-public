@@ -366,3 +366,18 @@
 #define NS_E_MAIN 0x178
 #define NS_E_MODE 0x1b4
 #define NS_PAK_DIRS "data,dataa1" /* the paks it mounts, for the native views' pictures */
+
+/* GameSpy clDataList string readers and the player-info deserializer's
+ * fixed-buffer reads (native/net_guard.c). The unbounded reader is the base
+ * game's 004432d0, the bounded one 00443390; PLAYERINFO's seven fields
+ * (0042a520, the base game's 0042a5e0) go into 12/16/36/36/68/132/132. */
+#define HOMM5_GS_STR_ORIG fn_00443240
+#define HOMM5_GS_STR_BOUNDED fn_00443300
+#define HOMM5_GS_STR_SITES \
+    {0x0042a5e8u, 12}, {0x0042a5fcu, 16}, {0x0042a610u, 36}, {0x0042a624u, 36}, {0x0042a638u, 68}, \
+        {0x0042a64cu, 132}, {0x0042a660u, 132}, {0x0042497cu, 36}, {0x004249bfu, 132}, \
+        {0x004249dau, 132}, {0x00424f60u, 36}, {0x00424f9fu, 132}, {0x00424fb6u, 132}, \
+        {0x0043f498u, 16}, {0x0043f4aeu, 132}, \
+        {0x0042723au, 36}, {0x004272b4u, 36}, {0x0042733fu, 132}, {0x0042383eu, 132}, \
+        {0x00423876u, 132}, {0x004222bau, 132}, {0x00428cafu, 132}, {0x00430434u, 36}, \
+        {0x00425f0au, 16}, {0x004233e6u, 16}, {0x004259b0u, 36}, {0x004260c7u, 16},

@@ -361,3 +361,18 @@ void fn_00557470(X86 *c);
     snprintf(out, cap, "/UI/H5A2/PWL/Pwl_%s.(Texture).dds", (key)[0] && (key)[1] ? (key) + 2 : (key))
 #define NS_GAME_VERSION "3.1"
 #define NS_PAK_DIRS "data" /* the paks it mounts, for the native views' pictures */
+
+/* GameSpy clDataList string readers and the player-info deserializer's
+ * fixed-buffer reads (native/net_guard.c). The unbounded reader is the base
+ * game's 004432d0, the bounded one 00443390; PLAYERINFO's seven fields
+ * (0042a710, the base game's 0042a5e0) go into 12/16/36/36/68/132/132. */
+#define HOMM5_GS_STR_ORIG fn_00443400
+#define HOMM5_GS_STR_BOUNDED fn_004434c0
+#define HOMM5_GS_STR_SITES \
+    {0x0042a7d8u, 12}, {0x0042a7ecu, 16}, {0x0042a800u, 36}, {0x0042a814u, 36}, {0x0042a828u, 68}, \
+        {0x0042a83cu, 132}, {0x0042a850u, 132}, {0x00424b6cu, 36}, {0x00424bafu, 132}, \
+        {0x00424bcau, 132}, {0x00425150u, 36}, {0x0042518fu, 132}, {0x004251a6u, 132}, \
+        {0x0043f668u, 16}, {0x0043f67eu, 132}, \
+        {0x0042742au, 36}, {0x004274a4u, 36}, {0x0042752fu, 132}, {0x00423a2eu, 132}, \
+        {0x00423a66u, 132}, {0x004224aau, 132}, {0x00428e9fu, 132}, {0x00430624u, 36}, \
+        {0x004260fau, 16}, {0x004235d6u, 16}, {0x00425ba0u, 36}, {0x004262b7u, 16},

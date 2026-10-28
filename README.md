@@ -321,6 +321,23 @@ it, logs in, joins the lobby's channels, and creates and joins games there. The 
 operator sees the CD key and password you log in with: any CD key works, so don't type
 your real one or a password you use elsewhere.
 
+**Playing online safely.** A ubi-gs server can be run by anyone, and local-network and
+online play puts you in touch with other players' copies. The 2006 client parses what a
+server or peer sends in old C++ that, in places, copied text into fixed stack buffers
+without a length check — a hostile server could send an over-long field and overflow one.
+HommaRe recompiles the game, so it replaces those copies with the game's own bounded
+reader: a field that is too long is cut to fit and the message is dropped, the way the
+game already drops a malformed one, rather than running off the end of a buffer. This
+covers every server-controlled string field the client reads into a fixed buffer: the
+player-info reply (the known overflow), the room member list and member-join, the proxy
+login reply, the module proxy list, the game-start and friend-update notifications, and
+the lobby id fields. The server's other text fields are read with a length already (the
+room info) or into buffers that grow to fit; the NAT and address replies carry no
+strings. Local-network and direct peer-to-peer play uses a different, binary protocol:
+its datagrams are read into a length-bounded buffer and parsed into fixed-size records,
+with no unbounded copy found. Even so, if you would rather not trust an unknown ubi-gs
+server or peer, stay on a local network or a VPN with people you know.
+
 ## What's next
 
 - GOG's other languages (German, French, Polish and more): their installers are needed to

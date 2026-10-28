@@ -176,3 +176,8 @@ void homm5_game_view_draw(X86 *c);
  * passes through: native/screens_question.c notes its title and text. */
 void homm5_msgbox_setup(X86 *c);
 #define FN_007c3910 homm5_msgbox_setup
+
+/* 00443240: the GameSpy clDataList unbounded string reader (native/net_guard.c;
+ * the base game's 004432d0). */
+void homm5_gs_str_read(X86 *c);
+#define FN_00443240 homm5_gs_str_read
