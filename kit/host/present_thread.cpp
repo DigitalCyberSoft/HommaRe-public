@@ -92,6 +92,13 @@ static void (*g_sched_probe)(uint64_t out[8]) = nullptr;
 namespace {
 // The refresh rate of the offscreen presenter's synthetic display link.
 constexpr double kOffscreenHz = 120.0;
+// When a frame whose GPU work has not completed is lost (see tick): this long after
+// its commit once a frame committed after it has completed, which an in-order queue
+// never does for a frame that is only slow, or after the longer wait whatever else
+// completed. A working GPU can be far slower than 2 s: lavapipe on a loaded CPU took
+// up to 19 s to complete a frame while the game was loading.
+constexpr double kLostGpuSeconds = 2.0;
+constexpr double kStuckGpuSeconds = 30.0;
 using Clock = std::chrono::steady_clock;
 template <class T> struct AtomicShared {
     std::shared_ptr<T> value;
@@ -465,6 +472,8 @@ struct Service : std::enable_shared_from_this<Service> {
         f->gpu = true;
         f->success = f->success && success;
         f->gpu_ts = ts;
+        if (f->command_id)
+            completed_commit_ts = std::max(completed_commit_ts, f->command_commit_ts);
         // Slow GPU work is not a lost display callback. Give the ready
         // drawable two more refreshes without releasing its target early.
         f->acknowledgement_deadline = std::max(f->acknowledgement_deadline, ts + 2 * frame_period);
@@ -532,12 +541,13 @@ struct Service : std::enable_shared_from_this<Service> {
                                 }
                             });
         }
+        device->commit(cb);
         {
+            // Stamped once commit returns: the GPU has the work from here on (see tick).
             std::lock_guard lock(mutex);
             f->command_id = cb.id;
             f->command_commit_ts = now();
         }
-        device->commit(cb);
     }
     uint64_t sched_prev[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     bool sched_primed = false;
@@ -787,25 +797,31 @@ struct Service : std::enable_shared_from_this<Service> {
     }
 
     std::atomic<bool> recreate_chain{false}; // a frame was lost on the GPU (see tick)
+    double completed_commit_ts = -1;         // the latest commit among completed frames
     int chain_w = 0, chain_h = 0;            // the swapchain's size, to recreate it
+    // The worker is the only writer of `chain`; the pacer reads it under the mutex.
+    void set_chain(gpu::Swapchain c) {
+        std::lock_guard lock(mutex);
+        chain = c;
+    }
     void tick(double ts) {
         if (!std::isfinite(ts) || ts < 0)
             return;
         if (recreate_chain.exchange(false) && device && surface && chain && !fake) {
             device->destroy(chain);
-            chain = device->create_swapchain(surface, chain_w, chain_h);
+            set_chain(device->create_swapchain(surface, chain_w, chain_h));
         }
         if (auto m = message.exchange(nullptr)) {
             if (m->install) {
                 if (device && chain) {
                     device->destroy(chain);
-                    chain = {};
+                    set_chain({});
                 }
                 surface = m->surface;
                 chain_w = m->w;
                 chain_h = m->h;
                 if (device && surface && !fake)
-                    chain = device->create_swapchain(surface, m->w, m->h);
+                    set_chain(device->create_swapchain(surface, m->w, m->h));
                 std::lock_guard lock(mutex);
                 if (!flights.empty()) {
                     // A drawable on the detached layer may never present. Cancel
@@ -846,13 +862,23 @@ struct Service : std::enable_shared_from_this<Service> {
                 bool lost = false;
                 for (auto &pending : flights) {
                     completion_fallback(pending, ts);
-                    // A frame whose GPU work has not ended after 2 s is lost (seen after the
-                    // full-screen window was hidden and shown again, NFS Carbon 2026-10-10:
-                    // it held its slot forever, the slots filled, and the window stayed black
-                    // while the game ran). Recover as for a new layer, below.
-                    if (!pending->gpu && ts - pending->submitted_ts >= 2.0)
+                    // A frame whose GPU work never ends is lost (seen after the full-screen
+                    // window was hidden and shown again, NFS Carbon 2026-10-10: it held its
+                    // slot forever, the slots filled, and the window stayed black while the
+                    // game ran). Recover as for a new layer, below. The age runs from the
+                    // commit's return, not from submission: that also counted the worker's
+                    // composing and committing, and a driver that presents synchronously
+                    // (lavapipe) returns from commit only once the GPU has run the frame, so
+                    // a slow frame read as lost before its completion handler could run. A
+                    // frame still being committed has no command yet.
+                    const double gpu_age =
+                        pending->command_id ? ts - pending->command_commit_ts : 0.0;
+                    const bool overtaken =
+                        pending->command_id && completed_commit_ts > pending->command_commit_ts;
+                    if (!pending->gpu &&
+                        gpu_age >= (overtaken ? kLostGpuSeconds : kStuckGpuSeconds))
                         lost = true;
-                    if (!pending->gpu && ts - pending->submitted_ts >= 1.0) {
+                    if (!pending->gpu && gpu_age >= 1.0) {
                         if (!(logged_faults & 16))
                             fprintf(stderr,
                                     "presenter: GPU timeout evidence frame=%llu cb=%llu "
@@ -1262,6 +1288,10 @@ void host_present_start(void *native_surface, int w, int h) {
     s->surface = native_surface;
     s->drawable_w = w;
     s->drawable_h = h;
+    // A lost frame recreates the swapchain at this size until a resize changes it;
+    // unset, the recreated one took whatever extent the surface reported.
+    s->chain_w = w;
+    s->chain_h = h;
     s->chain =
         native_surface ? s->device->create_swapchain(native_surface, w, h) : gpu::Swapchain{};
     fprintf(stderr, "presenter: %dx%d drawable, at most %zu display submissions in flight\n",

@@ -6197,6 +6197,65 @@ static void test_windowed_drawable_handler_and_completion_fallback() {
         host_present_stop();
     }
 }
+// A slow GPU is slow frames, not lost ones. Age runs from the commit, so a
+// commit that itself took 3 s (lavapipe presents synchronously) does not count;
+// a frame is lost after 2 s only once a later frame has completed before it,
+// and otherwise after kStuckGpuSeconds (30 s).
+static void test_slow_gpu_is_not_a_lost_frame() {
+    {
+        PresentFake fake;
+        host_present_test_begin(false, false);
+        host_present_test_seal(1, HOST_SCREEN_MENU, false);
+        CHECK(host_present_test_window_wake(0));
+        // The worker is still committing frame 1 three seconds on.
+        CHECK(host_present_test_window_wake(3.0, false, true));
+        fake.commit(); // returns at 3 s
+        CHECK(host_present_test_window_wake(3.5, false, true));
+        CHECK(host_present_test_window_wake(29.0, false, true));
+        CHECK_EQ(host_present_drops(), 0u);
+        CHECK_EQ(host_present_test_in_flight(), 1u);
+        fake.complete();
+        fake.presented(29.1);
+        CHECK_EQ(host_present_unique_completed(), 1u);
+        CHECK(host_present_test_released(1));
+        // Nothing completes for 30 s after its commit: lost, its storage retained.
+        host_present_test_seal(2, HOST_SCREEN_MENU, false);
+        CHECK(host_present_test_window_wake(30.0));
+        fake.commit();
+        CHECK(host_present_test_window_wake(59.9, false, true));
+        CHECK_EQ(host_present_drops(), 0u);
+        CHECK(host_present_test_window_wake(60.0, false, true));
+        CHECK_EQ(host_present_drops(), 1u);
+        CHECK_EQ(host_present_test_in_flight(), 1u); // a repeat of frame 1 took its place
+        CHECK(!host_present_test_released(2));
+        fake.complete();
+        CHECK(host_present_test_released(2));
+        CHECK_EQ(host_present_unique_completed(), 1u);
+    }
+    {
+        // Overtaken: frame 2 completed and frame 1, committed before it, did not.
+        PresentFake fake;
+        host_present_test_begin(false, false, 3);
+        host_present_test_seal(1, HOST_SCREEN_MENU, false);
+        CHECK(host_present_test_window_wake(0));
+        fake.commit();
+        host_present_test_seal(2, HOST_SCREEN_MENU, false);
+        CHECK(host_present_test_window_wake(0.1));
+        fake.commit();
+        CHECK_EQ(host_present_test_flight_count(), 2u);
+        host_present_test_command_done(2);
+        CHECK(host_present_test_window_wake(1.9, false, true));
+        CHECK_EQ(host_present_drops(), 0u);
+        CHECK(host_present_test_window_wake(2.0, false, true));
+        CHECK_EQ(host_present_drops(), 2u);
+        CHECK_EQ(host_present_test_flight_count(), 0u);
+        CHECK(!host_present_test_released(1));
+        fake.complete();
+        CHECK(host_present_test_released(1));
+        CHECK(host_present_test_released(2));
+        CHECK_EQ(host_present_unique_completed(), 0u);
+    }
+}
 static void test_newest_sealed_wins_and_oldest_drops() {
     host_present_test_begin();
     host_present_test_seal(1);
@@ -7362,6 +7421,7 @@ static void test_presentation_service() {
     test_windowed_first_blit_presents_without_prior_completion();
     test_windowed_drawable_handler_and_completion_fallback();
     test_windowed_duration_pacing_selector();
+    test_slow_gpu_is_not_a_lost_frame();
     test_presenter_menu_ui_and_movie_pixels();
     test_newest_sealed_wins_and_oldest_drops();
     test_repeat_counted_not_completed();
