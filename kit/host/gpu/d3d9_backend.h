@@ -50,8 +50,9 @@ class D9Backend {
     virtual void buffer_drop(uint32_t id) = 0;
 
     virtual void draw(const HostD9Draw &d) = 0;
-    // Whether draw() honours HostD9Draw::vfetch (dx/host_d9.h).
-    virtual bool vfetch() const { return false; }
+    // Whether draw() honours HostD9Draw::vfetch (dx/host_d9.h): the language
+    // it takes the prelude in (HOST_D9_VFETCH_MSL, _GLSL), 0 when it does not.
+    virtual int vfetch() const { return 0; }
     // The vertex fetch check buffer, once the frames that wrote it are done.
     virtual void vfetch_check(HostD9VFetchVisit visit, void *user) { (void)visit, (void)user; }
     virtual void admission_accounting(const HostD9Accounting &) {}

@@ -162,17 +162,22 @@ typedef struct HostD9Draw {
 
 void host_d9_draw(const HostD9Draw *draw);
 
-// Vertex fetch: a game hands over MSL defining
+// Vertex fetch: a game hands over source, in the language the backend says,
+// defining in Metal Shading Language
 //   bool d9_vfetch(uint vid, device const uint *b0, device const uint *b1,
 //                  device const uint *b2, constant uint *b3, thread uint *w)
+// or in Vulkan GLSL, where b0..b3 are the buffer arrays `uint d9_b0[]`..`d9_b3[]`,
+//   bool d9_vfetch(uint vid, out uint w[N]) // N the vertex's words, stride / 4
 // which, for the vertex number `vid` of the one vertex buffer it was set up
 // for (dx/d3d9.cpp, d3d9_vfetch_pool), either returns false (the buffer holds
 // the vertex) or writes the vertex's words. b0..b3 are the buffers below,
 // written with host_d9_buffer_upload; the check buffer receives, per vertex,
 // its words and a tag. Supported only where the backend says so.
 #define HOST_D9_VFETCH_BUFFER(k) (0x7ff00000u + (k)) // k 0..3; 4 the check buffer
-int host_d9_vfetch_supported(void);
-void host_d9_vfetch_set_prelude(const char *msl); // once, before the first vfetch draw
+#define HOST_D9_VFETCH_MSL 1
+#define HOST_D9_VFETCH_GLSL 2
+int host_d9_vfetch_supported(void); // 0, or the language: HOST_D9_VFETCH_MSL or _GLSL
+void host_d9_vfetch_set_prelude(const char *source); // once, before the first vfetch draw
 const char *host_d9_vfetch_prelude(void);
 // The check buffer's contents once the GPU has finished a frame that wrote
 // it: calls `visit` from the render thread with the words and the newest tag

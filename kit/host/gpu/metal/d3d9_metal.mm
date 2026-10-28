@@ -943,8 +943,8 @@ class Renderer final : public D9Backend {
     const char *name() const override {
         return "Metal";
     }
-    bool vfetch() const override {
-        return true;
+    int vfetch() const override {
+        return HOST_D9_VFETCH_MSL;
     }
     // The vertex fetch check buffer (HOST_D9_VFETCH_BUFFER(4)), handed over once the frames
     // that wrote it have finished.

@@ -65,16 +65,20 @@ int recomp_readable_path(const char *guest_path, char *out, size_t out_len);
 
 /* Vertex fetch (Direct3D 9 on a backend that has it): the vertices of one
  * vertex buffer that the game leaves unwritten are supplied, by vertex number,
- * from four buffers the game fills, through Metal Shading Language it hands
- * over, defining
+ * from four buffers the game fills, through shader source it hands over in
+ * the backend's language. In Metal Shading Language (D3D9_VFETCH_MSL) it defines
  *   bool d9_vfetch(uint vid, device const uint *b0, device const uint *b1,
  *                  device const uint *b2, constant uint *b3, thread uint *w)
+ * and in Vulkan GLSL 4.50 (D3D9_VFETCH_GLSL), where the buffers are the arrays
+ * uint d9_b0[] .. d9_b3[] and N is stride/4,
+ *   bool d9_vfetch(uint vid, out uint w[N])
  * which returns false for a vertex the buffer itself holds, or writes the
  * vertex's stride/4 words to w. Every vertex shader drawing from that buffer
  * (stream 0, offset 0) runs it first.
- *   d3d9_vfetch_supported  non-zero when the backend can;
+ *   d3d9_vfetch_supported  0 when the backend cannot, else the language it
+ *                          takes: D3D9_VFETCH_MSL or D3D9_VFETCH_GLSL;
  *   d3d9_vfetch_pool       picks the vertex buffer whose memory holds
- *                          guest_addr (from its Lock) and sets the MSL; check
+ *                          guest_addr (from its Lock) and sets the source; check
  *                          non-zero also writes what was fetched to buffer 4
  *                          (stride/4 + 1 words a vertex: the words, the tag =
  *                          the presents so far + 1). Returns its vertex count;
@@ -89,8 +93,10 @@ int recomp_readable_path(const char *guest_path, char *out, size_t out_len);
  *                          tag whose draws the GPU has finished, when one
  *                          has since the last call (waits for the render
  *                          thread). */
+#define D3D9_VFETCH_MSL 1
+#define D3D9_VFETCH_GLSL 2
 int d3d9_vfetch_supported(void);
-uint32_t d3d9_vfetch_pool(uint32_t guest_addr, uint32_t stride, const char *msl, int check);
+uint32_t d3d9_vfetch_pool(uint32_t guest_addr, uint32_t stride, const char *source, int check);
 void d3d9_vfetch_size(uint32_t buffer, uint32_t bytes);
 void d3d9_vfetch_write(uint32_t buffer, uint32_t offset, const void *bytes, uint32_t size);
 uint64_t d3d9_vfetch_frames(void);

@@ -97,6 +97,29 @@ static inline bool d9_vfetch(uint vid, device const uint *b0, device const uint 
 }
 )MSL";
 
+// The two in Vulkan GLSL, where the math reads d9_b1..d9_b3 itself: its
+// pointers are indices into them, all from 0.
+static const char kFetchCheckGlsl[] = R"GLSL(
+bool d9_vfetch(uint vid, out uint w[8]) {
+    const uint m = d9_b0[vid];
+    if (m == 0u)
+        return false;
+    h5_skin_vertex(m, 0u, 0u, 0u, w);
+    w[5] = m;
+    return true;
+}
+)GLSL";
+
+static const char kFetchGlsl[] = R"GLSL(
+bool d9_vfetch(uint vid, out uint w[8]) {
+    const uint m = d9_b0[vid];
+    if (m == 0u)
+        return false;
+    h5_skin_vertex(m, 0u, 0u, 0u, w);
+    return true;
+}
+)GLSL";
+
 namespace {
 
 enum Mode { OFF = 0, ON = 1, CHECK = 2, GPUCHECK = 3 };
@@ -294,9 +317,15 @@ void map_set(uint32_t first, uint32_t count, uint32_t slot) {
     map_write(first, count);
 }
 
-const std::string &fetch_msl() {
-    static const std::string msl = std::string(kMath) + (skin_mode() == GPUCHECK ? kFetchCheck : kFetch);
-    return msl;
+// The fetch in the renderer's language (asked once vertex fetch is known to be there).
+const std::string &fetch_source() {
+    static const std::string source = [] {
+        const bool check = skin_mode() == GPUCHECK;
+        if (d3d9_vfetch_supported() == D3D9_VFETCH_GLSL)
+            return std::string(kMath) + (check ? kFetchCheckGlsl : kFetchGlsl);
+        return std::string(kMath) + (check ? kFetchCheck : kFetch);
+    }();
+    return source;
 }
 
 bool setup(uint32_t base) {
@@ -310,7 +339,7 @@ bool setup(uint32_t base) {
     // check computes and compares on the CPU only: no vertex fetch.
     uint32_t n = 0x100000u;
     if (skin_mode() != CHECK) {
-        n = d3d9_vfetch_pool(base, 0x20, fetch_msl().c_str(), skin_mode() == GPUCHECK);
+        n = d3d9_vfetch_pool(base, 0x20, fetch_source().c_str(), skin_mode() == GPUCHECK);
         if (!n) {
             S.failed = true;
             fprintf(stderr, "[gpu-skin] no vertex buffer at %08x: the CPU draws as before\n", base);
@@ -378,7 +407,7 @@ bool bound(uint32_t base) {
     if (f == S.looked)
         return false;
     S.looked = f;
-    const uint32_t n = d3d9_vfetch_pool(base, 0x20, fetch_msl().c_str(), skin_mode() == GPUCHECK);
+    const uint32_t n = d3d9_vfetch_pool(base, 0x20, fetch_source().c_str(), skin_mode() == GPUCHECK);
     if (!n)
         return false;
     if (n != S.nverts) {

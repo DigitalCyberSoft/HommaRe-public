@@ -194,6 +194,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
     f2.features.fillModeNonSolid = base.fillModeNonSolid;
     f2.features.occlusionQueryPrecise = base.occlusionQueryPrecise;
     f2.features.depthClamp = base.depthClamp;
+    // The vertex fetch check writes what it fetched from the vertex shader.
+    f2.features.vertexPipelineStoresAndAtomics = base.vertexPipelineStoresAndAtomics;
     d->enabled_features_ = f2.features;
     VkPhysicalDeviceVulkan13Features f13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     VkPhysicalDeviceDynamicRenderingFeaturesKHR fdr{
