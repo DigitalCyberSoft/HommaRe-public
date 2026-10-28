@@ -124,7 +124,8 @@ haven't been tested yet: reports welcome.
 |---|---|
 | Mac (Apple silicon) | [Download the DMG](../../releases/latest), or [build it yourself](#building-from-source). |
 | iPad and iPhone | Build it yourself on that Mac with Xcode and install it on your device. |
-| Windows, Linux, Android | Not planned for now: the original game already runs on Windows. |
+| Linux (x86-64) | [Build it yourself](#building-from-source); it draws with Vulkan. |
+| Windows, Android | Not planned for now: the original game already runs on Windows. |
 
 ### System requirements
 
@@ -359,7 +360,7 @@ fails a build that would.
 ### Building from source
 
 The repository contains no game code: the build translates **your own** executables, so
-the Mac you build on needs the game installed (the build reads its executables:
+the Mac or Linux PC you build on needs the game installed (the build reads its executables:
 `H5_Game.exe` and `granny2.dll`). The app that comes out carries no game data and no mod made from
 it: on the device you install the game into it from your GOG installers, as in
 [Quick start](#quick-start). The generated code, analysis and game files are ignored by
@@ -375,6 +376,16 @@ Supported executables:
 
 **1. Dependencies.** Xcode, CMake, Ninja, Python 3 with the kit's requirements
 (`capstone`, `pefile`, `numpy`, `Pillow`), and Ghidra with a JDK for the analysis.
+On Linux, clang and lld in place of Xcode, SDL's X11, Wayland and audio development
+headers (the list is in `kit/.github/workflows/checks.yml`), a Vulkan driver, and
+`innoextract` for the launcher to install from GOG's installers. On Fedora:
+
+```bash
+sudo dnf install clang lld innoextract glslc java-21-openjdk-devel nas-devel \
+  pulseaudio-libs-devel pipewire-jack-audio-connection-kit-devel libXScrnSaver-devel \
+  mesa-libgbm-devel mesa-libGL-devel mesa-libEGL-devel libglvnd-devel ibus-devel \
+  pipewire-devel libdecor-devel liburing-devel
+```
 
 **2. Link your game and analyse it.**
 
@@ -398,7 +409,8 @@ and checks the result:
 registered it first, so for a device build change `bundle_id` in `game.toml`,
 `games/hof/game.toml` and `games/toe/game.toml` to a prefix of your own (keeping the
 `.hof` and `.toe` endings). The repository has no signing keys or profiles: Xcode signs
-with your team. `--overlay` keeps the kit's
+with your team. On Linux `--target app` leaves `build/package/HommaRe` (and a tarball beside
+it): the `HommaRe` executable with the expansions in `modules/`, started from that folder. `--overlay` keeps the kit's
 performance overlay (F11). Translation takes about 10–15 minutes per game and
 compilation about 25 minutes per game and platform on an M1 Max; later builds are
 incremental. Use `--regenerate` with `kit/tools/build.py` after changing the translator.
