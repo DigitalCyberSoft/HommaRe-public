@@ -52,6 +52,11 @@ if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   # or a game module (Linux; Apple's code is position independent already).
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
+# $<LINK_LIBRARY:AS_NEEDED,lib>: a library recorded only when something
+# links against it (mods/CMakeLists.txt: libatomic, which an optimised build
+# rarely calls and a desktop may not have installed).
+set(CMAKE_LINK_LIBRARY_USING_AS_NEEDED "LINKER:--push-state,--as-needed" "<LINK_ITEM>" "LINKER:--pop-state")
+set(CMAKE_LINK_LIBRARY_USING_AS_NEEDED_SUPPORTED TRUE)
 
 # Optimization is a per-target decision (cmake/Warnings.cmake). The
 # configuration only decides whether -O0 is forced.

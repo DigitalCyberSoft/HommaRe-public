@@ -202,11 +202,19 @@ std::atomic<int> g_screen_w{0}, g_screen_h{0};
 // MacBook's notch): what a full-screen game actually gets. Equal to the
 // display where there is no such strip.
 std::atomic<int> g_fullscreen_w{0}, g_fullscreen_h{0};
-// The window's safe area for the game (host_display_safe_insets).
+// The window's safe area for the game (host_display_safe_insets). Sixteen
+// bytes are no lock-free atomic on x86-64 without cmpxchg16b, where
+// std::atomic would call libatomic, which a desktop may not have installed;
+// it changes with the window only, so a mutex costs nothing.
 struct SafeInsets {
     float l = 0, t = 0, r = 0, b = 0;
 };
-std::atomic<SafeInsets> g_safe_insets{};
+SafeInsets g_safe_insets;
+std::mutex g_safe_insets_m;
+SafeInsets safe_insets() {
+    std::lock_guard<std::mutex> held(g_safe_insets_m);
+    return g_safe_insets;
+}
 // The window's form, phone-sized or not (host_display_phone), the game's
 // picture in points (host_display_picture_points) and the count of display
 // changes (host_display_generation); kept on the main thread.
@@ -2110,9 +2118,12 @@ void publish_safe_insets() {
             s.b = float(std::clamp(b / game.h, 0.0, 0.25));
         }
     }
-    const SafeInsets old = g_safe_insets.load();
+    const SafeInsets old = safe_insets();
     if (old.l != s.l || old.t != s.t || old.r != s.r || old.b != s.b) {
-        g_safe_insets.store(s);
+        {
+            std::lock_guard<std::mutex> held(g_safe_insets_m);
+            g_safe_insets = s;
+        }
         g_display_generation.fetch_add(1);
         fprintf(stderr, "[host] safe insets of the picture: %.3f,%.3f,%.3f,%.3f (housing %s%s)\n",
                 s.l, s.t, s.r, s.b, side < 0 ? "left" : side > 0 ? "right" : "none",
@@ -3506,7 +3517,7 @@ extern "C" int host_display_picture_points(float *w, float *h) {
 extern "C" int host_display_safe_insets(float *l, float *t, float *r, float *b) {
     if (!l || !t || !r || !b)
         return 0;
-    const SafeInsets s = g_safe_insets.load();
+    const SafeInsets s = safe_insets();
     *l = s.l;
     *t = s.t;
     *r = s.r;
