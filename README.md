@@ -1,4 +1,4 @@
-<!-- Describes the state of branch `main` (2026-10-22). -->
+<!-- Describes the state of branch `main` (2026-10-28). -->
 
 <p align="right"><b>English</b> · <a href="README.ru.md">Русский</a></p>
 
@@ -29,7 +29,7 @@ Play your own GOG copy on Apple silicon Macs, iPad and iPhone.
 > installers and verifies every file. Please don't ask for, or share, game files.
 > See the full [legal notice](#legal-notice).
 
-**Contents:** [What it is](#what-is-hommare) · [Highlights](#highlights) ·
+**Contents:** [What it is](#what-is-hommare) · [What's new](#whats-new) · [Highlights](#highlights) ·
 [Status](#status) · [Download](#download) · [Quick start](#quick-start) ·
 [Controls](#controls) · [Settings](#settings) · [FAQ](#faq-and-troubleshooting) ·
 [What's next](#whats-next) · [For developers](#for-developers) · [Credits](#credits) ·
@@ -47,6 +47,16 @@ All three games are in one app: the original game (1.60), **Hammers of Fate** (2
 launcher and play, with things the 2006 game couldn't do: ultrawide screens, touch and
 trackpad controls, an interface made for the iPhone, and a frame rate that saves your
 battery when nothing moves.
+
+## What's new
+
+**0.1-playable-286** (October 2026) · [all changes](CHANGELOG.md)
+
+- **Local network games:** *Multiplayer → Local Network* works between Macs, iPads and
+  iPhones on one network.
+- **Native menus on iPhone:** the game's menus drawn as native screens from its own
+  pictures and words; on iPad, choose *Menus → For the screen* in the launcher.
+- **Foldable iPhone:** no more fall back to 1024x768 after a screen lock.
 
 ## Highlights
 
@@ -82,6 +92,12 @@ battery when nothing moves.
   build and hire menus move to the corner, and everything stays clear of the Dynamic
   Island. The battle camera comes nearer, and glides back while you place your troops.
   The layout follows the window, so a foldable switches it as it folds.
+- **Menus made for the screen.** On iPhone the main menu, profiles, campaigns, Load and
+  Save, Options, duels, custom and hot-seat games and the in-game menu are drawn as
+  native screens, built from the game's own pictures, words and frames, with text sized
+  for a phone. iPad can have them too.
+- **Local network games.** *Multiplayer → Local Network* finds the games on your Wi-Fi:
+  host one, join one and play, between Macs, iPads and iPhones.
 - **Trackpad on a Mac.** Two fingers over the adventure map raise and lower the camera,
   or move it like on an iPad: scroll to pan, pinch to zoom, twist to turn. In battle the
   camera zooms towards the pointer, and lists scroll under your fingers.
@@ -118,12 +134,14 @@ haven't been tested yet: reports welcome.
 > **Mac:** a ready-made build is in [Releases](../../releases/latest)
 > (`HommaRe-<version>-macOS.dmg`). It holds no game data: you give it your own GOG
 > installers. macOS can't verify its developer, so it asks once on the first start (see
-> [Quick start](#quick-start)). **iPad and iPhone:** build it yourself on a Mac.
+> [Quick start](#quick-start)). **iPad and iPhone:** an unsigned IPA is in the same
+> release (`HommaRe-<version>-iOS.ipa`); sideload it with Sideloadly, AltStore or
+> SideStore, or build the app yourself on a Mac.
 
 | Platform | How to get it |
 |---|---|
 | Mac (Apple silicon) | [Download the DMG](../../releases/latest), or [build it yourself](#building-from-source). |
-| iPad and iPhone | Build it yourself on that Mac with Xcode and install it on your device. |
+| iPad and iPhone | [Sideload the IPA](../../releases/latest) with Sideloadly, AltStore or SideStore, or build it yourself on a Mac with Xcode. |
 | Windows, Linux, Android | Not planned for now: the original game already runs on Windows. |
 
 ### System requirements
@@ -161,7 +179,10 @@ haven't been tested yet: reports welcome.
 
 ### iPad and iPhone
 
-First [build the app](#building-from-source) and install it on your device.
+First install the app: sideload `HommaRe-<version>-iOS.ipa` from
+[Releases](../../releases/latest) with Sideloadly, AltStore or SideStore (they sign it
+with your Apple ID; turn on Developer Mode on the device), or
+[build it](#building-from-source) yourself.
 
 1. **Put the GOG installers on the device**: the `.exe` and `.bin` files, in the Files
    app (on the device or in iCloud Drive), or with Finder from a Mac.
@@ -284,14 +305,13 @@ normally. Leave with *Exit → OK* once after creating a profile.
 **The game is silent on my iPhone.** The silent switch is on. Turn it off, or set
 *Settings → Silent mode* to *Ignore*.
 
-**Is multiplayer supported?** Hot-seat on one device, yes. Network play isn't.
+**Is multiplayer supported?** Hot-seat on one device and games on your local network,
+yes. Ubisoft closed the game's Internet servers (Ubi.com) in 2015, so online play isn't.
 
 ## What's next
 
 - GOG's other languages (German, French, Polish and more): their installers are needed to
   check the files.
-- Native mobile pre-map UI for menus
-- Local network
 - iCloud saves sync
 
 There are no dates and no promises: it's ready when it's ready.
