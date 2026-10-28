@@ -197,6 +197,34 @@ def test_windows_folder(tmp_path):
     assert "Double-click StubRecomp.exe" in readme
 
 
+def test_windows_carries_innoextract_and_its_licenses(tmp_path):
+    exe = tmp_path / "recomp" / "StubRecomp.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"MZ app")
+    (exe.parent / "innoextract.exe").write_bytes(b"MZ innoextract")
+    build_dir = tmp_path / "cmake"
+    licenses = build_dir / "innoextract-windows/files/license"
+    licenses.mkdir(parents=True)
+    (licenses / "innoextract.LICENSE.txt").write_text("zlib")
+    (licenses / "Boost.LICENSE_1_0.txt").write_text("boost")
+    (build_dir / "CMakeCache.txt").write_text("")
+    cfg = {"game": {"app_name": "StubRecomp", "name": "Stub Game", "executable": "STUB.EXE"}}
+    out = package_desktop.stage(exe, cfg, tmp_path / "out", system="Windows", build_dir=build_dir)
+    assert (out / "innoextract.exe").read_bytes() == b"MZ innoextract"
+    assert (out / "resources/innoextract-NOTICE.md").read_bytes() == (
+        package_desktop.ROOT / "third_party/innoextract/NOTICE.md").read_bytes()
+    assert sorted(p.name for p in (out / "resources/innoextract-license").iterdir()) == [
+        "Boost.LICENSE_1_0.txt", "innoextract.LICENSE.txt"]
+    with zipfile.ZipFile(tmp_path / "out/StubRecomp-windows-x86_64.zip") as z:
+        assert "StubRecomp/innoextract.exe" in z.namelist()
+        assert "StubRecomp/resources/innoextract-license/innoextract.LICENSE.txt" in z.namelist()
+    # A build without the native launcher: no helper, and none left over.
+    (exe.parent / "innoextract.exe").unlink()
+    package_desktop.stage(exe, cfg, tmp_path / "out", system="Windows", build_dir=build_dir)
+    assert not (out / "innoextract.exe").exists()
+    assert not (out / "resources/innoextract-license").exists()
+
+
 def test_windows_binaries_lose_their_dwarf(tmp_path, monkeypatch):
     exe = tmp_path / "recomp" / "StubRecomp.exe"
     exe.parent.mkdir()

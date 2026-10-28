@@ -15,8 +15,8 @@ expansions' modules go into the base game's app (kit/tools/assemble_games.py)
 and tools/check_bundle.py checks the result (--game compares it with your
 installs too). The launcher in it installs the games from the GOG offline
 installers (innoextract: a helper on the Mac, a library on iOS, the system's
-on Linux) and the interface mods are made from the recipes when a game
-starts. Install the iOS
+on Linux, innoextract.exe beside the app on Windows) and the interface mods
+are made from the recipes when a game starts. Install the iOS
 app with `xcrun devicectl device install app --device <id> <app>` or
 `xcrun simctl install <udid> <app>`.
 

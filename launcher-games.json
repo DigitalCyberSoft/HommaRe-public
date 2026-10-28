@@ -1,16 +1,16 @@
 {
   "title": "HommaRe",
   "tagline": {
-    "en": "Native port for macOS, iOS and Linux",
-    "ru": "Нативный порт для macOS, iOS и Linux",
-    "cs": "Nativní port pro macOS, iOS a Linux",
-    "de": "Nativer Port für macOS, iOS und Linux",
-    "es": "Port nativo para macOS, iOS y Linux",
-    "fr": "Portage natif pour macOS, iOS et Linux",
-    "it": "Port nativo per macOS, iOS e Linux",
-    "hu": "Natív port macOS-re, iOS-re és Linuxra",
-    "pl": "Natywny port na macOS, iOS i Linuksa",
-    "zh-Hans": "适用于 macOS、iOS 和 Linux 的原生移植版"
+    "en": "Native port for macOS, iOS, Linux and Windows",
+    "ru": "Нативный порт для macOS, iOS, Linux и Windows",
+    "cs": "Nativní port pro macOS, iOS, Linux a Windows",
+    "de": "Nativer Port für macOS, iOS, Linux und Windows",
+    "es": "Port nativo para macOS, iOS, Linux y Windows",
+    "fr": "Portage natif pour macOS, iOS, Linux et Windows",
+    "it": "Port nativo per macOS, iOS, Linux e Windows",
+    "hu": "Natív port macOS-re, iOS-re, Linuxra és Windowsra",
+    "pl": "Natywny port na macOS, iOS, Linuksa i Windowsa",
+    "zh-Hans": "适用于 macOS、iOS、Linux 和 Windows 的原生移植版"
   },
   "legal": {
     "en": "An unofficial fan port, not affiliated with Ubisoft. No game files are included: play your own GOG copy.",
@@ -24,7 +24,8 @@
     "pl": "Nieoficjalny port fanowski, niezwiązany z Ubisoftem. Pliki gry nie są dołączone — graj na własnej kopii z GOG.",
     "zh-Hans": "非官方的玩家移植版，与 Ubisoft 无关。不含任何游戏文件：请使用你自己的 GOG 版本。"
   },
-  "installNames": ["Heroes of Might and Magic V", "Heroes V", "HoMM5", "Heroes 5", "Tribes of the East"],
+  "installNames": ["Heroes of Might and Magic V", "Heroes of Might & Magic V", "Heroes V", "HoMM5", "Heroes 5",
+                   "Tribes of the East"],
   "exclude": ["__redist", "commonappdata", "tmp", "Editor", "Editor Documentation", "FanDocuments", "*.pdf", "*.part"],
   "installers": [
     {
