@@ -140,6 +140,10 @@ Swapchain VulkanDevice::create_swapchain(void *native_surface, int width, int he
         return {};
     auto c = std::make_unique<Chain>();
     c->window = native_surface;
+    // Mesa 25.1's headless WSI (SDL's offscreen driver) offers the extension but
+    // has no release hook: vkReleaseSwapchainImagesEXT calls a null pointer there.
+    const char *driver = SDL_GetCurrentVideoDriver();
+    c->release = release_images_ && !(driver && strcmp(driver, "offscreen") == 0);
     SDL_Window *window = static_cast<SDL_Window *>(native_surface);
     if (!SDL_Vulkan_CreateSurface(window, instance_, nullptr, &c->surface)) {
         fprintf(stderr, "gpu/vulkan: SDL_Vulkan_CreateSurface: %s\n", SDL_GetError());
@@ -213,40 +217,116 @@ Texture VulkanDevice::acquire(Swapchain s) {
     return t;
 }
 
+// An acquired image that will not be drawn has to go back to the swapchain:
+// an image the application holds is never handed out again, and once every
+// image is held vkAcquireNextImageKHR waits forever (lavapipe's headless
+// swapchain spins). Dropping the bookkeeping, as this once did, kept the image.
+// Where the swapchain has VK_EXT_swapchain_maintenance1 (Chain::release) it is
+// released; elsewhere the only way back is to present it, cleared to black. Either way the acquire semaphore is
+// consumed first, so its slot can be reused.
 void VulkanDevice::release_drawable(Swapchain s, Texture t) {
-    // The acquire semaphore is signalled and nobody waits on it: consume it
-    // with an empty fenced submit so the slot can be reused.
-    VkSemaphore sem = VK_NULL_HANDLE;
+    VkSemaphore sem = VK_NULL_HANDLE, finished = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    VkImage image = VK_NULL_HANDLE;
+    uint32_t index = 0;
+    bool release = false;
     {
         std::lock_guard lock(mutex_);
         auto it = swapchains_.find(s.id);
         if (it == swapchains_.end())
             return;
         Chain &c = *it->second;
+        auto a = c.acquired.find(t.id);
+        if (a == c.acquired.end())
+            return;
+        index = a->second;
+        release = c.release;
+        swapchain = c.swapchain;
+        image = c.images[index];
+        finished = c.finished_semaphores[index];
         auto w = c.acquired_wait.find(t.id);
         if (w != c.acquired_wait.end()) {
             sem = w->second;
             c.acquired_wait.erase(w);
         }
-        c.acquired.erase(t.id);
+        c.acquired.erase(a);
         textures_.erase(t.id);
     }
-    if (!sem)
+    if (release) {
+        if (sem) {
+            VkPipelineStageFlags stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+            si.waitSemaphoreCount = 1;
+            si.pWaitSemaphores = &sem;
+            si.pWaitDstStageMask = &stage;
+            VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+            VkFence fence;
+            vkCreateFence(device_, &fci, nullptr, &fence);
+            {
+                std::lock_guard lock(queue_mutex_);
+                vkQueueSubmit(queue_, 1, &si, fence);
+            }
+            vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
+            vkDestroyFence(device_, fence, nullptr);
+        }
+        VkReleaseSwapchainImagesInfoEXT ri{VK_STRUCTURE_TYPE_RELEASE_SWAPCHAIN_IMAGES_INFO_EXT};
+        ri.swapchain = swapchain;
+        ri.imageIndexCount = 1;
+        ri.pImageIndices = &index;
+        std::lock_guard lock(queue_mutex_); // the swapchain is the queue's to present to
+        vkReleaseSwapchainImagesEXT(device_, &ri);
         return;
-    VkPipelineStageFlags stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    }
+    VkCommandBuffer cb = one_shot_begin();
+    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.image = image;
+    b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                         nullptr, 0, nullptr, 1, &b);
+    const VkClearColorValue black{{0, 0, 0, 1}};
+    vkCmdClearColorImage(cb, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &black, 1,
+                         &b.subresourceRange);
+    b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    b.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    b.dstAccessMask = 0;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &b);
+    vkEndCommandBuffer(cb);
+    VkPipelineStageFlags stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    si.waitSemaphoreCount = 1;
-    si.pWaitSemaphores = &sem;
-    si.pWaitDstStageMask = &stage;
-    VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence fence;
-    vkCreateFence(device_, &fci, nullptr, &fence);
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    if (sem) {
+        si.waitSemaphoreCount = 1;
+        si.pWaitSemaphores = &sem;
+        si.pWaitDstStageMask = &stage;
+    }
+    si.signalSemaphoreCount = 1;
+    si.pSignalSemaphores = &finished;
+    bool submitted = false;
     {
         std::lock_guard lock(queue_mutex_);
-        vkQueueSubmit(queue_, 1, &si, fence);
+        vkResetFences(device_, 1, &transfer_fence_);
+        submitted = vkQueueSubmit(queue_, 1, &si, transfer_fence_) == VK_SUCCESS;
+        if (submitted) {
+            VkPresentInfoKHR pi{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+            pi.waitSemaphoreCount = 1;
+            pi.pWaitSemaphores = &finished;
+            pi.swapchainCount = 1;
+            pi.pSwapchains = &swapchain;
+            pi.pImageIndices = &index;
+            vkQueuePresentKHR(queue_, &pi);
+        } else
+            fail("release_drawable: submit failed");
     }
-    vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
-    vkDestroyFence(device_, fence, nullptr);
+    if (submitted)
+        vkWaitForFences(device_, 1, &transfer_fence_, VK_TRUE, UINT64_MAX);
+    transfer_mutex_.unlock(); // taken by one_shot_begin
 }
 
 void VulkanDevice::present(CommandBuffer cb, Swapchain s, Texture t, double,

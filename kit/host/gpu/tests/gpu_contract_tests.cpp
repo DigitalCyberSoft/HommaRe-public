@@ -274,6 +274,56 @@ static void test_swapchain_from_surface() {
     d->destroy(s);
 }
 
+// A drawable acquired and then not drawn (the presenter's composite could not
+// be allocated) goes back to the swapchain with release_drawable, however often
+// that happens. The Vulkan backend once only forgot it: the swapchain ran out
+// of images after a few, and the next acquire waited forever. Both of its ways
+// back are covered: VK_EXT_swapchain_maintenance1's release, and presenting
+// the image (RECOMP_VULKAN_RELEASE_IMAGES=0, what a device without it does).
+static void test_released_drawables_return() {
+    for (const char *release : {"1", "0"}) {
+        os_setenv("RECOMP_VULKAN_RELEASE_IMAGES", release);
+        auto d = create_default_device();
+        if (!d)
+            break;
+        void *surface = test_native_surface(32, 16);
+        if (!surface) {
+            printf("no native surface here: drawable release test skipped\n");
+            break;
+        }
+        Swapchain s = d->create_swapchain(surface, 32, 16);
+        CHECK(s);
+        if (!s)
+            break;
+        constexpr int kRounds = 24; // several times any swapchain's image count
+        std::atomic<int> rounds{0};
+        std::atomic<bool> finished{false};
+        std::thread worker([&] {
+            for (int i = 0; i < kRounds; ++i) {
+                Texture t = d->acquire(s);
+                if (!t)
+                    break;
+                d->release_drawable(s, t);
+                ++rounds;
+            }
+            finished = true;
+        });
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while (!finished && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        CHECK(rounds.load() == kRounds);
+        if (!finished) {
+            fprintf(stderr, "acquire never returned after %d released drawables (release %s)\n",
+                    rounds.load(), release);
+            fflush(stderr);
+            _Exit(1);
+        }
+        worker.join();
+        d->destroy(s);
+    }
+    os_unsetenv("RECOMP_VULKAN_RELEASE_IMAGES");
+}
+
 int main() {
     os_setenv("RECOMP_GPU_BACKEND", POP_GPU_TEST_BACKEND);
     if (strcmp(default_backend_name(), POP_GPU_TEST_BACKEND) != 0) {
@@ -288,6 +338,7 @@ int main() {
     test_completion_handler_owns_resources();
     test_compute_readback_kernel();
     test_swapchain_from_surface();
+    test_released_drawables_return();
     printf("%d checks, %d failures\n", g_checks, g_failures);
     if (!g_failures)
         printf("all gpu %s tests passed\n", POP_GPU_TEST_BACKEND);

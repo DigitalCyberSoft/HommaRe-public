@@ -15,6 +15,9 @@ uint64_t host_present_test_last_id();
 uint8_t host_present_test_last_pixel();
 bool host_present_test_class_valid();
 void host_present_test_fail_allocations(unsigned count);
+// The next `count` composites fail to allocate, on the real worker's path too.
+void host_present_test_fail_composites(unsigned count);
+unsigned host_present_test_composite_failures_left();
 int host_present_test_requested_width();
 bool host_present_test_read_rgba(uint8_t *out, size_t bytes);
 

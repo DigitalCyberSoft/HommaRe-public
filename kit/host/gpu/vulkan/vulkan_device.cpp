@@ -89,7 +89,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
     for (const char *s :
          {"VK_KHR_surface", "VK_EXT_metal_surface", "VK_KHR_win32_surface", "VK_KHR_xlib_surface",
           "VK_KHR_xcb_surface", "VK_KHR_wayland_surface", "VK_EXT_headless_surface",
-          "VK_KHR_get_physical_device_properties2"})
+          "VK_KHR_get_physical_device_properties2",
+          // What VK_EXT_swapchain_maintenance1 needs (release_drawable).
+          "VK_KHR_get_surface_capabilities2", "VK_EXT_surface_maintenance1"})
         if (has_inst(s))
             inst_ext.push_back(s);
     std::vector<const char *> layers;
@@ -169,6 +171,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
         dev_ext.push_back("VK_KHR_swapchain");
     if (has_dev("VK_KHR_portability_subset"))
         dev_ext.push_back("VK_KHR_portability_subset");
+    const bool maintenance1_ext = has_dev("VK_EXT_swapchain_maintenance1") &&
+                                  has_inst("VK_EXT_surface_maintenance1") &&
+                                  has_inst("VK_KHR_get_surface_capabilities2");
     d->core13_ = d->props_.apiVersion >= VK_API_VERSION_1_3 && app.apiVersion >= VK_API_VERSION_1_3;
     if (!d->core13_) {
         if (!has_dev("VK_KHR_dynamic_rendering")) {
@@ -219,6 +224,24 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
         fdr.dynamicRendering = VK_TRUE;
         f2.pNext = &fdr;
     }
+    // An image acquired and then not drawn (a frame whose composite could not
+    // be allocated) goes back to the swapchain with vkReleaseSwapchainImagesEXT.
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT fsm{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT};
+    if (maintenance1_ext) {
+        VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT have{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 have2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        have2.pNext = &have;
+        vkGetPhysicalDeviceFeatures2(chosen, &have2);
+        if (have.swapchainMaintenance1) {
+            dev_ext.push_back("VK_EXT_swapchain_maintenance1");
+            fsm.swapchainMaintenance1 = VK_TRUE;
+            fsm.pNext = f2.pNext;
+            f2.pNext = &fsm;
+            d->release_images_ = true;
+        }
+    }
     float prio = 1.0f;
     VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
     qci.queueFamilyIndex = family;
@@ -246,6 +269,11 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
         fprintf(stderr, "gpu/vulkan: no dynamic rendering entry points\n");
         return nullptr;
     }
+    d->release_images_ = d->release_images_ && vkReleaseSwapchainImagesEXT;
+    // RECOMP_VULKAN_RELEASE_IMAGES=0 takes the path a device without the
+    // extension takes (release_drawable presents the image instead), for tests.
+    if (const char *e = recomp_env("VULKAN_RELEASE_IMAGES"); e && *e == '0')
+        d->release_images_ = false;
     vkGetDeviceQueue(d->device_, family, 0, &d->queue_);
     VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;

@@ -201,6 +201,7 @@ class VulkanDevice final : public Device {
         std::unordered_map<uint64_t, uint32_t> acquired; // texture id -> image index
         std::unordered_map<uint64_t, VkSemaphore> acquired_wait;
         bool needs_recreate = false;
+        bool release = false; // release_drawable may use vkReleaseSwapchainImagesEXT
         double refresh = 1.0 / 60;
     };
 
@@ -267,6 +268,8 @@ class VulkanDevice final : public Device {
     VkPhysicalDeviceFeatures enabled_features_{};
     bool core13_ = false;
     bool full_subgroups_ = false; // computeFullSubgroups enabled
+    // VK_EXT_swapchain_maintenance1: an acquired image goes back unpresented (release_drawable).
+    bool release_images_ = false;
     bool failed_ = false;
     bool trace_ = false;     // RECOMP_GPU_TRACE=1
     uint32_t one_shots_ = 0; // trace: synchronous transfers since the last commit

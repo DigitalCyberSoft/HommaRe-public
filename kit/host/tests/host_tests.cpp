@@ -6665,6 +6665,53 @@ static void test_presenter_migration_cancels_old_drawable() {
     host_present_stop();
 }
 
+// A frame whose composite cannot be allocated hands its drawable back to the
+// swapchain. Twelve in a row is more than a swapchain has images: before the
+// Vulkan backend returned them, the worker's next acquire waited forever (on
+// lavapipe's headless surface it spun) and nothing was presented again.
+static void test_presenter_composite_failures(D3DRenderer *) {
+    void *surface = gpu::test_native_surface(64, 48);
+    gpu::Swapchain probe = surface ? g_gpu->create_swapchain(surface, 64, 48) : gpu::Swapchain{};
+    if (!probe) {
+        printf("no swapchain on a test surface here: composite failure test skipped\n");
+        return;
+    }
+    g_gpu->destroy(probe);
+    // A stuck worker holds the device's lock in acquire, and the staging below
+    // then waits on it too: only another thread can call the test off.
+    static std::atomic<bool> done{false};
+    std::thread([] {
+        std::this_thread::sleep_for(std::chrono::seconds(45));
+        if (!done) {
+            printf("presenter stuck: acquire never returned after the composite failures\n");
+            fflush(nullptr);
+            _Exit(1);
+        }
+    }).detach();
+    host_present_start(surface, 64, 48);
+    host_present_test_fail_composites(12);
+    std::vector<uint8_t> rgba(64 * 48 * 4, 200);
+    uint64_t id = 200;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while ((host_present_test_composite_failures_left() || host_present_unique_completed() < 3) &&
+           std::chrono::steady_clock::now() < deadline) {
+        host_present_stage_rgba(rgba.data(), 64, 48);
+        host_present_test_seal(id++, HOST_SCREEN_MENU, false);
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    CHECK_EQ(host_present_test_composite_failures_left(), 0u);
+    CHECK(host_present_unique_completed() >= 3);
+    if (host_present_unique_completed() < 3) {
+        // The worker is stuck in acquire: stopping the presenter would wait for it.
+        printf("presenter stuck after %u composite failures\n",
+               12 - host_present_test_composite_failures_left());
+        fflush(nullptr);
+        _Exit(1);
+    }
+    host_present_stop();
+    done = true;
+}
+
 static void test_presenter_real_offscreen(D3DRenderer *renderer) {
     // Drive the GDI seam through a real offscreen target; source mutation
     // after publication must not change the completed frame.
@@ -11873,6 +11920,7 @@ int main(int argc, char **argv) {
             void (*fn)(D3DRenderer *);
         } gpu[] = {
             {"offscreen presenter", test_presenter_real_offscreen},
+            {"composite failures", test_presenter_composite_failures},
             {"presenter GPU color order", test_presenter_gpu_color_order},
             {"presenter GPU logical coordinates", test_presenter_gpu_logical_coordinates},
             {"Direct3D 11 hardware path", test_gpu2d_pixels},

@@ -663,7 +663,12 @@ struct Service : std::enable_shared_from_this<Service> {
         return device->create_texture(
             {w, h, format, gpu::UsageSampled | gpu::UsageRenderTarget | gpu::UsageCpu, 1});
     }
+    // Test hook: the next N composites fail as an out-of-memory device would.
+    std::atomic<unsigned> fail_composites{0};
     std::shared_ptr<Composite> composite(int w, int h, gpu::Format format) {
+        for (unsigned n = fail_composites.load(); n;)
+            if (fail_composites.compare_exchange_weak(n, n - 1))
+                return nullptr;
         gpu::Texture t = texture(w, h, format);
         if (!t)
             return nullptr;
@@ -1028,8 +1033,12 @@ struct Service : std::enable_shared_from_this<Service> {
                 reuse_composition ? cached : composite(w, h, out_format);
             gpu::CommandBuffer cb = device->begin();
             if (!cb || !out) {
+                // Hand back what this frame took: the drawable to its swapchain,
+                // and the begun command buffer, empty, so the device retires it.
                 if (drawable)
                     device->release_drawable(chain, drawable);
+                if (cb)
+                    device->commit(cb);
                 if (f) {
                     std::lock_guard lock(mutex);
                     flights.erase(std::find(flights.begin(), flights.end(), f));
@@ -1920,6 +1929,14 @@ uint8_t host_present_test_last_pixel() {
     auto s = active.load();
     std::lock_guard lock(s->mutex);
     return s->last_pixel;
+}
+void host_present_test_fail_composites(unsigned n) {
+    if (auto s = active.load())
+        s->fail_composites = n;
+}
+unsigned host_present_test_composite_failures_left() {
+    auto s = active.load();
+    return s ? s->fail_composites.load() : 0;
 }
 void host_present_test_fail_allocations(unsigned n) {
     auto s = active.load();
