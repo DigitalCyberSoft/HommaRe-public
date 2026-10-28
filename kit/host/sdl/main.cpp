@@ -3382,7 +3382,7 @@ int main(int argc, char **argv) {
             if (const char *keys = recomp_env("LAUNCHER_KEYS"))
                 options.keys = keys;
             const std::string chosen =
-                launcher::run(g_window, g_gpu.get(), g_surface, *platform, options);
+                game_path_normal(launcher::run(g_window, g_gpu.get(), g_surface, *platform, options));
             if (chosen.empty())
                 return 2;
             if (chosen != game.exe && !game_path_save(chosen))
