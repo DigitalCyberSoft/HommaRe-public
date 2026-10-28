@@ -116,6 +116,15 @@ int copy_out(const std::string &s, char *buf, size_t cap) {
     return 0;
 }
 
+// The path of a loaded executable or DLL (nullptr: the executable).
+int module_file(HMODULE m, char *buf, size_t cap) {
+    wchar_t w[32768];
+    DWORD n = GetModuleFileNameW(m, w, 32768);
+    if (!n || n >= 32768)
+        return -1;
+    return copy_out(narrow(w), buf, cap);
+}
+
 struct ThreadStart {
     void *(*fn)(void *);
     void *arg;
@@ -270,7 +279,12 @@ void os_vm_release(void *p, size_t bytes) {
 }
 
 void *os_dlopen(const char *path) {
-    HMODULE m = LoadLibraryW(widen(path).c_str());
+    // LoadLibrary wants backslashes; paths here come in '/'.
+    std::wstring w = widen(path);
+    for (wchar_t &c : w)
+        if (c == L'/')
+            c = L'\\';
+    HMODULE m = LoadLibraryW(w.c_str());
     if (!m)
         remember_dlerror();
     return m;
@@ -559,11 +573,15 @@ void *os_fdopen(int fd, const char *mode) {
 }
 
 int os_exe_path(char *buf, size_t cap) {
-    wchar_t w[32768];
-    DWORD n = GetModuleFileNameW(nullptr, w, 32768);
-    if (!n || n >= 32768)
+    return module_file(nullptr, buf, cap);
+}
+int os_module_path(const void *address, char *buf, size_t cap) {
+    HMODULE m = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)address, &m))
         return -1;
-    return copy_out(narrow(w), buf, cap);
+    return module_file(m, buf, cap);
 }
 // The unhandled-exception filter: the fault address relative to this
 // executable's base (so a linker map resolves it), the top of the stack as

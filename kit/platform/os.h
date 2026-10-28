@@ -136,6 +136,9 @@ void *os_fdopen(int fd, const char *mode);
 // Process.
 // ---------------------------------------------------------------------------
 int os_exe_path(char *buf, size_t cap); // 0 or -1; NUL-terminated
+// The file of the executable or shared library that holds `address` (one of
+// the caller's own functions): how a game module finds its folder. 0 or -1.
+int os_module_path(const void *address, char *buf, size_t cap);
 // Report a fatal signal inside guest code. `what` is "SIGSEGV", "SIGBUS" or
 // "an abort from the runtime". Returns 1 when handlers were installed and 0
 // where the platform has no equivalent yet.
