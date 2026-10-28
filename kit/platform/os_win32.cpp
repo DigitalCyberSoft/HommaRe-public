@@ -446,11 +446,8 @@ int os_user_data_dir(const char *app, char *buf, size_t cap) {
     DWORD n = GetEnvironmentVariableW(L"APPDATA", w, MAX_PATH + 1);
     if (!n || n > MAX_PATH)
         return -1;
-    std::string s = narrow(w) + "\\" + app;
-    if (s.size() + 1 > cap)
-        return -1;
-    memcpy(buf, s.c_str(), s.size() + 1);
-    return 0;
+    // In '/', like every other path this layer hands out: callers split there.
+    return copy_out(narrow(w) + "/" + app, buf, cap);
 }
 
 int os_spawn(const char *const argv[], int64_t *pid_out) {

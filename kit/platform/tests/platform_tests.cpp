@@ -185,6 +185,7 @@ void test_process_and_strings() {
     CHECK(os_user_data_dir("PopRecompTest", data, sizeof data) == 0);
     CHECK(strstr(data, "PopRecompTest") != nullptr);
     CHECK(data[strlen(data) - 1] != '/' && data[strlen(data) - 1] != '\\');
+    CHECK(strchr(data, '\\') == nullptr); // paths come out in '/' everywhere
     {
         uint64_t free_bytes = 0;
         const std::string dir = scratch_dir();
