@@ -47,6 +47,12 @@ if(EMSCRIPTEN)
   set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Plain char is signed on x86 and on Apple's arm64, unsigned in the aarch64
+# Linux ABI. The kit and the native code have only run with a signed one, so
+# Linux on ARM gets the same.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  add_compile_options(-fsigned-char)
+endif()
 if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   # All static and object libraries feed the shared SDL application (Android)
   # or a game module (Linux; Apple's code is position independent already).
@@ -90,6 +96,20 @@ elseif(WIN32 AND CMAKE_CROSSCOMPILING AND POP_TRANSLATE STREQUAL "STUB")
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/windows-stub)
 elseif(WIN32 AND CMAKE_CROSSCOMPILING)
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/windows)
+# Linux for another processor (the linux-arm64 preset): build/linux-arm64, the
+# folder tools/build.py --arch names. A build on the ARM machine itself is
+# not a cross build and uses build/, as on x86-64.
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CROSSCOMPILING)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    set(pop_cross_arch arm64)
+  else()
+    set(pop_cross_arch ${CMAKE_SYSTEM_PROCESSOR})
+  endif()
+  if(POP_TRANSLATE STREQUAL "STUB")
+    set(POP_BUILD_DIR ${POP_BUILD_ROOT}/linux-${pop_cross_arch}-stub)
+  else()
+    set(POP_BUILD_DIR ${POP_BUILD_ROOT}/linux-${pop_cross_arch})
+  endif()
 elseif(POP_TRANSLATE STREQUAL "STUB")
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/stub)
 elseif(IOS AND CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
