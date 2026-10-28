@@ -17,6 +17,10 @@
 - A display mode the game sets no longer resizes the web page's canvas: the page
   sizes it (the viewport) and the presenter scales the game's frame into it, as
   in full screen.
+- Ogg Vorbis decodes without FFmpeg (the web, and a Windows build without
+  MSYS2) through stb_vorbis 1.22 (`third_party/stb/stb_vorbis.c`), sample-exact
+  in its seeks as the FFmpeg path is: FMOD streams and samples in Ogg (Heroes V's
+  music) play there instead of being refused. `test_fmod_ogg` runs in every build.
 
 ## Renaming an app
 
