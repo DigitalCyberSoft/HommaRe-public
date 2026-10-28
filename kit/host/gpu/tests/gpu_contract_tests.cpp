@@ -1,13 +1,19 @@
 // gpu_contract_tests.cpp - a backend against the gpu.h contract: bytes
 // round-trip, a clear and a draw land where expected, commands complete in
-// commit order, a compute kernel reads what a texture holds, and a native
-// surface makes a swapchain. Compiled once per backend with
-// POP_GPU_TEST_BACKEND naming it; the factory override selects it.
+// commit order, a completion handler may own what it frees, a compute kernel
+// reads what a texture holds, and a native surface makes a swapchain.
+// Compiled once per backend with POP_GPU_TEST_BACKEND naming it; the factory
+// override selects it.
 #include "../../../platform/os.h"
 #include "../gpu_factory.h"
 
+#include <atomic>
+#include <chrono>
 #include <math.h>
+#include <memory>
 #include <mutex>
+#include <stdlib.h>
+#include <thread>
 #include <stdio.h>
 #include <string.h>
 #include <vector>
@@ -136,6 +142,50 @@ static void test_commit_order() {
     CHECK(ordered);
 }
 
+// A completion handler can hold the last reference to GPU resources: the
+// presenter's handler holds its frame, and a frame dropped while in flight has
+// no other owner. Releasing the handler then destroys textures through the
+// device, so the backend must have let go of its own lock by then. The Vulkan
+// reaper had not; it waited on itself and no command completed again.
+static void test_completion_handler_owns_resources() {
+    auto d = create_default_device();
+    if (!d)
+        return;
+    struct Owner {
+        Device *device = nullptr;
+        Texture texture;
+        std::atomic<bool> *released = nullptr;
+        ~Owner() {
+            device->destroy(texture);
+            released->store(true);
+        }
+    };
+    std::atomic<bool> released{false};
+    auto owner = std::make_shared<Owner>();
+    owner->device = d.get();
+    owner->texture = d->create_texture({4, 4, Format::BGRA8, UsageSampled});
+    owner->released = &released;
+    CommandBuffer cb = d->begin();
+    d->on_complete(cb, [owner](CommandStatus, double) {});
+    owner.reset();
+    d->commit(cb);
+    // Not d->wait(cb): with the lock still held it would wait forever too.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!released.load() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    CHECK(released.load());
+    if (!released.load()) {
+        // A device cannot be torn down past a stuck completion thread.
+        fprintf(stderr, "the completion thread deadlocked releasing its handler\n");
+        fflush(stderr);
+        _Exit(1);
+    }
+    CommandBuffer next = d->begin();
+    d->commit(next);
+    d->wait(next);
+    CHECK(d->status(next) == CommandStatus::Completed);
+}
+
 static void test_compute_readback_kernel() {
     auto d = create_default_device();
     if (!d)
@@ -207,6 +257,7 @@ int main() {
     test_upload_readback();
     test_clear_and_compositor_draw();
     test_commit_order();
+    test_completion_handler_owns_resources();
     test_compute_readback_kernel();
     test_swapchain_from_surface();
     printf("%d checks, %d failures\n", g_checks, g_failures);

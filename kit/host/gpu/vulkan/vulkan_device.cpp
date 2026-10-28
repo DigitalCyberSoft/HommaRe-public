@@ -989,7 +989,7 @@ void VulkanDevice::submit_cmd(uint64_t id, std::unique_ptr<Cmd> c) {
         if (r == VK_SUCCESS && c->presents)
             queue_present(*c);
     }
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
     if (trace_) {
         trace_second_.submit_ms += (now_seconds() - t0) * 1000;
         ++trace_second_.commits;
@@ -999,13 +999,17 @@ void VulkanDevice::submit_cmd(uint64_t id, std::unique_ptr<Cmd> c) {
     if (r != VK_SUCCESS) {
         fail("queue submit failed");
         auto callbacks = std::move(c->callbacks);
+        auto presented = std::move(c->presented);
+        c->presented = nullptr;
         retired_[cb.id] = CommandStatus::Error;
         retired_order_.push_back(cb.id);
         retire_graves(cb.id);
         free_cmds_.push_back(std::move(c));
+        retired_cv_.notify_all();
+        // As in reap_loop: callbacks run, and what they hold is released, unlocked.
+        lock.unlock();
         for (auto &fn : callbacks)
             fn(CommandStatus::Error, 0);
-        retired_cv_.notify_all();
         return;
     }
     if (trace_)
@@ -1065,6 +1069,13 @@ void VulkanDevice::reap_loop() {
             fn(status, ms);
         if (presented)
             presented(done_at);
+        // What the callbacks captured is released before the lock is taken
+        // again. A presenter frame's last reference can be the one its
+        // completion handler holds (a frame dropped while in flight), and its
+        // destructor destroys textures, which takes mutex_: released under the
+        // lock, the reaper waited on itself and every completion stopped.
+        callbacks.clear();
+        presented = nullptr;
         lock.lock();
     }
 }
