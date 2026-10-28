@@ -160,3 +160,10 @@ void homm5_game_view_draw(X86 *c);
  * passes through: native/screens_question.c notes its title and text. */
 void homm5_msgbox_setup(X86 *c);
 #define FN_006d32e0 homm5_msgbox_setup
+
+/* 00419c20: the GS SDK's login and 00e0e500: ProcessLoginRouterResult (the
+ * base game's 00419ae0 and 00b31380); native/gs_login.c. */
+void homm5_gs_login(X86 *c);
+#define FN_00419c20 homm5_gs_login
+void homm5_gs_login_result(X86 *c);
+#define FN_00e0e500 homm5_gs_login_result

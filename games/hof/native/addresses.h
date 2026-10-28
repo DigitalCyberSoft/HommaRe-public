@@ -366,3 +366,9 @@
 #define NS_E_MAIN 0x178
 #define NS_E_MODE 0x1b4
 #define NS_PAK_DIRS "data,dataa1" /* the paks it mounts, for the native views' pictures */
+
+/* The GS login (native/gs_login.c): the SDK's login entry, reached from
+ * ProcessLogin (00e06a10) through the thunk 00419340, and
+ * ProcessLoginRouterResult. */
+#define HOMM5_FN_GS_LOGIN fn_00419a30
+#define HOMM5_FN_GS_LOGIN_RESULT fn_00e06e30

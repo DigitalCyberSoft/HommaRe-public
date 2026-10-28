@@ -361,3 +361,9 @@ void fn_00557470(X86 *c);
     snprintf(out, cap, "/UI/H5A2/PWL/Pwl_%s.(Texture).dds", (key)[0] && (key)[1] ? (key) + 2 : (key))
 #define NS_GAME_VERSION "3.1"
 #define NS_PAK_DIRS "data" /* the paks it mounts, for the native views' pictures */
+
+/* The GS login (native/gs_login.c): the SDK's login entry, reached from
+ * ProcessLogin (00e0e0d0) through the thunk 00419530, and
+ * ProcessLoginRouterResult. */
+#define HOMM5_FN_GS_LOGIN fn_00419c20
+#define HOMM5_FN_GS_LOGIN_RESULT fn_00e0e500
