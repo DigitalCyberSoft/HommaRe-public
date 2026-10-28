@@ -63,6 +63,12 @@ set(CMAKE_LINK_LIBRARY_USING_AS_NEEDED_SUPPORTED TRUE)
 foreach(lang C CXX OBJCXX)
   set(CMAKE_${lang}_FLAGS_RELEASE "-g")
   set(CMAKE_${lang}_FLAGS_DEBUG "-g -O0")
+  if(EMSCRIPTEN)
+    # The web keeps function names (--profiling-funcs at link, host/CMakeLists.txt)
+    # instead of DWARF: a translated game's debug sections are several times its
+    # code, and the browser downloads and parses whatever the module carries.
+    set(CMAKE_${lang}_FLAGS_RELEASE "")
+  endif()
 endforeach()
 
 set(POP_ROOT ${CMAKE_SOURCE_DIR})

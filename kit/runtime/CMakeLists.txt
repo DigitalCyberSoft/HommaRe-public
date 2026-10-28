@@ -7,7 +7,9 @@ set(POP_RUNTIME_SOURCES
   media_foundation.cpp layout.cpp interp.cpp discovery.cpp)
 # zlib1.dll on the host's zlib, and the offline stand-ins (legacy_dlls.cpp).
 list(APPEND POP_RUNTIME_SOURCES legacy_dlls.cpp winsock.cpp)
-find_package(ZLIB REQUIRED)
+if(NOT TARGET ZLIB::ZLIB) # the web's is Emscripten's port (cmake/Dependencies.cmake)
+  find_package(ZLIB REQUIRED)
+endif()
 
 # The faces the runtime's GDI draws Windows' own UI fonts with
 # (third_party/fonts/opensans/README.md), embedded as byte arrays.

@@ -1,5 +1,11 @@
 # Changelog
 
+## The web: a whole game in the browser
+
+- The web build builds again: zlib (`runtime/legacy_dlls.cpp`) is Emscripten's
+  port, and the web keeps function names (`--profiling-funcs`) instead of DWARF,
+  whose sections for a translated game would be several times its code.
+
 ## Renaming an app
 
 - `[game] previous_app_names` and `previous_bundle_ids` name what an app was called
