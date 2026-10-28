@@ -33,8 +33,9 @@ target_link_libraries(recomp_mods PUBLIC lua recomp_runtime recomp_builtin_defau
 target_compile_options(recomp_mods PRIVATE ${POP_WARN_HOST})
 pop_optimize(recomp_mods 2)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  # std::atomic::is_lock_free in the page tracker needs libatomic with clang + libstdc++.
-  target_link_libraries(recomp_mods PUBLIC atomic)
+  # std::atomic::is_lock_free in the page tracker needs libatomic with clang
+  # + libstdc++ when it isn't inlined; a release build calls none of it.
+  target_link_libraries(recomp_mods PUBLIC "$<LINK_LIBRARY:AS_NEEDED,atomic>")
 endif()
 
 if(NOT IOS AND NOT ANDROID)
@@ -45,7 +46,7 @@ target_compile_definitions(recomp_mods_testing PUBLIC POPM_TESTING=1)
 target_compile_options(recomp_mods_testing PRIVATE ${POP_WARN_HOST})
 pop_optimize(recomp_mods_testing 1)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  target_link_libraries(recomp_mods_testing PUBLIC atomic)
+  target_link_libraries(recomp_mods_testing PUBLIC "$<LINK_LIBRARY:AS_NEEDED,atomic>")
 endif()
 endif()
 

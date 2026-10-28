@@ -3,13 +3,61 @@
 from pathlib import Path
 import platform
 import shutil
+import subprocess
 import sys
 import tarfile
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import copy_layouts  # noqa: E402
 from copy_core_mods import copy_core_mods  # noqa: E402
+
+
+RUNPATH_SCRIPT = r"""
+file(READ_ELF "${ELF}" RUNPATH runpath CAPTURE_ERROR error)
+if(error OR NOT runpath)
+  return()
+endif()
+string(REPLACE ":" ";" entries "${runpath}")
+set(kept)
+foreach(entry IN LISTS entries)
+  if(entry MATCHES "^\\$ORIGIN")
+    list(APPEND kept "${entry}")
+  endif()
+endforeach()
+list(JOIN kept ":" kept)
+if(kept STREQUAL runpath)
+  return()
+elseif(kept)
+  file(RPATH_SET FILE "${ELF}" NEW_RPATH "${kept}")
+else()
+  file(RPATH_REMOVE FILE "${ELF}")
+endif()
+"""
+
+
+def package_runpath(binary: Path):
+    """Keep only the $ORIGIN entries of a staged Linux binary's RUNPATH.
+
+    The build tree's executable also searches the build's FFmpeg and SDL
+    folders (CMake adds them for in-tree runs from build/recomp), absolute
+    paths on the builder's machine that a package must not carry: the
+    libraries ship beside the binary. CMake edits the ELF in place; a file it
+    cannot read as ELF, or one without a RUNPATH, is left alone.
+    """
+    with open(binary, "rb") as f:
+        if len(f.read(64)) < 64:  # not even an ELF header: a placeholder
+            return
+    cmake = shutil.which("cmake", path=str(Path(sys.executable).parent)) or shutil.which("cmake")
+    if not cmake:
+        raise FileNotFoundError("cmake is needed to package a Linux binary")
+    with tempfile.NamedTemporaryFile("w", suffix=".cmake", delete=False) as script:
+        script.write(RUNPATH_SCRIPT)
+    try:
+        subprocess.run([cmake, "-DELF=" + str(binary), "-P", script.name], check=True)
+    finally:
+        Path(script.name).unlink(missing_ok=True)
 
 
 def stage_linux_resources(cfg: dict, resources: Path) -> list:
@@ -74,6 +122,8 @@ def stage(app_binary: Path, cfg: dict, out_dir: Path, system=None, build_dir=Non
         files.append(destination)
 
     copy(app_binary, staged / binary_name)
+    if system == "Linux":
+        package_runpath(staged / binary_name)
     for name in ("LICENSE", "NOTICE"):
         copy(ROOT / name, staged / name)
     copy(ROOT / "tools/recomp/baseline/classic-modes.json", resources / "classic-modes.json")

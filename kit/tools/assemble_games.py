@@ -13,15 +13,19 @@ resources (symbols.json, controls, ...) into Resources/games/<app_name>/
 The app is signed again afterwards with the identity it carries (ad hoc for
 macOS and the simulator). On Linux the app is the desktop package's folder
 (build/package/<app_name>): libgame.<id>.so goes into its modules/ and the
-resources into resources/games/<app_name>/; nothing is signed.
+resources into resources/games/<app_name>/; nothing is signed, and the
+package's tarball beside the folder (tools/package_desktop.py packs it before
+the other games are here) gets the same files.
 """
 
 import argparse
+import os
 import plistlib
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
 from pathlib import Path
@@ -116,6 +120,36 @@ def sign(app, platform, dylibs):
     print("signed %s (%s)" % (app, "ad hoc" if identity == "-" else identity))
 
 
+def add_to_tarballs(app, added):
+    """Add `added` (paths inside the Linux package folder `app`) to its tarballs.
+
+    tools/package_desktop.py writes <app_name>-linux-<arch>.tar.gz beside the
+    folder before this script puts the other games in, so a release archive
+    held the launcher's own game only. Each archive is rewritten with its own
+    members, less any earlier copy of the added paths, plus the added files;
+    nothing else in the folder is swept in, as it may hold the player's files.
+    """
+    top = app.name
+    names = {top + "/" + p.relative_to(app).as_posix() for p in added}
+    for archive in sorted(app.parent.glob(top + "-linux-*.tar.gz")):
+        fd, tmp = tempfile.mkstemp(dir=archive.parent, suffix=".tar.gz")
+        os.close(fd)
+        try:
+            with tarfile.open(archive) as old, tarfile.open(tmp, "w:gz") as new:
+                for member in old.getmembers():
+                    if member.name in names or any(member.name.startswith(n + "/") for n in names):
+                        continue
+                    new.addfile(member, old.extractfile(member) if member.isfile() else None)
+                for path in added:
+                    new.add(path, arcname=top + "/" + path.relative_to(app).as_posix())
+            os.chmod(tmp, archive.stat().st_mode)  # mkstemp's file is the owner's alone
+            os.replace(tmp, archive)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+        print("updated %s" % archive)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--app", type=Path, required=True, help="The launcher's app (a --game-modules build)")
@@ -139,6 +173,7 @@ def main():
         parser.error("%s has no shared SDL: build it with tools/build.py --game-modules" % app)
     frameworks.mkdir(parents=True, exist_ok=True)
     dylibs = []
+    added = []  # Linux: what the package's tarball needs too
     for i, game_dir in enumerate(args.game):
         game_dir = game_dir.resolve()
         game_id, app_name = load_game(game_dir)
@@ -150,12 +185,16 @@ def main():
             subprocess.run(["install_name_tool", "-id", "@rpath/" + dest.name, str(dest)], check=True)
         dylibs.append(dest)
         source_app = built_app(build_root, app_name, args.platform)
+        added.append(dest)
         if source_app.is_dir():
             copy_resources(source_app, games_dir / app_name, args.platform)
+            added.append(games_dir / app_name)
         else:
             print("warning: no %s; %s gets no resources of its own" % (source_app, game_id), file=sys.stderr)
         print("added %s (%s) from %s" % (game_id, app_name, build_root))
-    if not linux:
+    if linux:
+        add_to_tarballs(app, added)
+    else:
         sign(app, args.platform, dylibs)
 
 

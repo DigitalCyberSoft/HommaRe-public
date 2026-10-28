@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import tarfile
@@ -308,3 +309,30 @@ def test_build_packages_only_successful_desktop_apps(tmp_path, monkeypatch, syst
         build.main()
     assert error.value.code == 7
     assert not calls
+
+
+@pytest.mark.skipif(not shutil.which("cc") or package_desktop.platform.system() != "Linux",
+                    reason="needs a Linux C compiler")
+def test_package_runpath_keeps_only_origin(tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }\n")
+    binary = tmp_path / "app"
+    subprocess.run(["cc", str(source), "-o", str(binary),
+                    "-Wl,--enable-new-dtags,-rpath,$ORIGIN:/build/ffmpeg/lib:/build/_deps/sdl3-build"], check=True)
+    package_desktop.package_runpath(binary)
+    dynamic = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=True).stdout
+    assert "[$ORIGIN]" in dynamic and "/build/" not in dynamic
+    assert subprocess.run([str(binary)]).returncode == 0
+    package_desktop.package_runpath(binary)  # nothing left to change
+
+
+@pytest.mark.skipif(not shutil.which("cc") or package_desktop.platform.system() != "Linux",
+                    reason="needs a Linux C compiler")
+def test_package_runpath_removes_build_only_entries(tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }\n")
+    binary = tmp_path / "app"
+    subprocess.run(["cc", str(source), "-o", str(binary), "-Wl,--enable-new-dtags,-rpath,/build/lib"], check=True)
+    package_desktop.package_runpath(binary)
+    dynamic = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=True).stdout
+    assert "RUNPATH" not in dynamic
