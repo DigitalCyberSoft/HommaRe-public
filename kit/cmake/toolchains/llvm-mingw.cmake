@@ -31,6 +31,9 @@ set(CMAKE_FIND_ROOT_PATH ${LLVM_MINGW_ROOT}/${_triple})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-# Keep compiler/runtime libraries static. FFmpeg uses explicit import libraries
-# and ships as replaceable DLLs beside the app when RECOMP_VIDEO is enabled.
+# Keep compiler/runtime libraries static, in a game module's DLL too, so the
+# app needs no libc++ or libunwind DLL beside it. FFmpeg uses explicit import
+# libraries and ships as replaceable DLLs beside the app when RECOMP_VIDEO is
+# enabled; SDL3.dll is the one shared library of a multi-game app.
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-static")

@@ -16,14 +16,14 @@ endif()
 # drawn by the host on Linux (host/launcher/linux/); the canvas launcher
 # everywhere else and with this off.
 option(RECOMP_NATIVE_LAUNCHER "Build the native launcher (SwiftUI on Apple platforms, the host's on Linux)" ON)
-# Several games in one app (Apple, Linux): each game also builds as a module,
-# libgame.<id>.dylib (.so) with recomp_game_main for an entry, and the app the
-# launcher runs in loads the module of the game the player picks
-# (host/sdl/main.cpp run_game_module, tools/assemble_games.py). Modules and the
-# app share one SDL, so SDL links as a shared library in this mode.
-option(RECOMP_GAME_MODULES "Build the game as a loadable module and link SDL shared (Apple, Linux)" OFF)
-if(RECOMP_GAME_MODULES AND NOT APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  message(FATAL_ERROR "RECOMP_GAME_MODULES is for Apple and Linux builds")
+# Several games in one app (Apple, Linux, Windows): each game also builds as a
+# module, libgame.<id>.dylib (.so, .dll) with recomp_game_main for an entry,
+# and the app the launcher runs in loads the module of the game the player
+# picks (host/sdl/main.cpp run_game_module, tools/assemble_games.py). Modules
+# and the app share one SDL, so SDL links as a shared library in this mode.
+option(RECOMP_GAME_MODULES "Build the game as a loadable module and link SDL shared (Apple, Linux, Windows)" OFF)
+if(RECOMP_GAME_MODULES AND NOT APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32)
+  message(FATAL_ERROR "RECOMP_GAME_MODULES is for Apple, Linux and Windows builds")
 endif()
 if(APPLE AND RECOMP_NATIVE_LAUNCHER)
   if(IOS AND NOT CMAKE_GENERATOR STREQUAL "Xcode" AND NOT CMAKE_Swift_COMPILER_TARGET)

@@ -130,6 +130,13 @@ pop_optimize(ui_layer_tests 1)
 pop_test_binary(ui_layer_tests)
 add_test(NAME ui_layer_tests COMMAND ui_layer_tests WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(ui_layer_tests PROPERTIES LABELS nogame)
+
+add_executable(game_modules_tests ${HOST}/game_modules.cpp ${HOST}/tests/game_modules_tests.cpp)
+target_compile_options(game_modules_tests PRIVATE ${POP_WARN_WERROR})
+pop_optimize(game_modules_tests 1)
+pop_test_binary(game_modules_tests)
+add_test(NAME game_modules_tests COMMAND game_modules_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(game_modules_tests PROPERTIES LABELS nogame)
 endif()
 
 # The hosts and the full host suite build on every platform over gpu_backend.
@@ -375,7 +382,7 @@ if(TARGET recomp_gen)
   set(POP_APP_SOURCES ${HOST}/sdl/main.cpp ${HOST}/sdl/keymap.cpp ${POP_PLATFORM_UI} ${POP_LAUNCHER_SOURCES}
             ${HOST}/controls/controls_host.cpp ${HOST}/controls/gamepad_sdl.cpp
             ${HOST}/controls/vpad_host_api.cpp
-            ${HOST}/game_path.cpp ${HOST}/present.cpp ${HOST}/text_overrides.cpp ${HOST}/ui_mods.cpp
+            ${HOST}/game_modules.cpp ${HOST}/game_path.cpp ${HOST}/present.cpp ${HOST}/text_overrides.cpp ${HOST}/ui_mods.cpp
             ${HOST}/server_prompt.cpp
             ${HOST}/page_overlay.cpp
             ${POP_PRESENT_SOURCES}
@@ -513,7 +520,14 @@ if(TARGET recomp_gen)
     if(IOS OR NOT APPLE)
       pop_builtin_mods(recomp_game)
     endif()
-    if(NOT APPLE)
+    if(WIN32)
+      # A DLL is a runtime output on Windows: libgame.<id>.dll into modules/.
+      # PE resolves every import per DLL, so the module's runtime binds to its
+      # own as on macOS; recomp_game_main, the one dllexport, is its only
+      # export. SDL3.dll and FFmpeg's DLLs are found in the executable's
+      # folder, which Windows searches for a loaded DLL's imports.
+      set_target_properties(recomp_game PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${POP_BUILD_DIR}/modules)
+    elseif(NOT APPLE)
       # ELF has one symbol namespace: the module's runtime and translation
       # carry the same names as the app's, and must bind to their own
       # (Mach-O's two-level namespace does this by itself), so the module
