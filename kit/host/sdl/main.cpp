@@ -3144,6 +3144,12 @@ int main(int argc, char **argv) {
 #ifdef __EMSCRIPTEN__
     return web_main(argc, argv);
 #endif
+    os_attach_parent_console();
+#ifdef _WIN32
+    // The window and the taskbar take the executable's icon (resource 1).
+    SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");
+    SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
+#endif
     // --version and --probe-layout answer before SDL or the GPU come up, so a
     // packaged build can be checked on a machine with neither a display nor
     // the game.

@@ -575,6 +575,19 @@ void *os_fdopen(int fd, const char *mode) {
 int os_exe_path(char *buf, size_t cap) {
     return module_file(nullptr, buf, cap);
 }
+void os_attach_parent_console(void) {
+    // Redirected (2> log.txt, a pipe, Wine's own terminal): keep that.
+    const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+    if (err && err != INVALID_HANDLE_VALUE && GetFileType(err) != FILE_TYPE_UNKNOWN)
+        return;
+    if (!AttachConsole(ATTACH_PARENT_PROCESS))
+        return; // started from Explorer: nowhere to write
+    // The C streams and the handles os_write_stderr_raw writes to.
+    if (freopen("CONOUT$", "w", stdout))
+        SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(_fileno(stdout)));
+    if (freopen("CONOUT$", "w", stderr))
+        SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(_fileno(stderr)));
+}
 int os_module_path(const void *address, char *buf, size_t cap) {
     HMODULE m = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |

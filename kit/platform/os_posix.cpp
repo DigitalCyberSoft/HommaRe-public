@@ -1065,6 +1065,8 @@ int os_exe_path(char *buf, size_t cap) {
 #endif
 }
 
+void os_attach_parent_console(void) {}
+
 int os_module_path(const void *address, char *buf, size_t cap) {
 #ifdef __EMSCRIPTEN__
     (void)address;

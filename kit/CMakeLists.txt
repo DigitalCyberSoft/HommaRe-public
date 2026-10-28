@@ -12,6 +12,9 @@ project(PopulousRecomp LANGUAGES C CXX)
 if(APPLE)
   enable_language(OBJCXX)
 endif()
+if(WIN32)
+  enable_language(RC) # the manifest, the app's icon and version (platform/windows/)
+endif()
 # The SwiftUI launcher (host/launcher/apple/) on macOS and iOS, the same one
 # drawn by the host on Linux (host/launcher/linux/); the canvas launcher
 # everywhere else and with this off.
