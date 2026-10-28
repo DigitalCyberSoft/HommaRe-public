@@ -38,5 +38,8 @@
     <key>UIFileSharingEnabled</key><true/>
     <key>LSSupportsOpeningDocumentsInPlace</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <!-- LAN games (runtime/winsock.cpp): iOS asks once before the app may reach other devices nearby. -->
+    <key>NSLocalNetworkUsageDescription</key><string>Network games with other players on the same Wi-Fi.</string>
+    <key>NSBonjourServices</key><array><string>_hommare._udp</string></array>
 </dict>
 </plist>

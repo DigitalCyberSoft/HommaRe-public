@@ -1,0 +1,49 @@
+name: Checks
+
+# What can run without the game: the game is translated from the player's own
+# executables, which are never in the repository, so builds and play tests
+# happen on the maintainer's Macs. kit/.github belongs to recomp-kit and does
+# not run here.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public:
+    name: Nothing private
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: The files, and the commits new to this push or pull request
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            python3 -I tools/check_public.py --commits "$BASE..HEAD"
+          else
+            python3 -I tools/check_public.py
+          fi
+
+  tooling:
+    name: Python tools
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install the pinned tools
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r kit/requirements-dev.txt
+      - name: The kit's suites that need no game
+        run: .venv/bin/python kit/tools/test.py

@@ -657,6 +657,42 @@ enum LauncherCatalog {
    "pl": "Na karcie graficznej",
    "zh-Hans": "在显卡上计算"
   },
+  "menus": {
+   "en": "Menus",
+   "ru": "Меню",
+   "cs": "Nabídky",
+   "de": "Menüs",
+   "es": "Menús",
+   "fr": "Menus",
+   "it": "Menu",
+   "hu": "Menük",
+   "pl": "Menu",
+   "zh-Hans": "菜单"
+  },
+  "menusNative": {
+   "en": "For the screen",
+   "ru": "Под экран",
+   "cs": "Pro obrazovku",
+   "de": "Für den Bildschirm",
+   "es": "Para la pantalla",
+   "fr": "Pour l’écran",
+   "it": "Per lo schermo",
+   "hu": "A kijelzőhöz",
+   "pl": "Pod ekran",
+   "zh-Hans": "适配屏幕"
+  },
+  "menusGame": {
+   "en": "The game's own",
+   "ru": "Как в игре",
+   "cs": "Herní",
+   "de": "Die des Spiels",
+   "es": "Los del juego",
+   "fr": "Ceux du jeu",
+   "it": "Quelli del gioco",
+   "hu": "A játék sajátja",
+   "pl": "Z gry",
+   "zh-Hans": "游戏原版"
+  },
   "trackpadHeight": {
    "en": "Height",
    "ru": "Высота",

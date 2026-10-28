@@ -2,7 +2,7 @@
 copy of, written here rather than taken from Tribes of the East's data: the
 black curtains beside a letterboxed screen (four windows of one plain
 colour) and the types.xml declarations that let the 1.60 exe read a root
-screen's <HorAlign>/<VerAlign> (design notes). They describe what
+screen's <HorAlign>/<VerAlign> (design notes ultrawide-plan.md). They describe what
 Tribes of the East's patch 3.1 does with the same file formats, so the game
 reads them the same way; tools/widescreen_mod.py checks that against the
 developer's own copy when it has one.

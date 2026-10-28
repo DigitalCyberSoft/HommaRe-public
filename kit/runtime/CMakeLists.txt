@@ -6,7 +6,7 @@ set(POP_RUNTIME_SOURCES
   misc.cpp misc_dlls.cpp ucrt.cpp ucrt_stdio.cpp vcruntime.cpp msvcp140.cpp comctl32.cpp gdi32.cpp gdi32_draw.cpp gdi32_text.cpp gdi32_truetype.cpp msimg32.cpp
   media_foundation.cpp layout.cpp interp.cpp discovery.cpp)
 # zlib1.dll on the host's zlib, and the offline stand-ins (legacy_dlls.cpp).
-list(APPEND POP_RUNTIME_SOURCES legacy_dlls.cpp)
+list(APPEND POP_RUNTIME_SOURCES legacy_dlls.cpp winsock.cpp)
 find_package(ZLIB REQUIRED)
 
 # The faces the runtime's GDI draws Windows' own UI fonts with

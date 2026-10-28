@@ -1,5 +1,5 @@
 /* native/touch.c - Heroes V's touch adapters for the host (runtime/native_seam.h).
- * Addresses: design notes section 13.
+ * Addresses: design notes ios-touch-plan.md section 13.
  *
  * Placement: the game draws its own cursor at the float pair NUI::CCursor
  * keeps in client pixels (0x0114da0c/10). Each frame CCursor refreshes that

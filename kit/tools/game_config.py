@@ -156,6 +156,10 @@ def load(game_dir):
     # game was localised for another (a Russian release names its files and profiles in 1251).
     if not isinstance(game.setdefault("cpuid_sse", False), bool):
         raise ValueError("%s: [game] cpuid_sse must be a boolean" % source)
+    # sockets: WinSock on the host's sockets (runtime/winsock.cpp) for a game
+    # that plays over a network; off, every socket call fails offline.
+    if not isinstance(game.setdefault("sockets", False), bool):
+        raise ValueError("%s: [game] sockets must be a boolean" % source)
     acp = game.setdefault("ansi_codepage", 1252)
     if acp not in (1251, 1252):
         raise ValueError("%s: [game] ansi_codepage must be 1251 or 1252" % source)

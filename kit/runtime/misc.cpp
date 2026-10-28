@@ -8,6 +8,7 @@
 #include "layout.h"
 #include "memory.h"
 #include "win32.h"
+#include "winsock.h"
 #include "loader.h"
 #include "resources.h"
 #include <algorithm>
@@ -1082,12 +1083,16 @@ void w_WSACleanup(X86 *c) {
     set_eax(c, 0);
 }
 void w_gethostname(X86 *c) {
+    if (winsock_real())
+        return winsock_gethostname(c);
     uint32_t buf = arg(c, 0), len = arg(c, 1);
     if (buf && len)
         gm_put_str(buf, RECOMP_GAME_ID, len);
     set_eax(c, 0);
 }
 void w_gethostbyname(X86 *c) {
+    if (winsock_real())
+        return winsock_gethostbyname(c);
     log_once("gethostbyname", "gethostbyname(\"%s\"): name resolution is not implemented",
              gm_str(arg(c, 0), 256).c_str());
     set_eax(c, 0);
@@ -2333,7 +2338,6 @@ const ImportShim g_misc_shims[] = {
     {"WS2_32.dll", "WSAStartup", 2, nullptr},
     {"WS2_32.dll", "WSACleanup", 0, nullptr},
     {"WS2_32.dll", "WSAGetLastError", 0, nullptr},
-    {"WS2_32.dll", "WSAIoctl", 9, nullptr},
     {"WS2_32.dll", "WSACreateEvent", 0, nullptr},
     {"WS2_32.dll", "WSACloseEvent", 1, nullptr},
     {"WS2_32.dll", "WSASetEvent", 1, nullptr},

@@ -175,6 +175,10 @@ final class LauncherModel {
     /// the screen is a phone's (a foldable's closed one, not its opened one),
     /// 2 always.
     private(set) var phoneInterface = LauncherModel.displaySetting(LauncherModel.phoneInterfaceKey, 1)
+    /// The game's menus drawn natively (SwiftUI over the game, the game's
+    /// native/native_screens.c): 1 on, 2 off (the default by device, sdl/main.cpp).
+    /// Read when the game starts.
+    private(set) var nativeMenus = LauncherModel.displaySetting(LauncherModel.nativeMenusKey, 0) == 1
     /// The device's silent mode: 0 the game is silent in it, 1 plays anyway.
     private(set) var ignoreSilentMode = LauncherModel.displaySetting(LauncherModel.silentModeKey, 0) != 0
     /// The box the interface's edge-anchored screens stay in (Heroes V's
@@ -319,6 +323,7 @@ final class LauncherModel {
     static let trackpadCameraKey = "host.input/trackpad_camera"
     static let metalHudKey = "host.display/metal_hud"
     static let gpuSkinKey = "homm5.perf/gpu_skin"
+    static let nativeMenusKey = "host.ui/native_menus"
 
     private static func displaySetting(_ key: String, _ fallback: Int) -> Int {
         var value: Int64 = 0
@@ -364,6 +369,9 @@ final class LauncherModel {
     }
     func setGpuSkin(_ on: Bool) {
         if store(Self.gpuSkinKey, on ? 1 : 2) { gpuSkin = on }
+    }
+    func setNativeMenus(_ on: Bool) {
+        if store(Self.nativeMenusKey, on ? 1 : 2) { nativeMenus = on }
     }
 
     /// The startup videos (video/intro.xml, and intro_a1.xml for the

@@ -1,5 +1,5 @@
 /* native/ui_bounds.c - the player's interface bounds on screens wider than
- * the interface (design notes), shared by the base game and Tribes
+ * the interface (design notes ultrawide-plan.md), shared by the base game and Tribes
  * of the East. Addresses come from the game's RECOMP_OVERRIDE_HEADER
  * (games/<id>/native/overrides.h), the base game's being the defaults, as in
  * native/horplus.c; the header also redirects the axis function to

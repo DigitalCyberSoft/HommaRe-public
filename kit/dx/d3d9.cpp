@@ -1599,7 +1599,7 @@ static const uint32_t kFaultLog = 16384;
 static uint32_t g_fault_log[kFaultLog], g_fault_log_n = 0;
 static uintptr_t g_fault_pc[kFaultLog]; // the host instruction that stored
 // Fewer faults and fewer compares (2026-10-21, perf-opt; on by default with
-// the values in brackets, each off with 0, A/B in design notes).
+// the values in brackets, each off with 0, A/B in design notes perf-opt.md).
 // Correctness never rests on them: a page left or made writable counts as
 // written for every draw that reads it, and a page protected again faults on
 // the next store, as any protected page does.

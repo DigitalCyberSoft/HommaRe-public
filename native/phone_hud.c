@@ -1,5 +1,5 @@
 /* native/phone_hud.c - Heroes V's interface inside a phone's safe area, its
- * map, battle and town panels drawn larger there (design notes),
+ * map, battle and town panels drawn larger there (design notes ios-phone-hud-plan.md),
  * shared by the three games. Addresses come from the game's
  * RECOMP_OVERRIDE_HEADER and RECOMP_ADDRESS_HEADER (games/<id>/native/), the
  * base game's being the defaults below, as in native/horplus.c.
@@ -273,6 +273,9 @@ int homm5_phone_layout_draw(uint32_t win);
 uint32_t homm5_phone_layout_strip(uint32_t win);
 void homm5_phone_layout_restore(uint32_t win, uint32_t bg);
 enum { LAYOUT_HIDE = 1, LAYOUT_BARE = 2 }; /* phone_layout.c's PL_HIDE, PL_BARE */
+/* native/native_screens.c: non-zero when `part` (00e3dd70's ECX) is the root
+ * of a screen the host draws natively; that file reads the screen then. */
+int homm5_native_screens_draw(X86 *c, uint32_t part);
 
 enum {
     HUD_NONE = 0,
@@ -1501,10 +1504,12 @@ static uint32_t loading_root(void) {
 
 /* CWindow::Draw with a phone's rows of buttons (native/phone_layout.c): a jog
  * dial's disc is not drawn (RET 4 at once), a dial made a frame is drawn
- * without its background. */
+ * without its background. Nor is the root of a screen the host draws natively
+ * (native/native_screens.c). */
 void homm5_window_draw(X86 *c) {
     const uint32_t win = c->r[R_ECX] - WINDOW_PART;
-    const int how = homm5_phone_layout_draw(win);
+    const int how = homm5_native_screens_draw(c, c->r[R_ECX]) ? LAYOUT_HIDE
+                                                              : homm5_phone_layout_draw(win);
     if (how == LAYOUT_HIDE) {
         const uint32_t esp = c->r[R_ESP];
         c->eip = rd32(esp);

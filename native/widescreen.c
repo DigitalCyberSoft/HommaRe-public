@@ -1,5 +1,5 @@
 /* native/widescreen.c - Heroes V's interface on screens wider (or taller) than
- * 4:3 (design notes).
+ * 4:3 (design notes ultrawide-plan.md).
  *
  * The interface is laid out on a virtual screen and mapped onto the real one
  * with separate x and y scales:

@@ -1,5 +1,5 @@
 /* native/horplus.c - Hor+ for Heroes V's 3D on screens wider than 4:3
- * (design notes), shared by the base game and Tribes of the East.
+ * (design notes ultrawide-plan.md), shared by the base game and Tribes of the East.
  * Addresses come from the game's RECOMP_OVERRIDE_HEADER (games/<id>/native/
  * overrides.h), the base game's being the defaults, as in native/touch.c; the
  * header also redirects each FN_<addr> below to its replacement here.

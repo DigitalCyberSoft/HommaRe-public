@@ -1,5 +1,6 @@
 /* scene.c - native replacements on the scene's hot paths (the base game's
- * addresses below, the others' in games/<id>/native/addresses.h). Each leaves the guest exactly as
+ * addresses below, the others' in games/<id>/native/addresses.h; research notes
+ * toe-scene-traversal/). Each leaves the guest exactly as
  * the translated original does: memory, registers, the stack slots it wrote,
  * the MMX/XMM registers and the flags its translation last wrote. A call the
  * native path does not cover goes to the original whole.

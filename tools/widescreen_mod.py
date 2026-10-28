@@ -8,7 +8,7 @@ Tribes of the East's patch 3.1 (a2p1-data.pak) re-anchored the interface for
 wide screens: root screens got <HorAlign>/<VerAlign> (ALIGN_SCREEN,
 ALIGN_CENTER) and their windows' <Placement> blocks moved to the right or
 bottom edge (EPA_HIGH_END) or the centre (ERA_CENTER). The base game's exe
-reads the same tags (design notes), but its data has none of them.
+reads the same tags (design notes ultrawide-plan.md), but its data has none of them.
 
 For every UI file a2p1 changes, this takes the base game's own copy (data.pak
 with p0..p3c-data.pak over it) and carries over only how Tribes of the East

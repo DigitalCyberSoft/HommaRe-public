@@ -1,5 +1,5 @@
 /* native/hof_screen.c - Hammers of Fate's interface on screens wider than 4:3
- * (design notes, section 6). Hammers of Fate only.
+ * (design notes ultrawide-plan.md, section 6). Hammers of Fate only.
  *
  * The 2.1 exe has a CVirtualScreenController (vtable 01032b04) but no
  * wide-screen code: SetScreenSize (00e500d0) stores the screen size in
@@ -20,7 +20,7 @@
  * SetOrigin/GetOrigin (00e50100/00e50130) keep the game's own origin apart
  * from the margin.
  *
- * The 3D scene (design notes 7.2) projects with GetVirtualSize
+ * The 3D scene (design notes ultrawide-plan.md 7.2) projects with GetVirtualSize
  * (00e437a0, a constant 1024x768): its renderer 007bfd10 asks for it at
  * 007bfd98 and hands it to the camera (vtable +0x34 -> 009fffa0 -> 009ffda0),
  * so on a wide screen the picture was 4:3 stretched across. That one call now
@@ -306,7 +306,7 @@ void hof_world_to_screen(X86 *c) {
  * add the origin and are wrapped the same way. */
 static const uint32_t size_sites[] = {
     /* Audited statically 2026-10-19 (every call of the point conversions;
-     * design notes). Pairs that subtract two converted values
+     * design notes ultrawide-plan.md). Pairs that subtract two converted values
      * (00e3b160/00e3b17d, 00e4fab7/00e4fac6) cancel the origin and stay out. */
     0x0072794c, /* 007278e0: the cursor's texture size (00e43900) */
     0x0088e758, /* 0088e650: an offset added to absolute rects (00e439f0) */

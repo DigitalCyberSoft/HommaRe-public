@@ -171,3 +171,8 @@ void homm5_skin_positions(X86 *c);
  * world for the host (host_render_scene_end). */
 void homm5_game_view_draw(X86 *c);
 #define FN_006565e0 homm5_game_view_draw
+
+/* 007c3910 (base 007c9d90): a message box's setup, which every game question
+ * passes through: native/screens_question.c notes its title and text. */
+void homm5_msgbox_setup(X86 *c);
+#define FN_007c3910 homm5_msgbox_setup

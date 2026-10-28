@@ -10,7 +10,7 @@
  * screen, a finger held on it and lifted, then a tap) only walks there.
  *
  * How the game does a melee attack (base game, notes in the user's
- * research/tap-attack): every frame the combat screen's Update picks what is
+ * research notes tap-attack): every frame the combat screen's Update picks what is
  * under the cursor (0074de10, into P = screen+0x444) and lets the action
  * function 0074e470(S = screen+0x43c, P) build the command the next left
  * button release sends (S+0x50). For an enemy, the side to strike from is the

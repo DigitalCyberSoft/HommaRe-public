@@ -29,3 +29,9 @@ build-ios-log.txt
 final-*.txt
 ios-*-log.txt
 
+# Local-only notes (the private HommaRe-notes repository)
+docs/private/
+
+# The launcher's splash: the game's official key art with its logo, so it
+# stays a local file; the build copies it into the app when it is there.
+launcher-splash.jpg

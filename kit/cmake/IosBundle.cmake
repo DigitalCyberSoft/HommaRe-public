@@ -159,6 +159,14 @@ function(pop_ios_bundle target)
               $<TARGET_BUNDLE_CONTENT_DIR:${target}>/touch-ui
       VERBATIM)
   endif()
+  # The fonts of the game's native screens (native-screens/fonts/, with their
+  # licences), registered by the screens at run time.
+  if(EXISTS ${RECOMP_GAME_DIR}/native-screens/fonts)
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${RECOMP_GAME_DIR}/native-screens/fonts
+              $<TARGET_BUNDLE_CONTENT_DIR:${target}>/native-screens-fonts
+      VERBATIM)
+  endif()
   # The game's shipped on-screen control layouts, when it has any (spec
   # section 5): host_resource("controls") is the flat bundle's own root here.
   add_custom_command(TARGET ${target} POST_BUILD

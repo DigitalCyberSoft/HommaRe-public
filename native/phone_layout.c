@@ -155,6 +155,13 @@ static void desc_name(uint32_t desc, char out[NAME_MAX_]) {
     out[n] = 0;
 }
 
+/* A window's <Name> for native/native_screens.c ("" when it has none). */
+void homm5_window_name(uint32_t win, char *out, size_t cap) {
+    char name[NAME_MAX_];
+    desc_name(window_desc(win), name);
+    snprintf(out, cap, "%s", name);
+}
+
 static int named(uint32_t win, const char *name) {
     char got[NAME_MAX_];
     desc_name(window_desc(win), got);

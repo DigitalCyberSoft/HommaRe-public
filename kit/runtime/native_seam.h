@@ -194,6 +194,24 @@ int recomp_camera_gesture(int phase, float x, float y, float zoom, float turn, i
  * the guest scheduler baton. */
 int recomp_ui_scroll(float x, float y, float dy, int width, int height);
 
+/* Optional game adapter: a screen of the game's interface the host draws
+ * natively over the game (iOS: SwiftUI), while the game keeps the screen alive
+ * and works it as before, without drawing it. The game describes the screen
+ * showing now as one JSON document, {"screen": "<id>", ...} in its own words;
+ * the host's view for that id draws it and answers with commands, JSON too,
+ * {"do": "<verb>", ...}.
+ *
+ * recomp_screen_state: when the document changed since *serial, copies it into
+ * buf (NUL-terminated), updates *serial and returns its length; 0 when it has
+ * not changed; -1 when no native screen shows (the host takes its view away).
+ * A document that does not fit leaves *serial and returns its length: call
+ * again with a larger buf. Called from the host thread every turn.
+ *
+ * recomp_screen_command: a command from the native view; queued, the adapter
+ * applies it on the game's own thread. Called from the host thread. */
+int recomp_screen_state(char *buf, int cap, unsigned *serial);
+void recomp_screen_command(const char *command);
+
 /* Optional game adapter: the app is going to the background (iOS), where it
  * may be closed without ever reaching the game's own exit. A game that saves
  * its settings only on a clean exit saves them now. Called off the main thread

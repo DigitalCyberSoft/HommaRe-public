@@ -139,6 +139,9 @@ enum L10n {
     static var nextStart: String { t("nextStart") }
     static var gpuSkin: String { t("gpuSkin") }
     static var gpuSkinOn: String { t("gpuSkinOn") }
+    static var menus: String { t("menus") }
+    static var menusNative: String { t("menusNative") }
+    static var menusGame: String { t("menusGame") }
     static var trackpadHeight: String { t("trackpadHeight") }
     static var trackpadTablet: String { t("trackpadTablet") }
     static var trackpadGame: String { t("trackpadGame") }

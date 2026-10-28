@@ -1,5 +1,5 @@
 // native/gpu_skin.cpp - skinned parts drawn from the bind pose on the GPU
-// (design notes). The game skins and lights every vertex of an
+// (design notes gpu-skinning-plan.md). The game skins and lights every vertex of an
 // animated model's part on the CPU and writes it into the one big vertex
 // buffer of format 5 (0066e4d0 -> 0066f790 -> 0068dd70 in the base game). Here
 // such a part writes no vertices: its record (palettes, the light worked out
@@ -39,7 +39,7 @@
 #define H5SKIN_POSITIONS_ORIG fn_0066f600
 #endif
 /* On in all three games: check and gpucheck come out clean on the base
- * game's map, the HoF menu and the ToE map (design notes section 4). */
+ * game's map, the HoF menu and the ToE map (design notes perf-opt.md section 4). */
 #ifndef H5SKIN_DEFAULT_ON
 #define H5SKIN_DEFAULT_ON 1
 #endif

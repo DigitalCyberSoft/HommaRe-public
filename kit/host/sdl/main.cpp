@@ -89,6 +89,8 @@
 #include <atomic>
 #include <cstdlib>
 #include <chrono>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <set>
@@ -214,6 +216,11 @@ struct PicturePoints {
 };
 std::atomic<PicturePoints> g_picture_points{};
 std::atomic<int> g_display_generation{0};
+// Whether the app is in the foreground, and when it last came back (ns): a
+// screen lock or app switch makes the system hand the scene transient sizes
+// that are not the screen the player is looking at (follow_screen).
+std::atomic<bool> g_app_active{true};
+std::atomic<uint64_t> g_foreground_ns{0};
 extern "C" __attribute__((weak)) double host_mac_safe_top_points(void);
 void note_screen_size() {
     int w = 0, h = 0;
@@ -1479,6 +1486,12 @@ void audio_service_restarted() {
 // One SDL event, translated into both of the input paths the game reads: the
 // DirectInput device state, and the Win32 message queue.
 void handle_event(const SDL_Event &event) {
+    if (event.type == SDL_EVENT_WILL_ENTER_BACKGROUND || event.type == SDL_EVENT_DID_ENTER_BACKGROUND) {
+        g_app_active.store(false);
+    } else if (event.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
+        g_foreground_ns.store(os_monotonic_ns());
+        g_app_active.store(true);
+    }
     if (platform_ui_handle_lifecycle(event))
         return;
     if (handle_editor_event(event))
@@ -2107,6 +2120,60 @@ void publish_safe_insets() {
     }
 }
 
+// A command from a native screen's view. RECOMP_NATIVE_SCREEN_SAMPLE only
+// logs it: there is no game screen behind the sample.
+void native_screen_sample_command(const char *command) {
+    fprintf(stderr, "[host] native screen command: %s\n", command);
+}
+
+// A screen the game asks the host to draw natively (recomp_screen_state), its
+// document passed on to the platform's view whenever it changes.
+// RECOMP_NATIVE_SCREEN_SAMPLE=<file> shows that document instead, to work on
+// a view without the game's screen.
+// A native screen is up (the game's undrawn screen beneath it): the system
+// keyboard is the native view's, not the game's text input.
+static bool g_native_screen_up = false;
+
+void sync_native_screen() {
+    static std::vector<char> buf(16384);
+    static unsigned serial = 0;
+    static bool &shown = g_native_screen_up;
+    static const std::string sample = [] {
+        const char *path = recomp_env("NATIVE_SCREEN_SAMPLE");
+        std::string text;
+        if (path && *path) {
+            std::ifstream in(path, std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            fprintf(stderr, "[host] native screen sample %s: %zu bytes\n", path, text.size());
+        }
+        return text;
+    }();
+    if (!sample.empty()) {
+        if (!shown)
+            platform_ui_native_screen(g_window, sample.c_str(), native_screen_sample_command);
+        shown = true;
+        return;
+    }
+    int n = recomp_screen_state(buf.data(), int(buf.size()), &serial);
+    if (n >= int(buf.size())) {
+        buf.resize(size_t(n) + 4096);
+        n = recomp_screen_state(buf.data(), int(buf.size()), &serial);
+    }
+    if (n < 0 && shown) {
+        fprintf(stderr, "[host] native screen gone\n");
+        shown = false;
+        // The same document may come back (a screen that stalled the game a
+        // moment, a message box closed): it is shown again, not "unchanged".
+        serial = 0;
+        platform_ui_native_screen(g_window, nullptr, recomp_screen_command);
+    } else if (n > 0 && n < int(buf.size())) {
+        if (!shown)
+            fprintf(stderr, "[host] native screen shown (%d bytes)\n", n);
+        shown = true;
+        platform_ui_native_screen(g_window, buf.data(), recomp_screen_command);
+    }
+}
+
 // The housekeeping every turn does once the events are in.
 void after_events() {
     publish_safe_insets();
@@ -2128,7 +2195,8 @@ void after_events() {
         // text area, which the system keeps above the keyboard.
         {
             static bool text_input = false;
-            const bool want = g_touch.text_input_wanted() || (context & RECOMP_TOUCH_TEXT);
+            const bool want = (g_touch.text_input_wanted() || (context & RECOMP_TOUCH_TEXT)) &&
+                              !g_native_screen_up;
             if (want != text_input && g_window) {
                 text_input = want;
                 if (want) {
@@ -2152,6 +2220,7 @@ void after_events() {
         platform_ui_camera_buttons(g_window,
                                    camera_buttons && (context & RECOMP_TOUCH_MAP_SCREEN),
                                    g_phone_form.load(), recomp_camera_step);
+        sync_native_screen();
         // The controls follow the hardware keyboard (attached: key layouts
         // hidden), a physical controller (connected: pad layouts hidden and
         // its state fed to the pad) and the settings rows; the view is
@@ -2330,6 +2399,14 @@ void follow_screen() {
         known_h = lh;
         return;
     }
+    // Not while the app is away or has just returned: the sizes a locking or
+    // switching system hands the scene then are transient, and a game reset to
+    // one of them would be saved as the screen's resolution. The size is taken
+    // again, settled, a second after the app is back.
+    if (!g_app_active.load() || os_monotonic_ns() - g_foreground_ns.load() < 1000000000ull) {
+        want_w = want_h = 0;
+        return;
+    }
     if (lw == known_w && lh == known_h) {
         want_w = want_h = 0;
         return;
@@ -2456,7 +2533,7 @@ void report(FILE *out, bool abnormal) {
     "host.display/frame_limit", "host.display/energy_saver", "host.display/idle_frames",
     "host.display/render_quality", "host.touch/camera_buttons", "host.input/trackpad_camera",
     "host.display/metal_hud", "homm5.perf/gpu_skin", "host.touch/battle_cells",
-    "host.ui/phone_interface", "host.audio/silent_mode", "homm5.wide/ui_bounds"};
+    "host.ui/phone_interface", "host.audio/silent_mode", "homm5.wide/ui_bounds", "host.ui/native_menus"};
 static const char kIntroMarker[] = "<!-- launcher: skip the startup videos -->";
 static const char *const kIntroFiles[] = {"video/intro.xml", "video/intro_a1.xml"};
 
@@ -2654,6 +2731,7 @@ static void seed_default_settings() {
         {"host.touch/battle_cells", -1, 1, 1},       // touch-friendly battle: on
         {"host.audio/silent_mode", -1, 0, 0},        // respect the silent switch
         {"host.ui/phone_interface", -1, 0, 1},       // iPad never, iPhone automatic
+        {"host.ui/native_menus", -1, 2, 1},          // native menus: iPhone on, iPad off
     };
     const int device = !platform_ui_touch_device() ? 0 : platform_ui_phone() ? 2 : 1;
     for (const Default &d : table) {
@@ -2744,8 +2822,22 @@ static void apply_cfg_defaults(const std::string &exe) {
             // the interface is drawn at it, the 3D at the share the render
             // quality asks for (mods_render_fraction), upscaled by MetalFX.
             int dw = 0, dh = 0;
-            if (!host_display_fullscreen_size(&dw, &dh))
-                continue;
+            if (!host_display_fullscreen_size(&dw, &dh) || dw <= 0 || dh <= 0) {
+                // Never leave a resolution the game saved earlier standing:
+                // the window's own size, else the display's.
+                if (g_window)
+                    SDL_GetWindowSizeInPixels(g_window, &dw, &dh);
+                if (dw <= 0 || dh <= 0) {
+                    const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
+                    if (mode) {
+                        const double density = mode->pixel_density > 0 ? mode->pixel_density : 1.0;
+                        dw = int(std::lround(mode->w * density));
+                        dh = int(std::lround(mode->h * density));
+                    }
+                }
+                if (dw <= 0 || dh <= 0)
+                    continue;
+            }
             int32_t w = 0, h = 0;
             host_display_screen_mode(dw, dh, std::min(dw, dh), &w, &h);
             value = std::to_string(w) + "x" + std::to_string(h);

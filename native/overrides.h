@@ -155,6 +155,12 @@ void homm5_skin_alloc(X86 *c);
 void homm5_skin_positions(X86 *c);
 #define FN_0066f600 homm5_skin_positions
 
+/* 007c9d90: a message box's setup, which every game question passes
+ * through: native/screens_question.c notes its title and text for the native
+ * popup (RECOMP_NATIVE_SCREENS). */
+void homm5_msgbox_setup(X86 *c);
+#define FN_007c9d90 homm5_msgbox_setup
+
 /* 0074de10 (the battle's pick under the cursor), 0074e470 (the action for
  * it), 0074bf70 (its left button release) and 0080bac0 (the grid cells'
  * states): native/tap_attack.c's "strike from a cell" mode,

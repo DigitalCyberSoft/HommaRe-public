@@ -6,7 +6,7 @@
  * text, in the vertex shaders' fetch (kit d3d9_vfetch).
  *
  * The game's functions it follows (Tribes of the East addresses; the base
- * game's in brackets, design notes has the formulas):
+ * game's in brackets, design notes gpu-skinning-plan.md has the formulas):
  *   positions  005578e0 / 00557f40 [0066f600 / 0066fc60] - float, by bone;
  *   normals    00557470 / 00557220 / 00557330 [0066f2e0 / f090 / f1a0] -
  *              integer MMX through the bones' i16 matrices, renormalised by

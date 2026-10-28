@@ -200,6 +200,8 @@ bool platform_ui_handle_lifecycle(const SDL_Event &event) {
 
 void platform_ui_camera_buttons(SDL_Window *, bool, bool, void (*)(int)) {}
 
+void platform_ui_native_screen(SDL_Window *, const char *, void (*)(const char *)) {}
+
 #if defined(__APPLE__)
 namespace {
 bool same_bytes(const std::filesystem::path &a, const std::filesystem::path &b) {

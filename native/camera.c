@@ -1,5 +1,5 @@
 /* native/camera.c - Heroes V's adventure-map camera for touch and the Mac trackpad (runtime/native_seam.h).
- * Addresses: design notes section 13 (camera, from static reading).
+ * Addresses: design notes ios-touch-plan.md section 13 (camera, from static reading).
  *
  * The adventure screen's camera is a CCamera (vtable 0xFB0120) at screen+0xA4,
  * driven by a CCameraOperator (vtable 0xFB0560) at screen+0x564. Each frame

@@ -1055,6 +1055,12 @@ struct SkinSettings: View {
                                     model.setPhoneInterface(Self.phoneSetting($0))
                                 }
                             }
+                            // The game's menus drawn natively, from the game's next start.
+                            cell(L10n.menus) {
+                                choices([L10n.menusNative, L10n.menusGame], model.nativeMenus ? 0 : 1, size: 20) {
+                                    model.setNativeMenus($0 == 0)
+                                }
+                            }
                             cell(L10n.metalHud) {
                                 SkinCheck(skin: skin, title: L10n.metalHudShow, on: model.metalHud, size: 20) { model.setMetalHud(!model.metalHud) }
                                 if model.metalHudPending {
@@ -1174,6 +1180,10 @@ struct SkinSettings: View {
                         model.setPhoneInterface(Self.phoneSetting($0))
                     }
                 }
+            }
+            // The game's menus drawn natively, from the game's next start.
+            row(L10n.menus) {
+                choices([L10n.menusNative, L10n.menusGame], model.nativeMenus ? 0 : 1) { model.setNativeMenus($0 == 0) }
             }
             #else
             // Two fingers on a Mac trackpad over the 3D map (sdl/main.cpp install_trackpad).

@@ -96,6 +96,9 @@ def render_header(cfg):
     # [game] cpuid_sse: CPUID reports SSE and SSE2 (runtime/cpu.cpp), so the
     # game takes its SSE paths; RECOMP_CPUID_SSE=0 or 1 overrides.
     lines.append("#define RECOMP_GAME_CPUID_SSE %d" % int(game.get("cpuid_sse", False)))
+    # [game] sockets: WinSock on the host's sockets (runtime/winsock.cpp);
+    # RECOMP_SOCKETS=0 or 1 overrides.
+    lines.append("#define RECOMP_GAME_SOCKETS %d" % int(game.get("sockets", False)))
     lines.append("#define RECOMP_RESUMABLE_STACKS %d" %
                  int(cfg["translate"].get("resumable_stacks", False)))
     lines.append("#define RECOMP_CD_AUDIO_TRACKS %s" % c_string_list(cfg.get("media", {}).get("cd_tracks", [])))

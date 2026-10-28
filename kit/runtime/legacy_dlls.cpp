@@ -15,6 +15,7 @@
 #include "imports.h"
 #include "memory.h"
 #include "win32.h"
+#include "winsock.h"
 #include <memory>
 #include <random>
 #include <string.h>
@@ -461,6 +462,16 @@ void ws_inet_addr(X86 *c) {
     set_eax(c, v[0] | (v[1] << 8) | (v[2] << 16) | (v[3] << 24));
 }
 
+// The host's sockets when the game plays over a network (winsock.h), else the
+// stand-in above.
+#define REAL_OR(real, stub)                                                                        \
+    [](X86 *c) {                                                                                   \
+        if (winsock_real())                                                                        \
+            real(c);                                                                               \
+        else                                                                                       \
+            stub(c);                                                                               \
+    }
+
 // Every WSOCK32 call by name and by its ordinal ("ordN", as the loader names it).
 #define WS(name, ord, argc, fn)                                                                    \
     {"WSOCK32.dll", name, argc, fn}, {                                                             \
@@ -513,32 +524,35 @@ const ImportShim shims[] = {
     {"COMCTL32.dll", "ord17", 0, nothing}, // InitCommonControls
     {"COMCTL32.dll", "InitCommonControls", 0, nothing},
 
-    WS("bind", 2, 3, ws_fail),
-    WS("closesocket", 3, 1, ws_closesocket),
-    WS("connect", 4, 3, ws_fail),
-    WS("getpeername", 5, 3, ws_fail),
-    WS("getsockname", 6, 3, ws_fail),
-    WS("getsockopt", 7, 5, ws_fail),
+    WS("accept", 1, 3, REAL_OR(winsock_accept, ws_socket)),
+    WS("bind", 2, 3, REAL_OR(winsock_bind, ws_fail)),
+    WS("closesocket", 3, 1, REAL_OR(winsock_closesocket, ws_closesocket)),
+    WS("connect", 4, 3, REAL_OR(winsock_connect, ws_fail)),
+    WS("getpeername", 5, 3, REAL_OR(winsock_getpeername, ws_fail)),
+    WS("getsockname", 6, 3, REAL_OR(winsock_getsockname, ws_fail)),
+    WS("getsockopt", 7, 5, REAL_OR(winsock_getsockopt, ws_fail)),
     WS("htonl", 8, 1, ws_htonl),
     WS("htons", 9, 1, ws_htons),
     WS("inet_addr", 10, 1, ws_inet_addr),
-    WS("ioctlsocket", 12, 3, ws_fail),
-    WS("listen", 13, 2, ws_fail),
+    WS("ioctlsocket", 12, 3, REAL_OR(winsock_ioctlsocket, ws_fail)),
+    WS("listen", 13, 2, REAL_OR(winsock_listen, ws_fail)),
     WS("ntohl", 14, 1, ws_htonl),
     WS("ntohs", 15, 1, ws_htons),
-    WS("recv", 16, 4, ws_fail),
-    WS("recvfrom", 17, 6, ws_fail),
-    WS("select", 18, 5, ws_select),
-    WS("send", 19, 4, ws_fail),
-    WS("sendto", 20, 6, ws_fail),
-    WS("setsockopt", 21, 5, ws_fail),
-    WS("shutdown", 22, 2, ws_fail),
-    WS("socket", 23, 3, ws_socket),
-    WS("gethostbyaddr", 51, 3, ws_null),
+    WS("recv", 16, 4, REAL_OR(winsock_recv, ws_fail)),
+    WS("recvfrom", 17, 6, REAL_OR(winsock_recvfrom, ws_fail)),
+    WS("select", 18, 5, REAL_OR(winsock_select, ws_select)),
+    WS("send", 19, 4, REAL_OR(winsock_send, ws_fail)),
+    WS("sendto", 20, 6, REAL_OR(winsock_sendto, ws_fail)),
+    WS("setsockopt", 21, 5, REAL_OR(winsock_setsockopt, ws_fail)),
+    WS("shutdown", 22, 2, REAL_OR(winsock_shutdown, ws_fail)),
+    WS("socket", 23, 3, REAL_OR(winsock_socket, ws_socket)),
+    WS("gethostbyaddr", 51, 3, REAL_OR(winsock_gethostbyaddr, ws_null)),
     WS("WSAGetLastError", 111, 0, ws_last_error),
-    WS("__WSAFDIsSet", 151, 2, ws_fd_isset),
+    WS("__WSAFDIsSet", 151, 2, REAL_OR(winsock_fd_isset, ws_fd_isset)),
+    {"WS2_32.dll", "WSAIoctl", 9, REAL_OR(winsock_WSAIoctl, ws_fail)},
 };
 #undef WS
+#undef REAL_OR
 
 } // namespace
 

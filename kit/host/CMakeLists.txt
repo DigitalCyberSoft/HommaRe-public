@@ -325,11 +325,36 @@ if(TARGET recomp_gen)
             ${POP_PRESENT_SOURCES}
             ${HOST}/input.cpp ${HOST}/input_gate.cpp ${HOST}/input_touch.cpp
             ${HOST}/input_trackpad.cpp ${POP_AUDIO_SOURCES})
+  # The game's own screens drawn natively over it on iOS (sdl/platform_ui.h
+  # platform_ui_native_screen): SwiftUI sources in the game repository's
+  # native-screens/, one module, RecompScreens, linked into the app and the
+  # game's module. Swift is there whenever the native launcher is.
+  file(GLOB pop_screen_sources ${RECOMP_GAME_DIR}/native-screens/*.swift)
+  if(IOS AND TARGET launcher_native AND pop_screen_sources)
+    add_library(native_screens STATIC ${pop_screen_sources})
+    set_target_properties(native_screens PROPERTIES Swift_MODULE_NAME RecompScreens Swift_LANGUAGE_VERSION 5)
+  endif()
+  function(pop_link_native_screens target)
+    if(TARGET native_screens)
+      target_link_libraries(${target} PRIVATE native_screens)
+      target_compile_definitions(${target} PRIVATE RECOMP_NATIVE_SCREENS=1)
+      set_target_properties(${target} PROPERTIES LINKER_LANGUAGE CXX)
+      if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+        set(sdk "${CMAKE_OSX_SYSROOT}")
+        if(NOT IS_DIRECTORY "${sdk}")
+          execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE sdk OUTPUT_STRIP_TRAILING_WHITESPACE)
+        endif()
+        target_link_options(${target} PRIVATE "-L${sdk}/usr/lib/swift" "-Wl,-rpath,/usr/lib/swift")
+      endif()
+    endif()
+  endfunction()
+
   pop_host(recomp_app GEN UI_LAYER OPT 2
     SOURCES ${POP_APP_SOURCES}
     LIBS ${POP_CORE_LIBS}
     FRAMEWORKS ${FW_METAL})
   pop_link_sdl(recomp_app)
+  pop_link_native_screens(recomp_app)
   set_target_properties(recomp_app PROPERTIES OUTPUT_NAME ${RECOMP_APP_NAME})
   if(APPLE AND RECOMP_GAME_MODULES)
     # The launcher's app also runs the other games' modules (sdl/main.cpp).
@@ -409,6 +434,7 @@ if(TARGET recomp_gen)
       LIBS ${POP_CORE_LIBS}
       FRAMEWORKS ${FW_METAL})
     pop_link_sdl(recomp_game)
+    pop_link_native_screens(recomp_game)
     if(NOT IOS)
       # The static SDL brought AppKit in for metal_surface.mm; the shared one does not.
       target_link_libraries(recomp_game PRIVATE "-framework AppKit")

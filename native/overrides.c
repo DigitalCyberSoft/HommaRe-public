@@ -96,7 +96,7 @@ void h5_float_min(X86 *c) {
  * ECX the box, the point on the stack, RET 4). It calls the float min/max
  * above six times, and 0066bc50 runs it for every vertex of the animated
  * meshes it bounds each frame: about 9% of the adventure map's CPU time at
- * 3440x1440 (design notes). The guest leaves EAX the last result,
+ * 3440x1440 (design notes ultrawide-plan.md). The guest leaves EAX the last result,
  * ECX the box, the x87 stack as it was and its status word from the last
  * compare; so does this. RECOMP_HOMM5_NATIVE_AABB=0 runs the original. */
 static uint32_t h5_pick(uint32_t cur, uint32_t pt, int max) {

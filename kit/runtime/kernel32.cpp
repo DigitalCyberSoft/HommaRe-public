@@ -5696,3 +5696,9 @@ const ImportShim g_kernel32_shims[] = {
     {"KERNEL32.dll", "GetFileInformationByHandle", 2, k_GetFileInformationByHandle},
 };
 const size_t g_kernel32_shim_count = sizeof(g_kernel32_shims) / sizeof(g_kernel32_shims[0]);
+
+// The scheduler's sleep for a guest-blocking host call (runtime/winsock.cpp):
+// the caller's guest thread is descheduled meanwhile.
+void sched_sleep_for_host_call(uint32_t ms) {
+    sched_sleep_ms(ms);
+}

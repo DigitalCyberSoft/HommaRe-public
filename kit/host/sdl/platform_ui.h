@@ -103,3 +103,11 @@ bool platform_ui_phone_interface();
 // round buttons at the top right (a phone's: by the camera housing), which
 // take their touches themselves. Desktop and Android: nothing.
 void platform_ui_camera_buttons(SDL_Window *window, bool visible, bool phone, void (*press)(int step));
+
+// A screen of the game drawn natively over it (runtime/native_seam.h,
+// recomp_screen_state): `state` is the screen's new JSON document, or null
+// when no native screen shows; a command from the view goes to `command`.
+// Call it only on a change. iOS: the game's SwiftUI views (the game
+// repository's native-screens/), over the whole window, taking every touch.
+// Desktop and Android: nothing (the game keeps drawing its own).
+void platform_ui_native_screen(SDL_Window *window, const char *state, void (*command)(const char *));

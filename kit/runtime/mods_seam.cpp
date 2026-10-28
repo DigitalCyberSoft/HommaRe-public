@@ -56,6 +56,11 @@ __attribute__((weak)) int recomp_camera_gesture(int, float, float, float, float,
 __attribute__((weak)) int recomp_ui_scroll(float, float, float, int, int) {
     return 0;
 }
+// No native screens: the game draws all of its interface.
+__attribute__((weak)) int recomp_screen_state(char *, int, unsigned *) {
+    return -1;
+}
+__attribute__((weak)) void recomp_screen_command(const char *) {}
 __attribute__((weak)) int recomp_touch_context(void) {
     return 0;
 }

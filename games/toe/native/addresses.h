@@ -67,7 +67,7 @@
 
 /* The phone's interface (native/phone_hud.c), from the base game's through
  * byte-identical functions, RTTI and the classes' sub-object offsets
- * (research/phone-hud-expansions-addresses.md, 2026-10-19). The root
+ * (research notes phone-hud-expansions-addresses.md, 2026-10-19). The root
  * placement 00e734a0 is the base game's 00e74f30 byte for byte, the alignment
  * fields of its description included. "probable": the town's, hire, build,
  * hero and loading screens' IScreen vtables and offsets (by structure), the
@@ -193,3 +193,171 @@ void fn_00557470(X86 *c);
 #define HOMM5_RET_VIEW_MAIN 0x006cc05eu
 #define HOMM5_RET_VIEW_SECOND 0x006cc08au
 #define HOMM5_RET_VIEW_ALT 0x006cbd7fu
+
+/* Native screens (native/native_screens.c, screens_*.c): research notes phone-menus/native/
+ * expansion-toe-addresses.md. */
+/* ---- native/native_screens.c ---- */
+#define NS_SCREEN_STACK 0x0110b6ec   /* V votes 39 (= HOMM5_SCREEN_STACK) */
+#define NS_DIFFICULTY   0x00abe040   /* V hash (base 00b97bd0) */
+#define NS_TEXT         0x00956620   /* V hash (base 00a09de0) */
+#define NS_FREE         0x004dd510   /* V votes 14084 (base 005e40c0) */
+/* NEW macros native_screens.c needs (base value in the comment): */
+#define NS_IW_FIND      0x94         /* V base 0x8c: 00e3c3b0 ≙ 00e362e0 at IWindow(+0x160) slot 0x94 */
+#define NS_IW_CAPTION   0xc0         /* V base 0xb4: 00e3d610 ≙ 00e37540 (ratio .98) */
+/* WINDOW_PART 0x10c, WINDOW_PARENT 0x28, WINDOW_CHILDREN 0xa4, ROOT_WINDOW 0xf8,
+ * NS_SCREEN_ROOT 0xa0, NS_ROOT_DRAW 0x14: unchanged (phone-hud-expansions-addresses.md §3, V). */
+
+/* ---- native/screens_question.c + overrides ---- */
+#define NS_VT_MSGBOX      0x00f604f4 /* V RTTI CCommonMsgBox, 13 slots agree */
+#define NS_VT_MSGBOX_TEXT 0x00f697a4 /* V RTTI CCommonMsgBoxWithUpdatableText */
+#define NS_MSGBOX_SETUP_ORIG fn_006d32e0 /* V base 007c9d90; same args, RET 0x18 (diff: fields +4) */
+/* games/toe/native/overrides.h:  void homm5_msgbox_setup(X86 *c); #define FN_006d32e0 homm5_msgbox_setup
+ * (screens_question.c calls fn_007c9d90 by name: needs this macro). */
+
+/* ---- native/screens_custom.c ---- */
+#define NS_VT_CREATE       0x00f7bc30 /* V RTTI, last subobject */
+#define NS_SUB_CREATE      0x1cc      /* V (base 0x1c4) */
+#define NS_VT_WAIT         0x00f7f330 /* V RTTI */
+#define NS_SUB_WAIT        0x2f8      /* V (base 0x2c4) */
+#define NS_NEW             0x004dd500 /* V votes 8645 (jmp 004dd2d0) */
+#define NS_CREATE_REACTION 0x008ea120 /* V +0x174 vtable slot 0; adds rmg_filter_changed, custom_game_show_rmg_maps */
+#define NS_CREATE_REFRESH  0x008ead40 /* V diff .983 (only IWindow/ISlider slots) */
+#define NS_MAPS_SORT       0x00915ab0 /* V diff .979 */
+#define NS_MAPS_SELECTED   0x00917980 /* V diff (entry row 0x84->0x90) */
+#define NS_MAP_NAME        0x00914d70 /* V 9 votes; tag field 0x54->0x4c inside */
+#define NS_MAP_DESC        0x00914b50 /* V 2 votes; tag field 0x60->0x58 inside */
+#define NS_MAP_GOAL        0x00914c00 /* V 5 votes. CHANGED: fastcall ECX = out wstr (built by it), EDX = info+0x6c; returns ECX; caller frees out.begin (as NS_MAP_SIZE) */
+#define NS_MAP_PLAYERS     0x00917d40 /* V hash */
+#define NS_MAP_SIZE        0x00629e30 /* V hash */
+#define NS_MP_MAPS         0x01118d1c /* V 008eaec0 */
+#define NS_SLIDER_VT       0x00ff180c /* V RTTI CWindowSlider +0xf8 */
+#define NS_WAIT_REACTION   0x00933110 /* V slot 0, diff .98 */
+#define NS_VT_HS_CREATE    0x00f7bdd8 /* V RTTI */
+#define NS_SUB_HS_CREATE   0x198      /* V (base 0x194) */
+#define NS_VT_HS_WAIT      0x00f7f4b4 /* V RTTI */
+#define NS_SUB_HS_WAIT     0x1bc      /* V same */
+#define NS_HS_CREATE       0x008ec110 /* V registration in 008ebe20 ("create", len 6) + diff .967 */
+#define NS_HS_LOAD         0x008ec4b0 /* V hash */
+#define NS_HS_BACK         0x008ec540 /* V registration (after load); ToE also sets a flag on the screen below */
+#define NS_HS_MAPSELECTED  0x008ec5a0 /* V identical body */
+#define NS_HS_START        0x00936280 /* V hash + registration in 00935e40 (hash of 009f18f0) */
+#define NS_HS_WAIT_BACK    0x00936260 /* V registration in 00935e40 */
+#define NS_HS_NAME_ACCEPT  0x00936300 /* V registration in 00935e40 */
+#define NS_RESOURCE_OF     0x00984690 /* V hash */
+#define NS_DYNAMIC_CAST    0x0094ab92 /* V votes 897; same call shape in 009264a0 */
+#define NS_RTTI_RESOURCE   0x010a8110 /* V ".?AVCResource@NDb@@" */
+#define NS_RTTI_HERO_SHARED 0x010aa044 /* V ".?AUSAdvMapHeroShared@NDb@@" */
+#define NS_TEXT_REF        0x00956620 /* V */
+
+/* ---- native/screens_duel.c ---- */
+#define NS_VT_DUEL         0x00f7bfc0 /* V RTTI CHSDMWaitScreen<CHeroInfoView> */
+#define NS_VT_DUEL3        0x00f7bf18 /* V RTTI CHSDMWaitScreen<CTripleHeroesView> */
+#define NS_SUB_DUEL        0x1d4      /* V (base 0x1d0) */
+#define NS_DUEL_NEXT       0x008ef3e0 /* V ctor 008edb20 registration, body identical */
+#define NS_DUEL_BACK       0x008ef340 /* V same */
+#define NS_DUEL3_NEXT      0x008ef430 /* V ctor 008eddd0 registration, body identical */
+#define NS_DUEL3_BACK      0x008ef390 /* V same */
+#define NS_DUEL3_PUT       0x00931990 /* V 4 votes, diff (block 0xe4->0xe8) */
+#define NS_DUEL3_VIEW      0x00931b00 /* V 4 votes */
+#define NS_DUEL3_MOVER     0x00931e30 /* V 2 votes */
+#define NS_DUEL_ARENAS     0x009264a0 /* V identical body */
+#define NS_DUEL_ARENAS_OF  0x01119b68 /* V 3 votes (MOV ECX,0x1119b68 in 00925d50/00926a10) */
+#define NS_DUEL_SPEED_NAME 0x00abe110 /* V 6 votes */
+#define NS_TEXT_OF_REF     0x00956620
+
+/* ---- native/screens_escmenu.c ---- */
+#define NS_VT_ESC_MENU     0x00f64be8 /* V RTTI */
+#define NS_SUB_ESC_MENU    0x1e0      /* V (base 0x1dc) */
+#define NS_ESC_REACTION    0x007341e0 /* V +0x174 vtable slot 0, diff .977 */
+
+/* ---- native/screens_hof.c ---- */
+#define NS_VT_HOF          0x00f76308 /* V RTTI */
+#define NS_SUB_HOF         0x1cc      /* V same */
+#define NS_HOF_REACTION    0x008879a0 /* V slot 0, diff .99 */
+#define NS_HOF_PICK        0x008880b0 /* V 4 votes, diff .99 */
+#define NS_HOF_CLEAR       0x00888ac0 /* V hash */
+#define NS_HOF_CLEAR_OK    0x17363b00 /* V same immediate in 008879a0/00888ac0 */
+
+/* ---- native/screens_load.c ---- */
+#define NS_VT_LOAD         0x00f575fc /* V RTTI */
+#define NS_SUB_LOAD        0x2b4      /* V same */
+#define NS_LOAD_CLICK      0x00648fc0 /* V hash */
+#define NS_LOAD_LOAD       0x0062ef20 /* V hash */
+#define NS_LOAD_CONFIRMED  0x0062f0b0 /* V hash */
+#define NS_LOAD_CLOSE      0x00644510 /* V 14 votes, identical body */
+#define NS_LOAD_TYPE       0x00629930 /* V hash */
+#define NS_LOAD_SIZE       0x00629e30 /* V hash */
+#define NS_DIFF_OF_SAVE    0x00abe080 /* V hash */
+#define NS_DIFF_ENTRY      0x00abe040 /* V hash */
+
+/* ---- native/screens_menu.c ---- */
+#define NS_VT_MENU         0x00f6b238 /* V RTTI */
+#define NS_SUB_MENU        0x210      /* V (base 0x214) */
+#define NS_MENU_REACTION   0x007b74e0 /* V hash */
+#define NS_MENU_SWITCH     0x007b7900 /* V hash + all 13 jump-table cases identical */
+#define NS_MENU_CREDITS    0x00893710 /* V identical body, 1 vote */
+#define NS_MENU_EXIT       0x00738950 /* V hash */
+#define NS_PROFILE_VALID   0x0088b690 /* V diff (passes game id 3 internally; same interface) */
+#define NS_PROFILE_NAME    0x0088b6e0 /* V same */
+#define NS_PROFILE_SHOWN   0x0088b670 /* V hash */
+#define NS_PROFILE_SHOW    0x0088b5b0 /* V hash */
+#define NS_PROFILE_DELETE  0x0088a7b0 /* V hash */
+#define NS_SETUP_REACTION  0x008967f0 /* V hash */
+#define NS_DIFFICULTY_NOW  0x01116814 /* V 7 votes */
+#define NS_CAMPAIGN_OF     0x0088fd70 /* V hash */
+#define NS_VT_EDIT_BOX     0x00f7ba44 /* V RTTI CSimpleEditBox */
+#define NS_SUB_EDIT_BOX    0x1bc      /* V (base 0x1b8) */
+#define NS_VT_FIRST_PROFILE 0x00f765c8 /* V RTTI CSelectFirstProfileNameScreen +0x174 */
+#define NS_EDIT_BOX_OK     0x008e8840 /* V hash */
+
+/* ---- native/screens_options.c ---- */
+#define NS_VT_OPTIONS      0x00f69400 /* V RTTI */
+#define NS_SUB_OPTIONS     0x1f8      /* V same */
+#define NS_OPT_SHOW        0x0079fbc0 /* V hash */
+#define NS_OPT_CHANGED     0x0079ed50 /* V hash */
+#define NS_OPT_ACCEPT      0x0079f840 /* V hash */
+#define NS_OPT_PAGE_BACK   0x0079fb10 /* V hash */
+#define NS_OPT_CLOSE       0x0079fe30 /* V hash */
+#define NS_OPT_DEFAULT     0x0079ff30 /* V hash */
+#define NS_OPT_DEFAULT_OK  0x172a6c00 /* V same immediate */
+#define NS_OPT_REVERT      0x0079e9c0 /* V hash */
+#define NS_VT_OPT_HEADER   0x00f69474 /* V RTTI, 10 slots agree */
+#define NS_VT_OPT_CHECK    0x00f694a4 /* V 9 slots */
+#define NS_VT_OPT_COMBO    0x00f694d4 /* V 7 slots */
+#define NS_VT_OPT_SLIDER   0x00f69504 /* V 6 slots */
+
+/* ---- fields and slots that differ from the base game (§2) ---- */
+#define NS_SLIDER_SET_SEGMENT 0x28
+#define NS_SLIDER_GET_SEGMENT 0x2c
+#define NS_E_ROW 0x90
+#define NS_E_KIND 0x94
+#define NS_W_TIME 0x214
+#define NS_W_ROWS 0x224
+#define NS_W_CONTROLLER 0x230
+#define NS_W_MODEL 0x234
+#define NS_W_DIFFICULTY 0x2b4
+#define NS_HL_TIME 0x98
+#define NS_HL_DIFFICULTY 0x9c
+#define NS_HL_MODEL 0x114
+#define NS_HS_SPEC 0x10c
+#define NS_HS_NAME 0x16c
+#define NS_HS_FACE_SMALL 0x134
+#define NS_HS_FACE_BIG 0x12c
+#define NS_MAP_GOAL_OUT 1          /* the goal formatter builds an out string (ECX out, EDX goal) */
+#define NS_RACE_FIRST 3            /* Haven 3 .. Inferno 8, Fortress 9, Stronghold 10 */
+#define NS_RACE_RANDOM 1
+#define NS_NO_COMPUTER_RULE 1      /* who plays: no "computer allowed" byte */
+#define NS_P_GRID 0x48
+#define NS_P_SET_SETTINGS 0x38
+#define NS_P_GET_SETTINGS 0x3c
+#define NS_DUEL_SETTINGS_SIZE 0x18 /* +8 town type (new), speed at +0x14 */
+#define NS_S_SPEED 0x14
+#define NS_DUEL_INDEX 0xf0
+#define NS_TRIPLE_SLOT_SIZE 0xe8
+#define NS_TRIPLE_INDEX 0xe4
+#define NS_B_YESNO 0x138
+/* One loading picture per campaign (A2C0..A2C3 -> Pwl_C0..C3). */
+#define NS_MISSION_PICTURE(out, cap, key, i) \
+    snprintf(out, cap, "/UI/H5A2/PWL/Pwl_%s.(Texture).dds", (key)[0] && (key)[1] ? (key) + 2 : (key))
+#define NS_GAME_VERSION "3.1"
+#define NS_PAK_DIRS "data" /* the paks it mounts, for the native views' pictures */
