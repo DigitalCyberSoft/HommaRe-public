@@ -412,6 +412,12 @@ void *vulkan_test_native_surface(int w, int h) {
     return SDL_CreateWindow("gpu test", w, h, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
 }
 
+void vulkan_test_resize_native_surface(void *surface, int w, int h) {
+    SDL_Window *window = static_cast<SDL_Window *>(surface);
+    SDL_SetWindowSize(window, w, h);
+    SDL_SyncWindow(window);
+}
+
 void *vulkan_native_surface_for_window(void *sdl_window) {
     return sdl_window;
 }

@@ -265,6 +265,9 @@ static void test_swapchain_from_surface() {
     CHECK(t && d->describe(t).width == 32 && d->describe(t).height == 16);
     d->release_drawable(s, t);
     CHECK(d->describe(t).width == 0);
+    // As a window host does: the window first, then the swapchain. X11 pins
+    // a swapchain to its window, so resizing only the swapchain kept 32x16.
+    test_resize_native_surface(surface, 64, 32);
     d->resize(s, 64, 32);
     Texture t2 = d->acquire(s);
     CHECK(t2 && d->describe(t2).width == 64);
