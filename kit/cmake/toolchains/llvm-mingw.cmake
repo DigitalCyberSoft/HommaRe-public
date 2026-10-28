@@ -17,6 +17,10 @@ endif()
 if(NOT LLVM_MINGW_ROOT)
   message(FATAL_ERROR "llvm-mingw.cmake: set LLVM_MINGW_ROOT to the llvm-mingw directory")
 endif()
+# Cached, so the reconfigure a build runs by itself finds the toolchain again
+# without the environment, and handed on to try_compile's projects.
+set(LLVM_MINGW_ROOT ${LLVM_MINGW_ROOT} CACHE PATH "The llvm-mingw directory")
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES LLVM_MINGW_ROOT)
 set(_triple ${RECOMP_WINDOWS_ARCH}-w64-mingw32)
 set(CMAKE_C_COMPILER ${LLVM_MINGW_ROOT}/bin/${_triple}-clang)
 set(CMAKE_CXX_COMPILER ${LLVM_MINGW_ROOT}/bin/${_triple}-clang++)

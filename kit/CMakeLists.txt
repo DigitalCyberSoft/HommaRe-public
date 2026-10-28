@@ -47,6 +47,11 @@ if(EMSCRIPTEN)
   set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(MINGW)
+  # MinGW's headers keep M_PI and localtime_r/gmtime_r behind these; glibc's
+  # and Apple's declare them by default.
+  add_compile_definitions(_USE_MATH_DEFINES _POSIX_THREAD_SAFE_FUNCTIONS=200112L)
+endif()
 if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   # All static and object libraries feed the shared SDL application (Android)
   # or a game module (Linux; Apple's code is position independent already).
