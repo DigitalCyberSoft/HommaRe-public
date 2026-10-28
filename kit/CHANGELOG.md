@@ -30,6 +30,9 @@
 - `[web] ui_mods` names the interface mods' recipes the web build carries; the
   web host makes them, and the `[texts]` pak, from the imported install before
   the game starts, as the desktop does.
+- `tools/web_smoke.mjs` drives a web site's game in Chrome over the DevTools
+  protocol: import, start, keys, clicks and text at given seconds, the pages' and
+  workers' consoles, screenshots, the module's instantiation time and the memory.
 
 ## Renaming an app
 
