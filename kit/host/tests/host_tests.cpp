@@ -52,6 +52,8 @@ extern "C" {
 #endif
 #include <SDL3/SDL.h>
 #include "../game_path.h"
+#include "../server_prompt.h"
+#include "../../runtime/curl_http.h"
 #include "../../runtime/layout.h"
 #include "../d3d_render.h"
 #include "../../dx/host_api.h"
@@ -1172,6 +1174,155 @@ static void test_game_path() {
     }
     os_unsetenv("RECOMP_PROFILE_DIR");
     host_layout_set_exe_path_for_test(nullptr);
+}
+
+// The ubi-gs servers kept in the profile (server_prompt.h): most recent
+// first, once each, ten at most, and a damaged file costs only its damaged
+// lines. Then the prompt itself, driven as the game and the player drive it.
+static std::string read_file(const std::string &path) {
+    std::string s;
+    if (FILE *f = fopen(path.c_str(), "rb")) {
+        char buf[4096];
+        for (size_t n; (n = fread(buf, 1, sizeof buf, f)) > 0;)
+            s.append(buf, n);
+        fclose(f);
+    }
+    return s;
+}
+static void write_file(const std::string &path, const std::string &s) {
+    if (FILE *f = fopen(path.c_str(), "wb")) {
+        fwrite(s.data(), 1, s.size(), f);
+        fclose(f);
+    }
+}
+static void test_server_prompt() {
+    char dir[512];
+    snprintf(dir, sizeof dir, "%s/ubi-gs-XXXXXX", os_temp_dir());
+    CHECK(os_mkdtemp(dir) == 0);
+    const std::string profile = dir;
+    const std::string path = server_list_path(profile);
+    CHECK(path == profile + "/ubi-gs-servers.txt");
+    CHECK(server_list_load(path).empty()); // no file yet
+
+    // A damaged file: what is still an address survives, canonical and once.
+    write_file(path, std::string("garbage line!\n127.0.0.1:8080\r\n# a comment\n\n   \n"
+                                 "HTTP://Play.Example.org:80/ # the old one\n127.0.0.1:8080\n"
+                                 "\x01\x02\xff\xfe\nhost:99999\n") +
+                         std::string("\0\0", 2) + "\n[::1]:7000\n");
+    std::vector<std::string> list = server_list_load(path);
+    CHECK_EQ(list.size(), 3u);
+    CHECK(list.size() == 3 && list[0] == "127.0.0.1:8080" && list[1] == "play.example.org" &&
+          list[2] == "[::1]:7000");
+
+    // Most recent first, once, ten at most.
+    list.clear();
+    for (int i = 0; i < 10; ++i)
+        server_list_remember(&list, "s" + std::to_string(i) + ".example.org");
+    CHECK(list.size() == 10 && list[0] == "s9.example.org" && list[9] == "s0.example.org");
+    server_list_remember(&list, "s5.example.org");
+    CHECK(list.size() == 10 && list[0] == "s5.example.org" && list[1] == "s9.example.org" &&
+          std::count(list.begin(), list.end(), "s5.example.org") == 1);
+    server_list_remember(&list, "new.example.org:8080");
+    CHECK(list.size() == 10 && list[0] == "new.example.org:8080" && list[1] == "s5.example.org" &&
+          std::find(list.begin(), list.end(), "s0.example.org") == list.end());
+    CHECK(server_list_save(path, list));
+    CHECK(server_list_load(path) == list);
+    CHECK(read_file(path).rfind("# ", 0) == 0); // says what it is
+    OsStat st;
+    CHECK(os_stat((path + ".new").c_str(), &st) != 0); // no temporary left behind
+    // A profile directory that does not exist yet is made.
+    const std::string deeper = server_list_path(profile + "/fresh");
+    CHECK(server_list_save(deeper, {"a.example.org"}) && server_list_load(deeper).size() == 1);
+    // More than ten in a hand-edited file: the first ten.
+    std::string many;
+    for (int i = 0; i < 14; ++i)
+        many += "h" + std::to_string(i) + ".example.org\n";
+    write_file(path, many);
+    list = server_list_load(path);
+    CHECK(list.size() == 10 && list[0] == "h0.example.org" && list[9] == "h9.example.org");
+
+    // The prompt: the saved servers, the first one preselected.
+    write_file(path, "one.example.org\ntwo.example.org:8080\n");
+    server_prompt_install(profile, "ubi-gs server", "Why this is asked.");
+    CHECK(!host_page_prompt_open());
+    CHECK(server_prompt::begin(""));
+    CHECK(host_page_prompt_open() && host_page_visible() && host_page_prompt_wants_text());
+    CHECK(server_prompt::field() == "one.example.org" && server_prompt::selected() == 0);
+    char buf[256];
+    CHECK_EQ(server_prompt::poll(buf, sizeof buf), 0);
+    CHECK(host_page_prompt_key(0xd0, true) && host_page_prompt_key(0xd0, false)); // Down
+    CHECK(server_prompt::field() == "two.example.org:8080" && server_prompt::selected() == 1);
+    host_page_prompt_key(0xc8, true); // Up
+    host_page_prompt_key(0xc8, false);
+    CHECK(server_prompt::field() == "one.example.org");
+    // Typed: the field no longer names a saved server.
+    for (int i = 0; i < 40; ++i) {
+        host_page_prompt_key(0x0e, true); // Backspace
+        host_page_prompt_key(0x0e, false);
+    }
+    CHECK(server_prompt::field().empty() && server_prompt::selected() == -1);
+    CHECK(host_page_prompt_text("10.0.0.5"));
+    host_page_prompt_key(0xc7, true); // Home, then the scheme in front of the caret
+    host_page_prompt_key(0xc7, false);
+    host_page_prompt_text("http://");
+    host_page_prompt_key(0xcf, true); // End
+    host_page_prompt_key(0xcf, false);
+    host_page_prompt_text(":7000\x07");
+    CHECK(server_prompt::field() == "http://10.0.0.5:7000");
+    // Not an address: OK says so and nothing is answered.
+    host_page_prompt_text(":x");
+    host_page_prompt_key(0x1c, true);
+    host_page_prompt_key(0x1c, false);
+    CHECK(server_prompt::poll(buf, sizeof buf) == 0 && !server_prompt::error().empty());
+    host_page_prompt_key(0x0e, true);
+    host_page_prompt_key(0x0e, false);
+    host_page_prompt_key(0x0e, true);
+    host_page_prompt_key(0x0e, false);
+    host_page_prompt_key(0x9c, true); // keypad Enter
+    host_page_prompt_key(0x9c, false);
+    CHECK(server_prompt::poll(buf, sizeof buf) == 1 && std::string(buf) == "10.0.0.5:7000");
+    CHECK(server_prompt::busy() && !host_page_prompt_wants_text());
+    CHECK_EQ(server_prompt::poll(buf, sizeof buf), 0); // answered once
+    // The server failed: asked again, with the reason, the address kept.
+    CHECK(server_prompt::begin("10.0.0.5:7000: connection refused"));
+    CHECK(!server_prompt::busy() && server_prompt::error() == "10.0.0.5:7000: connection refused" &&
+          server_prompt::field() == "http://10.0.0.5:7000");
+    // It draws, and draws again only when something changed.
+    uint64_t generation = 0;
+    const uint8_t *pixels = nullptr;
+    CHECK_EQ(host_page_menu(1280, 720, &generation, &pixels), 2);
+    bool drawn = false;
+    for (size_t i = 3; pixels && i < size_t(1280) * 720 * 4; i += 4)
+        drawn |= pixels[i] > 200; // the panel is nearly opaque, the dim is not
+    CHECK(drawn);
+    CHECK_EQ(host_page_menu(1280, 720, &generation, &pixels), 1);
+    host_page_prompt_text("0");
+    CHECK_EQ(host_page_menu(1280, 720, &generation, &pixels), 2);
+    // Modal: off the panel is still the prompt's.
+    CHECK(host_page_prompt_pointer(-1, -1, 0, true, 0));
+    // Escape cancels; its release is the prompt's too, a release it never saw is not.
+    CHECK(host_page_prompt_key(0x01, true));
+    CHECK(server_prompt::poll(buf, sizeof buf) == -1 && !host_page_prompt_open());
+    CHECK(host_page_prompt_key(0x01, false));
+    CHECK(!host_page_prompt_key(0x1e, false));
+    CHECK(!host_page_prompt_text("late"));
+    CHECK_EQ(host_page_menu(1280, 720, &generation, &pixels), 0);
+    server_prompt::end();
+    // A server that answered goes to the front of the file.
+    server_prompt::used("10.0.0.5:7000");
+    list = server_list_load(path);
+    CHECK(list.size() == 3 && list[0] == "10.0.0.5:7000" && list[1] == "one.example.org");
+    // Next time it is the one in the field.
+    CHECK(server_prompt::begin("") && server_prompt::field() == "10.0.0.5:7000");
+    host_page_prompt_cancel();
+    CHECK(server_prompt::poll(buf, sizeof buf) == -1);
+    server_prompt::end();
+    host_page_set_prompt(nullptr);
+    curl_http_set_chooser(nullptr);
+    os_unlink(deeper.c_str());
+    os_rmdir((profile + "/fresh").c_str());
+    os_unlink(path.c_str());
+    CHECK(os_rmdir(profile.c_str()) == 0); // nothing else was left there
 }
 
 // A developer build finds the kit's General MIDI bank in the kit's own tree,
@@ -11679,6 +11830,11 @@ int main(int argc, char **argv) {
     test_native_stick_motion_pixels();
     // Focused headless validation when the sandbox cannot create audio/Metal
     // services. The default suite still runs every test and reports failures.
+    if (argc == 2 && !strcmp(argv[1], "--server-prompt-only")) {
+        test_server_prompt();
+        printf("server prompt: %d checks, %d failures\n", g_checks, g_failures);
+        return g_failures ? 1 : 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "--script-only")) {
         test_script_parsing();
         test_reference_dump_serialization();
@@ -11711,6 +11867,7 @@ int main(int argc, char **argv) {
         void (*fn)();
     } plain[] = {
         {"game path", test_game_path},
+        {"ubi-gs server prompt", test_server_prompt},
         {"bundled General MIDI bank", test_bundled_general_midi},
         {"controls layouts resource", test_controls_layouts_resource},
         {"user data of a renamed app", test_migrate_user_data},

@@ -127,8 +127,63 @@ files = [
     # The buttons' click, at a quarter of its volume.
     "Sounds/_(Sound)/Interface/General/standart_click.xdb",
     "Sounds/_(Sound)/Interface/General/standart_disabled_click.xdb",
+    # Ubi.com is ubi-gs now ([online] below): the Multi Player menu's entry,
+    # its tooltip, and every message that names the service.
+    "UI/MainMenu2/MultiPlayer/UbiCom.txt",
+    "UI/MainMenu2/MultiPlayer/TTUbiCom.txt",
+    "UI/MPRegister/connecting.txt",
+    "UI/MPRegister/cant-connect.txt",
+    "UI/MPRegiter/TTAccount.txt",
+    "UI/MPRegiter/TTOk.txt",
+    "UI/EscMenu/ExitToUbiLobbyQuestion.txt",
+    "UI/EscMenu/ExitToUbiLobbyTitle.txt",
+    "UI/Lobby/Texts/UbiComError.txt",
+    "UI/MPChangeChannel/mode_tooltip.txt",
+    "UI/MPDMCreate/cannot-create.txt",
+    "UI/MPDMWait/ubi-com-error.txt",
+    "UI/MPProfile/AcquireProfileFailedText.txt",
+    "UI/MPProfile/TTLosses.txt",
+    "UI/MPProfile/TTWins.txt",
+    "UI/MatchMakerErrors/UCLE_GS_ERROR.txt",
+    "UI/MatchMakerErrors/UCLE_GS_SEND_FAILED.txt",
+    "UI/Common/game_type_1.txt",
+    "UI/Common/MsgBoxAdventureMapDisconnectedFromUbiComText.txt",
+    "UI/Common/MsgBoxAdventureMapOtherPlayerDisconnectedFromUbiComText.txt",
+    "UI/Common/MsgBoxDisconnectedFromChatForFloodText.txt",
+    "UI/Common/MsgBoxMPInterfacesDisconnectedFromUbiComText.txt",
+    "UI/Texts/ubi_send_results_success.txt",
+    "UI/Texts/ubi_send_results_wait.txt",
 ]
-replace = { "в Windows" = "в систему", "to Windows" = "to Desktop", "<VolumeBase>1</VolumeBase>" = "<VolumeBase>0.25</VolumeBase>" }
+
+# Made in this order, in every listed file. The tooltip's sentence comes before
+# the service's bare name, which would otherwise leave it "via ubi-gs website".
+# Another language that writes the name as Ubi.com gets ubi-gs in its own words.
+[texts.replace]
+"в Windows" = "в систему"
+"to Windows" = "to Desktop"
+"<VolumeBase>1</VolumeBase>" = "<VolumeBase>0.25</VolumeBase>"
+"via ubi.com website" = "through a ubi-gs community server"
+"Ubi.com" = "ubi-gs"
+"ubi.com" = "ubi-gs"
+"UBI.com" = "ubi-gs"
+
+# Multi Player > Ubi.com against a community server: Ubisoft shut the game's
+# online services down on 6 October 2015, and ubi-gs
+# (github.com/michal-kapala/ubi-gs) answers the same requests. The game asks
+# gsconnect_host for the addresses of its other servers when Ubi.com is
+# clicked, never at start; kit/runtime/curl_http.cpp sends that one request to
+# the server the player names in the host's prompt (kit/host/server_prompt.cpp),
+# which keeps the servers that answered, most recent first, in the profile's
+# ubi-gs-servers.txt.
+[online]
+gsconnect_host = "gsconnect.ubisoft.com"
+prompt_title = "ubi-gs server"
+prompt_text = """Ubisoft closed the official Heroes of Might and Magic V servers in 2015. \
+ubi-gs is a community re-implementation of them (github.com/michal-kapala/ubi-gs).
+Someone has to run it, and every player who wants to play together must use the same \
+server. Whoever runs it puts the server's public address in its servers.ini \
+(gsconnect/static/homm5/servers.ini); with the default 127.0.0.1 only players on \
+that same machine can reach it."""
 
 [controls]
 pad = "off"
