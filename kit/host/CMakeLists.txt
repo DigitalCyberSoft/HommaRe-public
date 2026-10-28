@@ -509,6 +509,16 @@ if(TARGET recomp_gen)
       endif()
       configure_file(${POP_ROOT}/platform/windows/app.rc.in ${pop_app_rc} @ONLY)
       target_sources(recomp_app PRIVATE ${pop_app_rc})
+      # The translation's symbol table, which the mods load, lives in
+      # build/recomp; a cross build's executable is in build/windows/recomp,
+      # where tools/package_desktop.py takes it from beside the binary.
+      if(POP_REAL_GEN AND EXISTS ${POP_BUILD_ROOT}/recomp/symbols.json
+         AND NOT POP_OUT STREQUAL "${POP_BUILD_ROOT}/recomp")
+        add_custom_command(TARGET recomp_app POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${POP_BUILD_ROOT}/recomp/symbols.json
+                  ${POP_OUT}/symbols.json
+          VERBATIM)
+      endif()
     endif()
   endif()
 
