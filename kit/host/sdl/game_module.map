@@ -1,0 +1,6 @@
+/* A game module's only export (host/sdl/main.cpp recomp_game_main); everything
+ * else binds inside the module (host/CMakeLists.txt recomp_game, ELF only). */
+{
+  global: recomp_game_main;
+  local: *;
+};

@@ -1041,7 +1041,7 @@ void homm5_skin_alloc(X86 *c) {
 // float operations in NEON, lane for lane, so the result is bit for bit the
 // game's. RECOMP_HOMM5_NATIVE_BOUNDS: 1 (default), 0 the original, check both.
 
-#include <arm_neon.h>
+#include "neon_compat.h"
 
 extern "C" {
 void H5SKIN_POSITIONS_ORIG(X86 *c);

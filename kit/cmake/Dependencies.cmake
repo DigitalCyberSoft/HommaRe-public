@@ -3,8 +3,9 @@
 include(FetchContent)
 
 # A multi-game app (RECOMP_GAME_MODULES) shares one SDL between the app and
-# the game modules it loads: two copies would each own the UIKit/AppKit glue.
-if(APPLE AND RECOMP_GAME_MODULES)
+# the game modules it loads: two copies would each own the UIKit/AppKit glue
+# (on Linux, the X11/Wayland connection and the audio device).
+if(RECOMP_GAME_MODULES)
   set(SDL_SHARED ON CACHE BOOL "" FORCE)
 else()
   set(SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -57,7 +58,7 @@ endif()
 # pop_link_sdl(<target>): link SDL3 (statically; shared in a multi-game app)
 # and give the target its headers.
 function(pop_link_sdl target)
-  if(APPLE AND RECOMP_GAME_MODULES)
+  if(RECOMP_GAME_MODULES)
     target_link_libraries(${target} PRIVATE SDL3::SDL3-shared)
   else()
     target_link_libraries(${target} PRIVATE SDL3::SDL3-static)

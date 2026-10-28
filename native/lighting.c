@@ -9,7 +9,7 @@
  * RECOMP_HOMM5_NATIVE_LIGHT=1 (default) runs these, 0 the originals, check
  * runs both on every call and logs the first differences (the original's
  * results stay), ab alternates every 10 s. */
-#include <arm_neon.h>
+#include "neon_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

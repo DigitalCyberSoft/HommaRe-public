@@ -128,6 +128,12 @@ if(POP_HAVE_GEN)
     # They keep the arena pointer under fixed_guest_base (runtime/x86.h).
     set_property(SOURCE ${RECOMP_NATIVE_SOURCES} APPEND PROPERTY
       COMPILE_DEFINITIONS RECOMP_NO_FIXED_BASE=1)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      # Host code that calls POSIX (clock_gettime, nanosleep) as the Apple
+      # headers allow under -std=c11; glibc hides it there without this.
+      set_property(SOURCE ${RECOMP_NATIVE_SOURCES} APPEND PROPERTY
+        COMPILE_DEFINITIONS _DEFAULT_SOURCE)
+    endif()
     # The game's addresses for its native sources ([translate] native
     # addresses): defined on those sources alone, so the generated chunks
     # neither include the header nor rebuild when it changes.

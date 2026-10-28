@@ -23,7 +23,6 @@
 #include <map>
 #include <string>
 #include <vector>
-#include <xlocale.h>
 
 namespace {
 
@@ -933,7 +932,7 @@ int scan(Input &in, uint32_t fmt, bool wide_fmt, uint32_t va, uint64_t options) 
             if (text.find_first_of("0123456789") == std::string::npos)
                 return any_input || assigned ? assigned : (c2 == EOF ? -1 : assigned);
             any_input = true;
-            double v = strtod_l(text.c_str(), nullptr, (locale_t)0);
+            double v = strtod_l(text.c_str(), nullptr, ucrt_c_locale());
             if (!suppress) {
                 uint32_t dst = a.u32();
                 if (len == 'l' || len == 'q')

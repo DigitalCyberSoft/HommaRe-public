@@ -155,6 +155,10 @@ cfg_defaults = { "profiles/default_profile/user_a2.cfg" = { gfx_resolution = "sc
 [macos]
 ui_mods = ["Widescreen"]
 
+# The same on a Linux desktop.
+[linux]
+ui_mods = ["Widescreen"]
+
 [launcher]
 title = "Heroes of Might and Magic V: Tribes of the East"
 # The base game's launcher config: a standalone build shows the same launcher.

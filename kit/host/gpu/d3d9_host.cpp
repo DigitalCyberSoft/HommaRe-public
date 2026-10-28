@@ -74,6 +74,9 @@ D9Backend *make_backend(gpu::Device *device) {
 std::atomic<D9Backend *> g_web_backend{nullptr};
 #endif
 
+// Event query id -> its mark (D9Backend::event_mark); the render thread's alone.
+std::unordered_map<uint32_t, uint64_t> g_event_marks;
+
 D9Backend *backend() {
     if (g_test_backend)
         return g_test_backend;
@@ -148,6 +151,8 @@ enum class Op : uint8_t {
     QueryBegin,
     QueryEnd,
     QueryDrop,
+    EventEnd,
+    EventDrop,
     Probe,
     ReadAsync,
     Call,
@@ -480,6 +485,12 @@ class RenderThread {
                 break;
             case Op::QueryDrop:
                 r_->query_drop(cmd.a);
+                break;
+            case Op::EventEnd:
+                g_event_marks[cmd.a] = r_->event_mark();
+                break;
+            case Op::EventDrop:
+                g_event_marks.erase(cmd.a);
                 break;
             case Op::Probe:
                 r_->probe_next(cmd.a ? (const char *)(base + cmd.at) : nullptr);
@@ -854,6 +865,20 @@ int host_d9_query_result(uint32_t id, uint32_t *count) {
 }
 void host_d9_query_drop(uint32_t id) {
     push(Op::QueryDrop, id);
+}
+
+void host_d9_event_end(uint32_t id) {
+    push(Op::EventEnd, id);
+}
+int host_d9_event_done(uint32_t id) {
+    RenderThread *t = render_thread();
+    return !t || t->sync([&] {
+        auto it = g_event_marks.find(id);
+        return it == g_event_marks.end() || backend()->event_done(it->second);
+    });
+}
+void host_d9_event_drop(uint32_t id) {
+    push(Op::EventDrop, id);
 }
 
 bool host_d9_use_device_for_test(gpu::Device *device) {

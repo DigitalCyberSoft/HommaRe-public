@@ -331,7 +331,7 @@ if(TARGET recomp_gen)
     FRAMEWORKS ${FW_METAL})
   pop_link_sdl(recomp_app)
   set_target_properties(recomp_app PROPERTIES OUTPUT_NAME ${RECOMP_APP_NAME})
-  if(APPLE AND RECOMP_GAME_MODULES)
+  if(RECOMP_GAME_MODULES)
     # The launcher's app also runs the other games' modules (sdl/main.cpp).
     target_compile_definitions(recomp_app PRIVATE RECOMP_GAME_MODULES=1)
   endif()
@@ -392,24 +392,25 @@ if(TARGET recomp_gen)
     # Desktop packages carry manifests beside statically linked core plugins.
     # This avoids shipping a plugin compiled for a different host platform.
     pop_builtin_mods(recomp_app RESOURCES $<TARGET_FILE_DIR:recomp_app>/resources)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND RECOMP_VIDEO)
-      # Keep staged FFmpeg libraries discoverable beside the executable.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND (RECOMP_VIDEO OR RECOMP_GAME_MODULES))
+      # Keep staged FFmpeg libraries (and the shared SDL) discoverable beside the executable.
       set_target_properties(recomp_app PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
     endif()
   endif()
 
   # The game as a module of a multi-game app (RECOMP_GAME_MODULES): the same
-  # host as lib<game.id>.dylib, entered through recomp_game_main by the app
-  # whose launcher picked it (sdl/main.cpp). It has no launcher of its own and
-  # finds its resources and profile from its own path. tools/assemble_games.py
-  # puts it, with its resources, into the app that hosts the launcher.
-  if(APPLE AND RECOMP_GAME_MODULES)
+  # host as libgame.<game.id>.dylib (.so), entered through recomp_game_main by
+  # the app whose launcher picked it (sdl/main.cpp). It has no launcher of its
+  # own and finds its resources and profile from its own path.
+  # tools/assemble_games.py puts it, with its resources, into the app that
+  # hosts the launcher.
+  if(RECOMP_GAME_MODULES)
     pop_host(recomp_game GEN UI_LAYER OPT 2 SHARED
       SOURCES ${POP_APP_SOURCES}
       LIBS ${POP_CORE_LIBS}
       FRAMEWORKS ${FW_METAL})
     pop_link_sdl(recomp_game)
-    if(NOT IOS)
+    if(APPLE AND NOT IOS)
       # The static SDL brought AppKit in for metal_surface.mm; the shared one does not.
       target_link_libraries(recomp_game PRIVATE "-framework AppKit")
     endif()
@@ -423,8 +424,18 @@ if(TARGET recomp_gen)
       INSTALL_RPATH "@loader_path"
       XCODE_ATTRIBUTE_LD_DYLIB_INSTALL_NAME "@rpath/libgame.${RECOMP_GAME_ID}.dylib"
       XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "@loader_path")
-    if(IOS)
+    if(IOS OR NOT APPLE)
       pop_builtin_mods(recomp_game)
+    endif()
+    if(NOT APPLE)
+      # ELF has one symbol namespace: the module's runtime and translation
+      # carry the same names as the app's, and must bind to their own
+      # (Mach-O's two-level namespace does this by itself), so the module
+      # exports recomp_game_main alone. SDL and FFmpeg sit beside the
+      # executable, one folder up from modules/.
+      target_link_options(recomp_game PRIVATE "-Wl,--version-script=${HOST}/sdl/game_module.map")
+      set_property(TARGET recomp_game APPEND PROPERTY LINK_DEPENDS ${HOST}/sdl/game_module.map)
+      set_target_properties(recomp_game PROPERTIES BUILD_RPATH "$ORIGIN/.." INSTALL_RPATH "$ORIGIN/..")
     endif()
   endif()
 
