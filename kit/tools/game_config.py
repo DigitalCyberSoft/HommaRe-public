@@ -289,6 +289,19 @@ def load(game_dir):
             any(c in s for s in [*texts["files"], *texts["replace"], *texts["replace"].values()] for c in "|;"):
         raise ValueError('%s: [texts] takes pak = "path", files = ["path", ...] and '
                          'replace = { "old words" = "new words" }' % source)
+    # [online]: a Ubisoft Game Service title's server list. gsconnect_host is
+    # the host its libcurl asks (runtime/curl_http.cpp sends that request to a
+    # community server the player names instead); prompt_title and prompt_text
+    # are what the host's question says (host/server_prompt.cpp). No host: the
+    # game stays offline, as every other request does.
+    online = cfg.setdefault("online", {})
+    online.setdefault("gsconnect_host", "")
+    online.setdefault("prompt_title", "")
+    online.setdefault("prompt_text", "")
+    if not all(isinstance(online[k], str) for k in ("gsconnect_host", "prompt_title", "prompt_text")) or \
+            any(c in online["gsconnect_host"] for c in "/:@ \t\n"):
+        raise ValueError('%s: [online] takes gsconnect_host = "host.name", prompt_title = "..." and '
+                         'prompt_text = "..."' % source)
     touch.setdefault("gestures", "classic")
     if touch["gestures"] not in ("classic", "hover"):
         raise ValueError('%s: [touch] gestures must be "classic" or "hover", not %r' % (source, touch["gestures"]))

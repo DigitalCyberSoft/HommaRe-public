@@ -85,6 +85,11 @@ def render_header(cfg):
     lines.append("#define RECOMP_TEXTS_FILES %s" % c_string("".join(f + ";" for f in texts["files"])))
     lines.append("#define RECOMP_TEXTS_REPLACE %s" % c_string(
         "".join("%s|%s;" % (k, v) for k, v in texts["replace"].items())))
+    # [online]: the GS server-list host and the host's question about it.
+    online = cfg["online"]
+    lines.append("#define RECOMP_ONLINE_GSCONNECT_HOST %s" % c_string(online["gsconnect_host"]))
+    lines.append("#define RECOMP_ONLINE_PROMPT_TITLE %s" % c_string(online["prompt_title"]))
+    lines.append("#define RECOMP_ONLINE_PROMPT_TEXT %s" % c_string(online["prompt_text"]).replace("\n", "\\n"))
     lines.append("#define RECOMP_TOUCH_INVERT %s" % c_string(",".join(cfg["touch"]["invert"])))
     lines.append("#define RECOMP_CONTROLS_PAD %d" % ("off", "mapped", "native").index(controls["pad"]))
     lines.append("#define RECOMP_CONTROLS_MAPPED %s" % c_string(

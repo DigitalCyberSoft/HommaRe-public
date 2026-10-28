@@ -83,6 +83,26 @@ class LoadTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, r"\[linux\]"):
                     game_config.load(game)
 
+    def test_online_section_defaults_renders_and_rejects_a_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp)
+            stub = (ROOT / "games/stub/game.toml").read_text()
+            (game / "globals.toml").write_text("")
+            (game / "game.toml").write_text(stub)
+            header = gen_game_config.render_header(game_config.load(game))
+            self.assertIn('#define RECOMP_ONLINE_GSCONNECT_HOST ""', header)  # off: offline as before
+            (game / "game.toml").write_text(
+                stub + '\n[online]\ngsconnect_host = "gs.example.org"\nprompt_title = "Server"\n'
+                'prompt_text = """One "line".\nTwo."""\n')
+            header = gen_game_config.render_header(game_config.load(game))
+            self.assertIn('#define RECOMP_ONLINE_GSCONNECT_HOST "gs.example.org"', header)
+            self.assertIn('#define RECOMP_ONLINE_PROMPT_TITLE "Server"', header)
+            self.assertIn('#define RECOMP_ONLINE_PROMPT_TEXT "One \\"line\\".\\nTwo."', header)
+            for bad in ('gsconnect_host = "http://gs.example.org/"', 'gsconnect_host = 1', 'prompt_text = []'):
+                (game / "game.toml").write_text(stub + '\n[online]\n' + bad + '\n')
+                with self.assertRaisesRegex(ValueError, r"\[online\]"):
+                    game_config.load(game)
+
     def test_windows_version_defaults_and_optional_build(self):
         with tempfile.TemporaryDirectory() as tmp:
             game = Path(tmp)
