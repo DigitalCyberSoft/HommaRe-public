@@ -137,8 +137,10 @@ def report(problems, what):
     return 1 if problems else 0
 
 
-def pre_push(remote_url):
-    """The hook: refs to push come on stdin as `<local ref> <local sha> <remote ref> <remote sha>`."""
+def pre_push(remote_name, remote_url):
+    """The hook: refs to push come on stdin as `<local ref> <local sha> <remote ref> <remote sha>`.
+    A new branch's commits are those its remote does not have yet: what
+    another remote has (a private one) is new to this one."""
     if "HommaRe-public" not in remote_url:
         return 0
     problems, tips, commits = [], 0, 0
@@ -149,7 +151,8 @@ def pre_push(remote_url):
         local, remote = parts[1], parts[3]
         found, _ = check_tree(local)
         problems += ["%s: %s" % (parts[0], p) for p in found]
-        spec = [local, "--not", "--remotes"] if remote == ZERO else ["%s..%s" % (remote, local)]
+        spec = ([local, "--not", "--remotes=%s" % remote_name] if remote == ZERO
+                else ["%s..%s" % (remote, local)])
         found, n = check_commits(spec)
         problems += found
         tips += 1
@@ -170,7 +173,7 @@ case "$2" in
         echo "pre-push: this tree has no tools/check_public.py, so it cannot be checked; push refused" >&2
         exit 1
     fi
-    exec python3 -I "$script" --pre-push "$2"
+    exec python3 -I "$script" --pre-push "$1" "$2"
     ;;
 esac
 exit 0
@@ -193,14 +196,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--rev", default="HEAD", help="the commit whose files to check")
     p.add_argument("--commits", metavar="RANGE", help="also check the commits of this range (A..B)")
-    p.add_argument("--pre-push", metavar="URL", help=argparse.SUPPRESS)
+    p.add_argument("--pre-push", nargs=2, metavar=("NAME", "URL"), help=argparse.SUPPRESS)
     p.add_argument("--install-hook", action="store_true")
     args = p.parse_args()
     load_private_rules.found = load_private_rules()
     if args.install_hook:
         return install_hook()
     if args.pre_push is not None:
-        return pre_push(args.pre_push)
+        return pre_push(*args.pre_push)
     problems, files = check_tree(args.rev)
     what = "%s: %d tracked files" % (args.rev, files)
     if args.commits:
