@@ -159,6 +159,7 @@ void test_process_and_strings() {
     char exe[4096];
     CHECK(os_exe_path(exe, sizeof exe) == 0);
     char dir[512];
+    CHECK(strchr(os_temp_dir(), '\\') == nullptr);
     snprintf(dir, sizeof dir, "%s/pop-platform-XXXXXX", os_temp_dir());
     CHECK(os_mkdtemp(dir) == 0);
     OsStat st;

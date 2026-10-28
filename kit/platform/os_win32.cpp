@@ -380,9 +380,8 @@ const char *os_temp_dir(void) {
         return ".";
     while (n > 1 && (w[n - 1] == L'\\' || w[n - 1] == L'/'))
         w[--n] = 0;
-    std::string s = narrow(w);
-    strncpy(buf, s.c_str(), sizeof buf - 1);
-    buf[sizeof buf - 1] = 0;
+    if (copy_out(narrow(w), buf, sizeof buf) != 0)
+        return ".";
     return buf;
 }
 
