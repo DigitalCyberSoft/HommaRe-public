@@ -55,6 +55,12 @@ if(POP_HAVE_GEN)
     target_compile_definitions(recomp_gen PRIVATE RECOMP_LEAN_CALLS=1)
   endif()
   # [translate] write_track = "protect": no per-store lazy-buffer marking.
+  # WebAssembly has no page protection to catch those stores with, so the
+  # web's translated stores mark whatever the game asks for (and the runtime
+  # tracks by them, tools/gen_game_config.py).
+  if(EMSCRIPTEN)
+    set(RECOMP_WRITE_TRACK_STORES 1)
+  endif()
   if(DEFINED RECOMP_WRITE_TRACK_STORES)
     target_compile_definitions(recomp_gen PRIVATE RECOMP_WRITE_TRACK_STORES=${RECOMP_WRITE_TRACK_STORES})
   endif()

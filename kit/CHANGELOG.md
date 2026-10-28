@@ -11,6 +11,12 @@
   `call; return` pairs left before a shared return block in the translation's
   archives, in place, after each build of them. Without it a guest loop spread
   over two functions overflowed the browser's stack within a second.
+- WebAssembly has no page protection, so a game with `[translate] write_track =
+  "protect"` builds for the web with stores that mark the lazy vertex buffers
+  (mode 1) instead of falling back to comparing every page a draw reads.
+- A display mode the game sets no longer resizes the web page's canvas: the page
+  sizes it (the viewport) and the presenter scales the game's frame into it, as
+  in full screen.
 
 ## Renaming an app
 

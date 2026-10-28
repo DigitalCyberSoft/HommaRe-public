@@ -133,6 +133,9 @@ int g_mode_w = 640, g_mode_h = 480;
 bool g_mode_dirty = false;
 int g_window_mode = 0, g_wanted_window_mode = 0;
 bool g_fullscreen_transition = false;
+// The web: the page sizes the canvas (the whole viewport), so a display mode
+// the game sets scales into it, as in full screen, and never resizes it.
+bool g_page_sized_window = false;
 HostRect g_pointer_confinement; // window points; main thread only
 bool g_pointer_sample_valid = false;
 int32_t g_pointer_sample_x = 0, g_pointer_sample_y = 0;
@@ -2355,8 +2358,9 @@ void apply_mode_change() {
     // The minimum first, since a window cannot shrink below the one it had. It
     // is the guest's frame when that fits the screen, so integer scaling always
     // has a whole multiple to take, and never more than the window.
-    SDL_SetWindowMinimumSize(g_window, size.min_w, size.min_h);
-    if (g_window_mode == 0 && !g_fullscreen_transition) {
+    if (!g_page_sized_window)
+        SDL_SetWindowMinimumSize(g_window, size.min_w, size.min_h);
+    if (g_window_mode == 0 && !g_fullscreen_transition && !g_page_sized_window) {
         SDL_SetWindowSize(g_window, size.w, size.h);
         SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         post_drawable_size();
@@ -3024,6 +3028,7 @@ void web_guest() {
 }
 
 int web_main(int argc, char **argv) {
+    g_page_sized_window = true;
     for (int i = 1; i < argc; ++i) {
         if (strncmp(argv[i], "--exe=", 6) == 0)
             g_web_exe = argv[i] + 6;
