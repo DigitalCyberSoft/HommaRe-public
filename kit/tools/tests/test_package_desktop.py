@@ -144,6 +144,30 @@ def test_stage_bundles_the_games_control_layouts(tmp_path):
         assert not any(n.endswith("readme.txt") for n in names)
 
 
+def test_stage_bundles_the_native_launchers_config_on_linux(tmp_path):
+    """launcher-games.json and launcher-manifests/*.json land in resources/ (Linux only)."""
+    exe = tmp_path / "recomp_app"
+    exe.write_bytes(b"\x7fELF")
+    game_dir = tmp_path / "game"
+    (game_dir / "launcher-manifests").mkdir(parents=True)
+    (game_dir / "launcher-games.json").write_text('{"games": []}')
+    (game_dir / "launcher-manifests/gog-1-en.json").write_text('{"files": []}')
+    (game_dir / "launcher-manifests/notes.txt").write_text("not a manifest")
+    cfg = {"game": {"app_name": "StubRecomp", "name": "Stub Game", "executable": "STUB.EXE"},
+           "dir": str(game_dir), "launcher_config_dir": game_dir,
+           "linux": {"ui_mods": [], "profile_files": {}}}
+    with patch("platform.machine", return_value="x86_64"):
+        out = package_desktop.stage(exe, cfg, tmp_path / "out", system="Linux", game_dir=game_dir)
+    assert (out / "resources/launcher-games.json").read_text() == '{"games": []}'
+    assert {p.name for p in (out / "resources/launcher-manifests").iterdir()} == {"gog-1-en.json"}
+    with tarfile.open(tmp_path / "out/StubRecomp-linux-x86_64.tar.gz") as tar:
+        names = set(tar.getnames())
+        assert "StubRecomp/resources/launcher-games.json" in names
+        assert "StubRecomp/resources/launcher-manifests/gog-1-en.json" in names
+    win = package_desktop.stage(tmp_path / "recomp_app", cfg, tmp_path / "win", system="Windows", game_dir=game_dir)
+    assert not (win / "resources/launcher-games.json").exists()
+
+
 def test_stage_without_layouts_creates_no_controls_directory(tmp_path):
     exe = tmp_path / "recomp_app"
     exe.write_bytes(b"\x7fELF")

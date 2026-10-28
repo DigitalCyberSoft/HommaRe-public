@@ -1,14 +1,17 @@
 // native_launcher.h - the SwiftUI launcher Apple builds draw over the SDL
 // window (host/launcher/apple/*.swift) when the game repository ships a
-// launcher-games.json. The C++ host keeps pumping SDL events while it is up;
-// other targets, and games without the config, keep the canvas launcher.
+// launcher-games.json. The C++ host keeps pumping SDL events while it is up.
+// Linux draws the same launcher in the window itself (host/launcher/linux/),
+// reading the window's events in recomp_native_launcher_poll. Other targets,
+// and games without the config, keep the canvas launcher.
 #pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Presents the launcher in `native_window` (NSWindow * or UIWindow *).
+// Presents the launcher in `native_window` (NSWindow * or UIWindow *; the
+// SDL_Window * on Linux).
 // `config_path` names launcher-games.json, `modules` the comma-separated game
 // modules this app can run (RECOMP_GAME_ID first),
 // `known_exe` the executable the host already resolved ("" when none) and
@@ -32,6 +35,9 @@ void recomp_native_launcher_end(void);
 
 #include <string>
 struct SDL_Window;
+namespace gpu {
+class Device;
+}
 namespace launcher {
 struct NativeChoice {
     std::string exe, root, game, module;
@@ -40,7 +46,11 @@ struct NativeChoice {
 bool native_available(const std::string &config_path);
 // Runs the native launcher: 1 once the player picked a game (`out` filled),
 // 0 when they closed it, -1 when it could not be shown (use the canvas one).
+// On Linux it presents through `device` and the window's `native_surface`, as
+// the canvas launcher does (SDL's window surface without a device); Apple's
+// draws with SwiftUI and leaves them be.
 int native_run(SDL_Window *window, const std::string &config_path, const std::string &modules,
-               const std::string &known_exe, const std::string &profile_dir, NativeChoice *out);
+               const std::string &known_exe, const std::string &profile_dir, NativeChoice *out,
+               gpu::Device *device = nullptr, void *native_surface = nullptr);
 } // namespace launcher
 #endif

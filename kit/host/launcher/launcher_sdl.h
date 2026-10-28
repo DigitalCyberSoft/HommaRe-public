@@ -4,16 +4,13 @@
 // launcher_platform_android.cpp is Android, and host/sdl/platform_ui_ios.mm
 // holds the iPadOS one.
 #pragma once
+#include "../gpu/gpu.h"
 #include "launcher_ui.h"
 
 #include <SDL3/SDL.h>
 
 #include <memory>
 #include <string>
-
-namespace gpu {
-class Device;
-}
 
 namespace launcher {
 
@@ -39,6 +36,23 @@ std::string run(SDL_Window *window, gpu::Device *device, void *native_surface, P
 
 // This target's platform.
 std::unique_ptr<Platform> make_platform(SDL_Window *window);
+
+// Puts a canvas in the window: through a swapchain on `device`, or through
+// SDL's window surface without one. The native launcher on Linux
+// (linux/bridge.cpp) shows its frames with it too.
+struct Presenter {
+    gpu::Device *device = nullptr;
+    gpu::Swapchain chain;
+    gpu::Texture texture;
+    gpu::Format format = gpu::Format::BGRA8;
+    int w = 0, h = 0, tex_w = 0, tex_h = 0;
+    SDL_Window *window = nullptr; // software presentation when there is no device
+
+    bool open(void *surface, int width, int height);
+    void resize(int width, int height);
+    void show(const Canvas &c);
+    void close();
+};
 
 // Whether the player asked for the launcher at start: --launcher, the
 // RECOMP_LAUNCHER switch, or Shift or Alt held.

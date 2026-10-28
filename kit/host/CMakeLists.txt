@@ -273,6 +273,61 @@ if(APPLE AND RECOMP_NATIVE_LAUNCHER)
     endif()
   endif()
 endif()
+# The same launcher on Linux, drawn by the host itself (host/launcher/linux/):
+# the canvas launcher's window with the game's own textures and TrueType
+# text, installing from GOG installers with the system's innoextract. Its
+# words are the SwiftUI launcher's, apple/launcher-strings.json, embedded.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND RECOMP_NATIVE_LAUNCHER)
+  set(pop_strings_cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/launcher_strings.cpp)
+  add_custom_command(
+    OUTPUT ${pop_strings_cpp}
+    COMMAND ${CMAKE_COMMAND} -DOUT=${pop_strings_cpp} -DNAMESPACE=launcher::native
+            "-DENTRIES=launcher_strings_json=${HOST}/launcher/apple/launcher-strings.json"
+            -P ${POP_ROOT}/cmake/EmbedFiles.cmake
+    DEPENDS ${POP_ROOT}/cmake/EmbedFiles.cmake ${HOST}/launcher/apple/launcher-strings.json
+    COMMENT "Embedding the launcher's strings"
+    VERBATIM)
+  # Everything but the window, which the tests build too.
+  set(POP_NATIVE_LAUNCHER_CORE ${HOST}/launcher/linux/config.cpp ${HOST}/launcher/linux/detect.cpp
+                               ${HOST}/launcher/linux/installer.cpp ${HOST}/launcher/linux/skin.cpp
+                               ${HOST}/launcher/linux/l10n.cpp ${HOST}/launcher/linux/text.cpp
+                               ${HOST}/launcher/linux/layout.cpp ${pop_strings_cpp})
+  add_library(launcher_native OBJECT ${POP_NATIVE_LAUNCHER_CORE} ${HOST}/launcher/linux/model.cpp
+                                     ${HOST}/launcher/linux/view.cpp ${HOST}/launcher/linux/bridge.cpp)
+  target_include_directories(launcher_native PRIVATE ${POP_ROOT} ${POP_ROOT}/runtime ${CMAKE_BINARY_DIR}/generated)
+  target_compile_options(launcher_native PRIVATE ${POP_WARN_STRICT})
+  pop_link_sdl(launcher_native)
+  pop_optimize(launcher_native 2)
+
+  # Its portable part over fake installs and paks in a scratch folder: no
+  # window, no game. The faces the app takes from the runtime (Open Sans),
+  # embedded again for them.
+  set(pop_test_fonts_cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/native_launcher_test_fonts.cpp)
+  set(pop_fonts_dir ${POP_ROOT}/third_party/fonts/opensans)
+  add_custom_command(
+    OUTPUT ${pop_test_fonts_cpp}
+    COMMAND ${CMAKE_COMMAND} -DOUT=${pop_test_fonts_cpp} -DNAMESPACE=gdi
+            "-DENTRIES=bundled_sans_regular=${pop_fonts_dir}/OpenSans-Regular.ttf|bundled_sans_semibold=${pop_fonts_dir}/OpenSans-Semibold.ttf"
+            -P ${POP_ROOT}/cmake/EmbedFiles.cmake
+    DEPENDS ${POP_ROOT}/cmake/EmbedFiles.cmake ${pop_fonts_dir}/OpenSans-Regular.ttf
+            ${pop_fonts_dir}/OpenSans-Semibold.ttf
+    COMMENT "Embedding the bundled fonts for the launcher tests"
+    VERBATIM)
+  foreach(pop_test native_launcher_tests native_installer_tests native_skin_tests)
+    add_executable(${pop_test} ${HOST}/tests/${pop_test}.cpp ${POP_NATIVE_LAUNCHER_CORE} ${pop_test_fonts_cpp}
+                               ${HOST}/controls/json.cpp ${POP_ROOT}/mods/font6x8.cpp)
+    target_include_directories(${pop_test} PRIVATE ${POP_ROOT} ${POP_ROOT}/runtime ${CMAKE_BINARY_DIR}/generated)
+    target_compile_options(${pop_test} PRIVATE ${POP_WARN_STRICT})
+    target_link_libraries(${pop_test} PRIVATE launcher_core recomp_miniz recomp_platform)
+    pop_optimize(${pop_test} 1)
+    pop_test_binary(${pop_test})
+    add_test(NAME ${pop_test} COMMAND ${pop_test} WORKING_DIRECTORY ${POP_ROOT})
+    set_tests_properties(${pop_test} PROPERTIES LABELS nogame)
+  endforeach()
+  # The model and its screens too, drawn on a canvas; SDL for the key codes.
+  target_sources(native_launcher_tests PRIVATE ${HOST}/launcher/linux/model.cpp ${HOST}/launcher/linux/view.cpp)
+  pop_link_sdl(native_launcher_tests)
+endif()
 if(IOS)
   set(POP_PLATFORM_UI ${HOST}/sdl/platform_ui_ios.mm)
   list(APPEND FW_METAL "-framework UIKit" "-framework UniformTypeIdentifiers" "-framework CoreHaptics")
@@ -338,10 +393,14 @@ if(TARGET recomp_gen)
   if(TARGET launcher_native)
     target_link_libraries(recomp_app PRIVATE launcher_native)
     target_compile_definitions(recomp_app PRIVATE RECOMP_NATIVE_LAUNCHER=1)
+    if(NOT APPLE)
+      # host/launcher/linux/: it reads the window's events itself.
+      target_compile_definitions(recomp_app PRIVATE RECOMP_NATIVE_LAUNCHER_SDL=1)
+    endif()
     # The app links as C++; the Swift objects autolink swiftCore, SwiftUI and
     # the rest, which live in the SDK (and in the OS at run time).
     set_target_properties(recomp_app PROPERTIES LINKER_LANGUAGE CXX)
-    if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    if(APPLE AND NOT CMAKE_GENERATOR STREQUAL "Xcode")
       set(pop_sdk "${CMAKE_OSX_SYSROOT}")
       if(NOT IS_DIRECTORY "${pop_sdk}")
         execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE pop_sdk OUTPUT_STRIP_TRAILING_WHITESPACE)
