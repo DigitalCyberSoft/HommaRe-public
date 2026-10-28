@@ -114,6 +114,16 @@ if(POP_HAVE_GEN)
     list(APPEND POP_GEN_AUX_TARGETS ${aux_target})
     message(STATUS "Auxiliary module translation: ${dir}")
   endforeach()
+  # The web: the translation's tail calls (JUMP_FN) become return_call, which
+  # the WebAssembly backend leaves as call + return before a shared return
+  # block (tools/wasm_tail_calls.py). The archive is rewritten whenever it is.
+  if(EMSCRIPTEN)
+    foreach(gen_target recomp_gen ${POP_GEN_AUX_TARGETS})
+      add_custom_command(TARGET ${gen_target} POST_BUILD
+        COMMAND ${Python3_EXECUTABLE} ${POP_ROOT}/tools/wasm_tail_calls.py $<TARGET_FILE:${gen_target}>
+        VERBATIM)
+    endforeach()
+  endif()
   # The game's native replacements (game.toml [translate] native).
   if(RECOMP_NATIVE_HEADER AND NOT POP_TRANSLATE STREQUAL "STUB")
     target_sources(recomp_gen PRIVATE ${RECOMP_NATIVE_SOURCES})

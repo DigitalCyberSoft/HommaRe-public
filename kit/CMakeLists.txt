@@ -45,6 +45,12 @@ if(EMSCRIPTEN)
   # EM_ASM and EM_JS, in SDL and in the web host, need the GNU dialects.
   set(CMAKE_C_EXTENSIONS ON)
   set(CMAKE_CXX_EXTENSIONS ON)
+  # WebAssembly's tail calls (return_call): the translation continues a guest
+  # jump into another function with JUMP_FN, a call in tail position that a
+  # native build makes a jump. Without them each one grows the browser's
+  # stack, and a loop spread over two functions overflows it.
+  add_compile_options(-mtail-call)
+  add_link_options(-mtail-call)
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))

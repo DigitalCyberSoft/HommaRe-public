@@ -5,6 +5,12 @@
 - The web build builds again: zlib (`runtime/legacy_dlls.cpp`) is Emscripten's
   port, and the web keeps function names (`--profiling-funcs`) instead of DWARF,
   whose sections for a translated game would be several times its code.
+- The translation's tail calls (`JUMP_FN`) are WebAssembly tail calls
+  (`-mtail-call`). The backend emits `return_call` only where the call and the
+  return share a block, so `tools/wasm_tail_calls.py` rewrites the
+  `call; return` pairs left before a shared return block in the translation's
+  archives, in place, after each build of them. Without it a guest loop spread
+  over two functions overflowed the browser's stack within a second.
 
 ## Renaming an app
 
