@@ -190,9 +190,14 @@ void test_l10n() {
     CHECK(t("play") == "Играть");
     CHECK(bytes(4076506937) == "4,08 ГБ");
     os_setenv("RECOMP_LAUNCHER_LANG", "en");
+#ifdef _WIN32
+    // Windows shows the path as it is, whatever HOME says (Git Bash sets one).
+    CHECK(location("C:/Users/x/Games/x") == "C:/Users/x/Games/x");
+#else
     const char *home = getenv("HOME");
     if (home && *home && strcmp(home, "/") != 0)
         CHECK(location(std::string(home) + "/Games/x") == "~/Games/x");
+#endif
     CHECK(location("/opt/x") == "/opt/x");
 }
 
