@@ -172,9 +172,7 @@ prompt_title = "ubi-gs server"
 prompt_text = """Ubisoft closed the official Heroes of Might and Magic V servers in 2015. \
 ubi-gs is a community re-implementation of them (github.com/michal-kapala/ubi-gs).
 Someone has to run it, and every player who wants to play together must use the same \
-server. Whoever runs it puts the server's public address in its servers.ini \
-(gsconnect/static/homm5/servers.ini); with the default 127.0.0.1 only players on \
-that same machine can reach it.
+server.
 ubigs.wayofharm.com is the default community server; type another address to use a different one."""
 # Offered in the prompt while the player has used no server yet.
 default_server = "ubigs.wayofharm.com"
