@@ -142,6 +142,10 @@ bool scrypt(const void *pw, size_t pw_len, const void *salt, size_t salt_len, ui
     const size_t words = size_t(32) * r; // one 128r-byte block
     std::vector<uint8_t> b;
     std::vector<uint32_t> v, x, y;
+    // A 32-bit size_t (wasm32) cannot hold 128·r·N bytes at the top of the
+    // range; the product would wrap and leave v too small.
+    if (n > v.max_size() / words)
+        return false;
     try {
         b.resize(size_t(128) * r * p);
         v.resize(words * n);
