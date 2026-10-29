@@ -14,6 +14,8 @@
 //   binding 3   uniform PSP (D9PSParams, d3d9_msl.h)
 //   binding 4+i combined image sampler, stage i (0-15): sampler2D,
 //               samplerCube, or sampler2DShadow for a depth texture
+//   binding 20+k storage buffer, vertex fetch only (VFetchLayout): the
+//               game's buffers d9_b0..d9_b3, then (24) the check's d9_chk
 //
 // N is constant_registers(program): each program declares only what it
 // reads, so the renderer binds N * 16 bytes of constants.
@@ -30,14 +32,19 @@ struct D9VkVSParams {
     float ascale[16][4]; // per input register: undoes normalization of integer formats
     int32_t bgra[4];     // [0]: input registers stored as RGBA whose D3D order is BGRA
     int32_t bconst[4][4];
+    uint32_t vtag[4]; // [0]: the vertex fetch check's tag (HostD9Draw::vfetch_tag)
 };
 
 namespace d9glsl {
 
 constexpr uint32_t kConstantRegisters = 256;
 constexpr uint32_t kSamplerBinding = 4;
+constexpr uint32_t kVFetchBinding = 20;
 
 bool vertex_source(const d9sh::Program &p, std::string *out, std::string *why);
+// The same with the vertex fetch prefix (d3d9_msl.h); prelude is the game's GLSL.
+bool vertex_source(const d9sh::Program &p, const d9msl::VFetchLayout &vf, const char *prelude,
+                   std::string *out, std::string *why);
 bool pixel_source(const d9sh::Program &p, const d9msl::PixelVariant &v, std::string *out,
                   std::string *why);
 // The float constant registers the program's source declares.

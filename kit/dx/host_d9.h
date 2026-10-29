@@ -162,17 +162,22 @@ typedef struct HostD9Draw {
 
 void host_d9_draw(const HostD9Draw *draw);
 
-// Vertex fetch: a game hands over MSL defining
+// Vertex fetch: a game hands over source, in the language the backend says,
+// defining in Metal Shading Language
 //   bool d9_vfetch(uint vid, device const uint *b0, device const uint *b1,
 //                  device const uint *b2, constant uint *b3, thread uint *w)
+// or in Vulkan GLSL, where b0..b3 are the buffer arrays `uint d9_b0[]`..`d9_b3[]`,
+//   bool d9_vfetch(uint vid, out uint w[N]) // N the vertex's words, stride / 4
 // which, for the vertex number `vid` of the one vertex buffer it was set up
 // for (dx/d3d9.cpp, d3d9_vfetch_pool), either returns false (the buffer holds
 // the vertex) or writes the vertex's words. b0..b3 are the buffers below,
 // written with host_d9_buffer_upload; the check buffer receives, per vertex,
 // its words and a tag. Supported only where the backend says so.
 #define HOST_D9_VFETCH_BUFFER(k) (0x7ff00000u + (k)) // k 0..3; 4 the check buffer
-int host_d9_vfetch_supported(void);
-void host_d9_vfetch_set_prelude(const char *msl); // once, before the first vfetch draw
+#define HOST_D9_VFETCH_MSL 1
+#define HOST_D9_VFETCH_GLSL 2
+int host_d9_vfetch_supported(void); // 0, or the language: HOST_D9_VFETCH_MSL or _GLSL
+void host_d9_vfetch_set_prelude(const char *source); // once, before the first vfetch draw
 const char *host_d9_vfetch_prelude(void);
 // The check buffer's contents once the GPU has finished a frame that wrote
 // it: calls `visit` from the render thread with the words and the newest tag
@@ -212,6 +217,15 @@ void host_d9_query_begin(uint32_t id);
 void host_d9_query_end(uint32_t id);
 int host_d9_query_result(uint32_t id, uint32_t *count);
 void host_d9_query_drop(uint32_t id);
+
+// Event queries: end marks the point the device has reached; done() is 1 once
+// the GPU has finished everything before it (and 1 for an event never
+// marked), 0 while it has not. A game that paces its dynamic buffers by them
+// must not see them done early: it would write over vertices a frame still
+// in flight reads.
+void host_d9_event_end(uint32_t id);
+int host_d9_event_done(uint32_t id);
+void host_d9_event_drop(uint32_t id);
 
 // Diagnostics: log every draw of the next frame and dump its textures, with
 // `tag` in the file names.

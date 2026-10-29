@@ -144,7 +144,9 @@ bool to_host(uint32_t a, uint32_t len, sockaddr_in *out) {
     if (!a || len < 8)
         return false;
     memset(out, 0, sizeof *out);
-    out->sin_len = sizeof *out;
+#ifdef __APPLE__
+    out->sin_len = sizeof *out; // BSD's length byte; Linux's sockaddr has none
+#endif
     out->sin_family = (sa_family_t)rd16(a);
     memcpy(&out->sin_port, g_mem + a + 2, 2);
     memcpy(&out->sin_addr, g_mem + a + 4, 4);
@@ -328,6 +330,54 @@ bool wait_fd(uint32_t s, short events, uint32_t timeout_ms) {
 
 // ------------------------------------------------------------- the calls --
 
+// A peer that closed a stream fails the send with EPIPE instead of raising
+// SIGPIPE: per socket on Apple (SO_NOSIGPIPE), per send elsewhere (MSG_NOSIGNAL).
+void no_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#else
+    (void)fd;
+#endif
+}
+#ifdef MSG_NOSIGNAL
+const int SEND_FLAGS = MSG_NOSIGNAL;
+#else
+const int SEND_FLAGS = 0;
+#endif
+
+// WinSock's SOL_SOCKET option numbers are BSD's, which Apple keeps and Linux
+// does not (its SO_REUSEADDR is 2, SO_BROADCAST 6...): the host's, or -1.
+int host_option(uint32_t name) {
+    switch (name) {
+    case 0x0001: return SO_DEBUG;
+    case 0x0002: return SO_ACCEPTCONN;
+    case 0x0004: return SO_REUSEADDR;
+    case 0x0008: return SO_KEEPALIVE;
+    case 0x0010: return SO_DONTROUTE;
+    case 0x0020: return SO_BROADCAST;
+    case 0x0080: return SO_LINGER;
+    case 0x0100: return SO_OOBINLINE;
+    case 0x1001: return SO_SNDBUF;
+    case 0x1002: return SO_RCVBUF;
+    case 0x1003: return SO_SNDLOWAT;
+    case 0x1004: return SO_RCVLOWAT;
+    case 0x1007: return SO_ERROR;
+    case 0x1008: return SO_TYPE;
+    default: return -1;
+    }
+}
+
+// Two copies of the game on one machine share a port, as Windows lets them.
+void reuse_port(int fd, int on) {
+#ifdef SO_REUSEPORT
+    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof on);
+#else
+    (void)fd;
+    (void)on;
+#endif
+}
+
 bool winsock_real() {
     static int on = -1;
     if (on < 0) {
@@ -353,8 +403,7 @@ void winsock_socket(X86 *c) {
         return;
     }
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-    int one = 1;
-    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+    no_sigpipe(fd);
     if (type == SOCK_DGRAM)
         relay_start();
     uint32_t h = g_next_handle++;
@@ -391,7 +440,7 @@ void winsock_bind(X86 *c) {
         // machine (simulators side by side): each hears the broadcasts.
         int on = 1;
         setsockopt(k->fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
-        setsockopt(k->fd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof on);
+        reuse_port(k->fd, on);
     }
     if (bind(k->fd, (sockaddr *)&a, sizeof a) != 0) {
         if (trace())
@@ -455,8 +504,7 @@ void winsock_accept(X86 *c) {
         int fd = accept(k->fd, (sockaddr *)&a, &len);
         if (fd >= 0) {
             fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-            int one = 1;
-            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+            no_sigpipe(fd);
             uint32_t h = g_next_handle++;
             Sock n;
             n.fd = fd;
@@ -493,8 +541,9 @@ static void do_send(X86 *c, bool to) {
         bool bcast = have_to && k->type == SOCK_DGRAM && is_broadcast(a.sin_addr);
         if (bcast)
             relay_send(k->fd, g_mem + buf, len, a);
-        ssize_t n = have_to ? sendto(k->fd, g_mem + buf, len, (int)(flags & 0x3), (sockaddr *)&a, sizeof a)
-                            : send(k->fd, g_mem + buf, len, (int)(flags & 0x3));
+        int host_flags = (int)(flags & 0x3) | SEND_FLAGS; // MSG_OOB, MSG_PEEK
+        ssize_t n = have_to ? sendto(k->fd, g_mem + buf, len, host_flags, (sockaddr *)&a, sizeof a)
+                            : send(k->fd, g_mem + buf, len, host_flags);
         // A broadcast the system refuses (iOS without the multicast
         // entitlement) still reached the relay's peers: report it sent.
         if (n < 0 && bcast && errno != EWOULDBLOCK)
@@ -637,7 +686,7 @@ void winsock_ioctlsocket(X86 *c) {
 }
 
 // setsockopt(s, level, name, val, len) / getsockopt(s, level, name, val, lenp).
-// SOL_SOCKET is 0xffff and the common option numbers are the BSD ones.
+// SOL_SOCKET is 0xffff and the option numbers are the BSD ones (host_option).
 void winsock_setsockopt(X86 *c) {
     Sock *k = find(arg(c, 0));
     uint32_t level = arg(c, 1), name = arg(c, 2), val = arg(c, 3), len = arg(c, 4);
@@ -652,18 +701,18 @@ void winsock_setsockopt(X86 *c) {
         case 0x1005: k->snd_timeout = v; set_eax(c, 0); return; // SO_SNDTIMEO (ms)
         case 0x1006: k->rcv_timeout = v; set_eax(c, 0); return; // SO_RCVTIMEO (ms)
         case 0x20: k->broadcast = v != 0; break;                // SO_BROADCAST
-        case 0xff7f: name = SO_LINGER; break;                   // SO_DONTLINGER
         default: break;
         }
-        if (name == SO_LINGER) {
-            struct linger l{arg(c, 2) == 0xff7f ? 0 : (int)(v & 0xffff), (int)(v >> 16)};
+        int host = host_option(name);
+        if (name == 0x80 || name == 0xff7f) { // SO_LINGER, SO_DONTLINGER
+            struct linger l{name == 0xff7f ? 0 : (int)(v & 0xffff), (int)(v >> 16)};
             setsockopt(k->fd, SOL_SOCKET, SO_LINGER, &l, sizeof l);
-        } else if (setsockopt(k->fd, SOL_SOCKET, (int)name, &iv, sizeof iv) != 0) {
+        } else if (host < 0 || setsockopt(k->fd, SOL_SOCKET, host, &iv, sizeof iv) != 0) {
             if (trace())
-                fprintf(stderr, "[sockets]   ignored: %s\n", strerror(errno));
+                fprintf(stderr, "[sockets]   ignored: %s\n", host < 0 ? "an unknown option" : strerror(errno));
         }
-        if (name == SO_REUSEADDR) // two copies on one machine, as Windows lets them share a port
-            setsockopt(k->fd, SOL_SOCKET, SO_REUSEPORT, &iv, sizeof iv);
+        if (name == 0x4) // SO_REUSEADDR
+            reuse_port(k->fd, iv);
     } else if (level == IPPROTO_TCP && name == 1) {
         setsockopt(k->fd, IPPROTO_TCP, TCP_NODELAY, &iv, sizeof iv);
     }
@@ -685,8 +734,8 @@ void winsock_getsockopt(X86 *c) {
         iv = (int)k->rcv_timeout;
     } else if (level == 0xffff && name == 0x1005) {
         iv = (int)k->snd_timeout;
-    } else if (level == 0xffff) {
-        getsockopt(k->fd, SOL_SOCKET, (int)name, &iv, &len);
+    } else if (level == 0xffff && host_option(name) >= 0) {
+        getsockopt(k->fd, SOL_SOCKET, host_option(name), &iv, &len);
     } else if (level == IPPROTO_TCP && name == 1) {
         getsockopt(k->fd, IPPROTO_TCP, TCP_NODELAY, &iv, &len);
     }

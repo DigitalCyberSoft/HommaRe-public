@@ -22,91 +22,85 @@ bool requested(int argc, char **argv) {
     return (SDL_GetModState() & (SDL_KMOD_SHIFT | SDL_KMOD_ALT)) != 0;
 }
 
-namespace {
-
-struct Presenter {
-    gpu::Device *device = nullptr;
-    gpu::Swapchain chain;
-    gpu::Texture texture;
-    gpu::Format format = gpu::Format::BGRA8;
-    int w = 0, h = 0, tex_w = 0, tex_h = 0;
-
-    bool open(void *surface, int width, int height) {
-        if (!device) {
-            w = width;
-            h = height;
-            return SDL_GetWindowSurface(window) != nullptr;
-        }
-        chain = device->create_swapchain(surface, width, height);
-        if (!chain)
-            return false;
-        format = device->swapchain_format(chain);
+bool Presenter::open(void *surface, int width, int height) {
+    if (!device) {
         w = width;
         h = height;
-        return true;
+        return SDL_GetWindowSurface(window) != nullptr;
     }
-    void resize(int width, int height) {
-        if (width == w && height == h)
+    chain = device->create_swapchain(surface, width, height);
+    if (!chain)
+        return false;
+    format = device->swapchain_format(chain);
+    w = width;
+    h = height;
+    return true;
+}
+
+void Presenter::resize(int width, int height) {
+    if (width == w && height == h)
+        return;
+    if (device)
+        device->resize(chain, width, height);
+    w = width;
+    h = height;
+}
+
+void Presenter::show(const Canvas &c) {
+    if (!device) {
+        SDL_Surface *dst = SDL_GetWindowSurface(window);
+        if (!dst)
             return;
-        if (device)
-            device->resize(chain, width, height);
-        w = width;
-        h = height;
+        SDL_Surface *src = SDL_CreateSurfaceFrom(
+            c.width(), c.height(),
+            format == gpu::Format::BGRA8 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_RGBA32,
+            static_cast<void *>(const_cast<uint8_t *>(c.pixels())), c.width() * 4);
+        if (src) {
+            SDL_BlitSurface(src, nullptr, dst, nullptr);
+            SDL_DestroySurface(src);
+        }
+        SDL_UpdateWindowSurface(window);
+        return;
     }
-    SDL_Window *window = nullptr; // software presentation when there is no device
-    void show(const Canvas &c) {
-        if (!device) {
-            SDL_Surface *dst = SDL_GetWindowSurface(window);
-            if (!dst)
-                return;
-            SDL_Surface *src = SDL_CreateSurfaceFrom(
-                c.width(), c.height(),
-                format == gpu::Format::BGRA8 ? SDL_PIXELFORMAT_BGRA32 : SDL_PIXELFORMAT_RGBA32,
-                static_cast<void *>(const_cast<uint8_t *>(c.pixels())), c.width() * 4);
-            if (src) {
-                SDL_BlitSurface(src, nullptr, dst, nullptr);
-                SDL_DestroySurface(src);
-            }
-            SDL_UpdateWindowSurface(window);
-            return;
-        }
-        if (!chain || c.width() <= 0 || c.height() <= 0)
-            return;
-        if (!texture || tex_w != c.width() || tex_h != c.height()) {
-            if (texture)
-                device->destroy(texture);
-            texture = device->create_texture(
-                {c.width(), c.height(), format, gpu::UsageSampled | gpu::UsageCpu, 1});
-            tex_w = c.width();
-            tex_h = c.height();
-        }
-        if (!texture)
-            return;
-        device->upload(texture, {0, 0, c.width(), c.height()}, c.pixels(), c.width() * 4);
-        gpu::Texture drawable = device->acquire(chain);
-        if (!drawable)
-            return;
-        gpu::TextureDesc d = device->describe(drawable);
-        const int cw = std::min(d.width, c.width()), ch = std::min(d.height, c.height());
-        gpu::CommandBuffer cb = device->begin();
-        device->blit(cb, texture, {0, 0, cw, ch}, drawable, 0, 0);
-        device->present(cb, chain, drawable, 0, nullptr);
-        device->commit(cb);
-        device->wait(cb);
-    }
-    void close() {
-        if (!device) {
-            SDL_DestroyWindowSurface(window);
-            return;
-        }
+    if (!chain || c.width() <= 0 || c.height() <= 0)
+        return;
+    if (!texture || tex_w != c.width() || tex_h != c.height()) {
         if (texture)
             device->destroy(texture);
-        texture = {};
-        if (chain)
-            device->destroy(chain);
-        chain = {};
+        texture = device->create_texture(
+            {c.width(), c.height(), format, gpu::UsageSampled | gpu::UsageCpu, 1});
+        tex_w = c.width();
+        tex_h = c.height();
     }
-};
+    if (!texture)
+        return;
+    device->upload(texture, {0, 0, c.width(), c.height()}, c.pixels(), c.width() * 4);
+    gpu::Texture drawable = device->acquire(chain);
+    if (!drawable)
+        return;
+    gpu::TextureDesc d = device->describe(drawable);
+    const int cw = std::min(d.width, c.width()), ch = std::min(d.height, c.height());
+    gpu::CommandBuffer cb = device->begin();
+    device->blit(cb, texture, {0, 0, cw, ch}, drawable, 0, 0);
+    device->present(cb, chain, drawable, 0, nullptr);
+    device->commit(cb);
+    device->wait(cb);
+}
+
+void Presenter::close() {
+    if (!device) {
+        SDL_DestroyWindowSurface(window);
+        return;
+    }
+    if (texture)
+        device->destroy(texture);
+    texture = {};
+    if (chain)
+        device->destroy(chain);
+    chain = {};
+}
+
+namespace {
 
 void write_ppm(const std::string &path, const Canvas &c, bool bgra) {
     FILE *f = fopen((path + ".part").c_str(), "wb");

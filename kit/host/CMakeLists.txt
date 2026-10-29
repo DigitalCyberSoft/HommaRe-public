@@ -273,6 +273,61 @@ if(APPLE AND RECOMP_NATIVE_LAUNCHER)
     endif()
   endif()
 endif()
+# The same launcher on Linux, drawn by the host itself (host/launcher/linux/):
+# the canvas launcher's window with the game's own textures and TrueType
+# text, installing from GOG installers with the system's innoextract. Its
+# words are the SwiftUI launcher's, apple/launcher-strings.json, embedded.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND RECOMP_NATIVE_LAUNCHER)
+  set(pop_strings_cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/launcher_strings.cpp)
+  add_custom_command(
+    OUTPUT ${pop_strings_cpp}
+    COMMAND ${CMAKE_COMMAND} -DOUT=${pop_strings_cpp} -DNAMESPACE=launcher::native
+            "-DENTRIES=launcher_strings_json=${HOST}/launcher/apple/launcher-strings.json"
+            -P ${POP_ROOT}/cmake/EmbedFiles.cmake
+    DEPENDS ${POP_ROOT}/cmake/EmbedFiles.cmake ${HOST}/launcher/apple/launcher-strings.json
+    COMMENT "Embedding the launcher's strings"
+    VERBATIM)
+  # Everything but the window, which the tests build too.
+  set(POP_NATIVE_LAUNCHER_CORE ${HOST}/launcher/linux/config.cpp ${HOST}/launcher/linux/detect.cpp
+                               ${HOST}/launcher/linux/installer.cpp ${HOST}/launcher/linux/skin.cpp
+                               ${HOST}/launcher/linux/l10n.cpp ${HOST}/launcher/linux/text.cpp
+                               ${HOST}/launcher/linux/layout.cpp ${pop_strings_cpp})
+  add_library(launcher_native OBJECT ${POP_NATIVE_LAUNCHER_CORE} ${HOST}/launcher/linux/model.cpp
+                                     ${HOST}/launcher/linux/view.cpp ${HOST}/launcher/linux/bridge.cpp)
+  target_include_directories(launcher_native PRIVATE ${POP_ROOT} ${POP_ROOT}/runtime ${CMAKE_BINARY_DIR}/generated)
+  target_compile_options(launcher_native PRIVATE ${POP_WARN_STRICT})
+  pop_link_sdl(launcher_native)
+  pop_optimize(launcher_native 2)
+
+  # Its portable part over fake installs and paks in a scratch folder: no
+  # window, no game. The faces the app takes from the runtime (Open Sans),
+  # embedded again for them.
+  set(pop_test_fonts_cpp ${CMAKE_CURRENT_BINARY_DIR}/generated/native_launcher_test_fonts.cpp)
+  set(pop_fonts_dir ${POP_ROOT}/third_party/fonts/opensans)
+  add_custom_command(
+    OUTPUT ${pop_test_fonts_cpp}
+    COMMAND ${CMAKE_COMMAND} -DOUT=${pop_test_fonts_cpp} -DNAMESPACE=gdi
+            "-DENTRIES=bundled_sans_regular=${pop_fonts_dir}/OpenSans-Regular.ttf|bundled_sans_semibold=${pop_fonts_dir}/OpenSans-Semibold.ttf"
+            -P ${POP_ROOT}/cmake/EmbedFiles.cmake
+    DEPENDS ${POP_ROOT}/cmake/EmbedFiles.cmake ${pop_fonts_dir}/OpenSans-Regular.ttf
+            ${pop_fonts_dir}/OpenSans-Semibold.ttf
+    COMMENT "Embedding the bundled fonts for the launcher tests"
+    VERBATIM)
+  foreach(pop_test native_launcher_tests native_installer_tests native_skin_tests)
+    add_executable(${pop_test} ${HOST}/tests/${pop_test}.cpp ${POP_NATIVE_LAUNCHER_CORE} ${pop_test_fonts_cpp}
+                               ${HOST}/controls/json.cpp ${POP_ROOT}/mods/font6x8.cpp)
+    target_include_directories(${pop_test} PRIVATE ${POP_ROOT} ${POP_ROOT}/runtime ${CMAKE_BINARY_DIR}/generated)
+    target_compile_options(${pop_test} PRIVATE ${POP_WARN_STRICT})
+    target_link_libraries(${pop_test} PRIVATE launcher_core recomp_miniz recomp_platform)
+    pop_optimize(${pop_test} 1)
+    pop_test_binary(${pop_test})
+    add_test(NAME ${pop_test} COMMAND ${pop_test} WORKING_DIRECTORY ${POP_ROOT})
+    set_tests_properties(${pop_test} PROPERTIES LABELS nogame)
+  endforeach()
+  # The model and its screens too, drawn on a canvas; SDL for the key codes.
+  target_sources(native_launcher_tests PRIVATE ${HOST}/launcher/linux/model.cpp ${HOST}/launcher/linux/view.cpp)
+  pop_link_sdl(native_launcher_tests)
+endif()
 if(IOS)
   set(POP_PLATFORM_UI ${HOST}/sdl/platform_ui_ios.mm)
   list(APPEND FW_METAL "-framework UIKit" "-framework UniformTypeIdentifiers" "-framework CoreHaptics")
@@ -356,17 +411,21 @@ if(TARGET recomp_gen)
   pop_link_sdl(recomp_app)
   pop_link_native_screens(recomp_app)
   set_target_properties(recomp_app PROPERTIES OUTPUT_NAME ${RECOMP_APP_NAME})
-  if(APPLE AND RECOMP_GAME_MODULES)
+  if(RECOMP_GAME_MODULES)
     # The launcher's app also runs the other games' modules (sdl/main.cpp).
     target_compile_definitions(recomp_app PRIVATE RECOMP_GAME_MODULES=1)
   endif()
   if(TARGET launcher_native)
     target_link_libraries(recomp_app PRIVATE launcher_native)
     target_compile_definitions(recomp_app PRIVATE RECOMP_NATIVE_LAUNCHER=1)
+    if(NOT APPLE)
+      # host/launcher/linux/: it reads the window's events itself.
+      target_compile_definitions(recomp_app PRIVATE RECOMP_NATIVE_LAUNCHER_SDL=1)
+    endif()
     # The app links as C++; the Swift objects autolink swiftCore, SwiftUI and
     # the rest, which live in the SDK (and in the OS at run time).
     set_target_properties(recomp_app PROPERTIES LINKER_LANGUAGE CXX)
-    if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    if(APPLE AND NOT CMAKE_GENERATOR STREQUAL "Xcode")
       set(pop_sdk "${CMAKE_OSX_SYSROOT}")
       if(NOT IS_DIRECTORY "${pop_sdk}")
         execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE pop_sdk OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -417,25 +476,26 @@ if(TARGET recomp_gen)
     # Desktop packages carry manifests beside statically linked core plugins.
     # This avoids shipping a plugin compiled for a different host platform.
     pop_builtin_mods(recomp_app RESOURCES $<TARGET_FILE_DIR:recomp_app>/resources)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND RECOMP_VIDEO)
-      # Keep staged FFmpeg libraries discoverable beside the executable.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND (RECOMP_VIDEO OR RECOMP_GAME_MODULES))
+      # Keep staged FFmpeg libraries (and the shared SDL) discoverable beside the executable.
       set_target_properties(recomp_app PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
     endif()
   endif()
 
   # The game as a module of a multi-game app (RECOMP_GAME_MODULES): the same
-  # host as lib<game.id>.dylib, entered through recomp_game_main by the app
-  # whose launcher picked it (sdl/main.cpp). It has no launcher of its own and
-  # finds its resources and profile from its own path. tools/assemble_games.py
-  # puts it, with its resources, into the app that hosts the launcher.
-  if(APPLE AND RECOMP_GAME_MODULES)
+  # host as libgame.<game.id>.dylib (.so), entered through recomp_game_main by
+  # the app whose launcher picked it (sdl/main.cpp). It has no launcher of its
+  # own and finds its resources and profile from its own path.
+  # tools/assemble_games.py puts it, with its resources, into the app that
+  # hosts the launcher.
+  if(RECOMP_GAME_MODULES)
     pop_host(recomp_game GEN UI_LAYER OPT 2 SHARED
       SOURCES ${POP_APP_SOURCES}
       LIBS ${POP_CORE_LIBS}
       FRAMEWORKS ${FW_METAL})
     pop_link_sdl(recomp_game)
     pop_link_native_screens(recomp_game)
-    if(NOT IOS)
+    if(APPLE AND NOT IOS)
       # The static SDL brought AppKit in for metal_surface.mm; the shared one does not.
       target_link_libraries(recomp_game PRIVATE "-framework AppKit")
     endif()
@@ -449,8 +509,18 @@ if(TARGET recomp_gen)
       INSTALL_RPATH "@loader_path"
       XCODE_ATTRIBUTE_LD_DYLIB_INSTALL_NAME "@rpath/libgame.${RECOMP_GAME_ID}.dylib"
       XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "@loader_path")
-    if(IOS)
+    if(IOS OR NOT APPLE)
       pop_builtin_mods(recomp_game)
+    endif()
+    if(NOT APPLE)
+      # ELF has one symbol namespace: the module's runtime and translation
+      # carry the same names as the app's, and must bind to their own
+      # (Mach-O's two-level namespace does this by itself), so the module
+      # exports recomp_game_main alone. SDL and FFmpeg sit beside the
+      # executable, one folder up from modules/.
+      target_link_options(recomp_game PRIVATE "-Wl,--version-script=${HOST}/sdl/game_module.map")
+      set_property(TARGET recomp_game APPEND PROPERTY LINK_DEPENDS ${HOST}/sdl/game_module.map)
+      set_target_properties(recomp_game PROPERTIES BUILD_RPATH "$ORIGIN/.." INSTALL_RPATH "$ORIGIN/..")
     endif()
   endif()
 

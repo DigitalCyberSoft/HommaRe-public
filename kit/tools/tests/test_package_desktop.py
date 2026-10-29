@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import tarfile
@@ -44,6 +45,38 @@ def test_stage_includes_core_manifests_for_builtin_plugins(tmp_path):
     assert not (manifest.parent / "display.dylib").exists()
     with tarfile.open(tmp_path / "out/StubRecomp-linux-x86_64.tar.gz") as tar:
         assert tar.extractfile("StubRecomp/resources/mods/core/display/mod.toml").read() == manifest.read_bytes()
+
+
+def test_stage_carries_linux_ui_mods_seed_and_launcher(tmp_path):
+    exe = tmp_path / "recomp_app"
+    exe.write_bytes(b"\x7fELF")
+    game = tmp_path / "game"
+    (game / "ui-mods").mkdir(parents=True)
+    for name in ("Widescreen", "PhoneUI"):
+        (game / "ui-mods" / (name + ".recipe")).write_text(name)
+    (game / "seed.cfg").write_text("seed")
+    (game / "launcher-manifests").mkdir()
+    (game / "launcher-manifests/base.json").write_text("{}")
+    (game / "launcher-games.json").write_text('{"games": []}')
+    cfg = {"game": {"app_name": "StubRecomp", "name": "Stub Game", "executable": "STUB.EXE"},
+           "dir": str(game), "launcher_config_dir": game,
+           "linux": {"ui_mods": ["Widescreen"], "profile_files": {"profiles/seed.cfg": "seed.cfg"}}}
+    stale = tmp_path / "out/StubRecomp/resources/ui-mods/TouchUI.recipe"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("an earlier build's")
+    with patch("platform.machine", return_value="x86_64"):
+        out = package_desktop.stage(exe, cfg, tmp_path / "out", system="Linux")
+    resources = out / "resources"
+    assert sorted(p.name for p in (resources / "ui-mods").iterdir()) == ["Widescreen.recipe"]
+    assert (resources / "profile-seed/profiles/seed.cfg").read_text() == "seed"
+    assert (resources / "launcher-games.json").is_file()
+    assert (resources / "launcher-manifests/base.json").is_file()
+    assert not (out / "libSDL3.so.0").exists()
+    with tarfile.open(tmp_path / "out/StubRecomp-linux-x86_64.tar.gz") as tar:
+        names = tar.getnames()
+    assert "StubRecomp/resources/ui-mods/Widescreen.recipe" in names
+    assert "StubRecomp/resources/launcher-manifests/base.json" in names
+    assert "StubRecomp/resources/ui-mods/TouchUI.recipe" not in names
 
 
 @pytest.mark.parametrize("machine,arch", [("x86_64", "x86_64"), ("AMD64", "x86_64"),
@@ -110,6 +143,30 @@ def test_stage_bundles_the_games_control_layouts(tmp_path):
         assert "StubRecomp/resources/controls/pad.json" in names
         assert "StubRecomp/resources/controls/pad.phone-portrait.json" in names
         assert not any(n.endswith("readme.txt") for n in names)
+
+
+def test_stage_bundles_the_native_launchers_config_on_linux(tmp_path):
+    """launcher-games.json and launcher-manifests/*.json land in resources/ (Linux only)."""
+    exe = tmp_path / "recomp_app"
+    exe.write_bytes(b"\x7fELF")
+    game_dir = tmp_path / "game"
+    (game_dir / "launcher-manifests").mkdir(parents=True)
+    (game_dir / "launcher-games.json").write_text('{"games": []}')
+    (game_dir / "launcher-manifests/gog-1-en.json").write_text('{"files": []}')
+    (game_dir / "launcher-manifests/notes.txt").write_text("not a manifest")
+    cfg = {"game": {"app_name": "StubRecomp", "name": "Stub Game", "executable": "STUB.EXE"},
+           "dir": str(game_dir), "launcher_config_dir": game_dir,
+           "linux": {"ui_mods": [], "profile_files": {}}}
+    with patch("platform.machine", return_value="x86_64"):
+        out = package_desktop.stage(exe, cfg, tmp_path / "out", system="Linux", game_dir=game_dir)
+    assert (out / "resources/launcher-games.json").read_text() == '{"games": []}'
+    assert {p.name for p in (out / "resources/launcher-manifests").iterdir()} == {"gog-1-en.json"}
+    with tarfile.open(tmp_path / "out/StubRecomp-linux-x86_64.tar.gz") as tar:
+        names = set(tar.getnames())
+        assert "StubRecomp/resources/launcher-games.json" in names
+        assert "StubRecomp/resources/launcher-manifests/gog-1-en.json" in names
+    win = package_desktop.stage(tmp_path / "recomp_app", cfg, tmp_path / "win", system="Windows", game_dir=game_dir)
+    assert not (win / "resources/launcher-games.json").exists()
 
 
 def test_stage_without_layouts_creates_no_controls_directory(tmp_path):
@@ -252,3 +309,30 @@ def test_build_packages_only_successful_desktop_apps(tmp_path, monkeypatch, syst
         build.main()
     assert error.value.code == 7
     assert not calls
+
+
+@pytest.mark.skipif(not shutil.which("cc") or package_desktop.platform.system() != "Linux",
+                    reason="needs a Linux C compiler")
+def test_package_runpath_keeps_only_origin(tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }\n")
+    binary = tmp_path / "app"
+    subprocess.run(["cc", str(source), "-o", str(binary),
+                    "-Wl,--enable-new-dtags,-rpath,$ORIGIN:/build/ffmpeg/lib:/build/_deps/sdl3-build"], check=True)
+    package_desktop.package_runpath(binary)
+    dynamic = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=True).stdout
+    assert "[$ORIGIN]" in dynamic and "/build/" not in dynamic
+    assert subprocess.run([str(binary)]).returncode == 0
+    package_desktop.package_runpath(binary)  # nothing left to change
+
+
+@pytest.mark.skipif(not shutil.which("cc") or package_desktop.platform.system() != "Linux",
+                    reason="needs a Linux C compiler")
+def test_package_runpath_removes_build_only_entries(tmp_path):
+    source = tmp_path / "main.c"
+    source.write_text("int main(void) { return 0; }\n")
+    binary = tmp_path / "app"
+    subprocess.run(["cc", str(source), "-o", str(binary), "-Wl,--enable-new-dtags,-rpath,/build/lib"], check=True)
+    package_desktop.package_runpath(binary)
+    dynamic = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=True).stdout
+    assert "RUNPATH" not in dynamic

@@ -84,9 +84,12 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
         inst_ext.push_back("VK_KHR_portability_enumeration");
         inst_flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     }
+    // SDL's offscreen driver (unattended runs on Linux) makes a headless
+    // surface; without the extension the presenter has nothing to draw to.
     for (const char *s :
          {"VK_KHR_surface", "VK_EXT_metal_surface", "VK_KHR_win32_surface", "VK_KHR_xlib_surface",
-          "VK_KHR_xcb_surface", "VK_KHR_wayland_surface", "VK_KHR_get_physical_device_properties2"})
+          "VK_KHR_xcb_surface", "VK_KHR_wayland_surface", "VK_EXT_headless_surface",
+          "VK_KHR_get_physical_device_properties2"})
         if (has_inst(s))
             inst_ext.push_back(s);
     std::vector<const char *> layers;
@@ -194,6 +197,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create() {
     f2.features.fillModeNonSolid = base.fillModeNonSolid;
     f2.features.occlusionQueryPrecise = base.occlusionQueryPrecise;
     f2.features.depthClamp = base.depthClamp;
+    // The vertex fetch check writes what it fetched from the vertex shader.
+    f2.features.vertexPipelineStoresAndAtomics = base.vertexPipelineStoresAndAtomics;
     d->enabled_features_ = f2.features;
     VkPhysicalDeviceVulkan13Features f13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     VkPhysicalDeviceDynamicRenderingFeaturesKHR fdr{

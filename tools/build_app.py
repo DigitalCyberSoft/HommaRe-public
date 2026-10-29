@@ -2,7 +2,7 @@
 """Build the app the player installs the games into: HommaRe with the three
 games' modules, no game file and no mod made from one, and check it.
 
-    tools/build_app.py --target app          # build/HommaRe.app (macOS)
+    tools/build_app.py --target app          # build/HommaRe.app (macOS), build/package/HommaRe (Linux)
     tools/build_app.py --target ios-sim      # build/ios-sim/.../HommaRe.app
     RECOMP_IOS_TEAM=<team> tools/build_app.py --target ios
     tools/build_app.py --target ios --unsigned   # build/HommaRe-iOS.ipa
@@ -13,8 +13,9 @@ kit/tools/build.py --game-modules --no-game-files --no-install --release
 expansions' modules go into the base game's app (kit/tools/assemble_games.py)
 and tools/check_bundle.py checks the result (--game compares it with your
 installs too). The launcher in it installs the games from the GOG offline
-installers (innoextract: a helper on the Mac, a library on iOS) and the
-interface mods are made from the recipes when a game starts. Install the iOS
+installers (innoextract: a helper on the Mac, a library on iOS, the system's
+on Linux) and the interface mods are made from the recipes when a game
+starts. Install the iOS
 app with `xcrun devicectl device install app --device <id> <app>` or
 `xcrun simctl install <udid> <app>`.
 
@@ -25,6 +26,7 @@ AltStore or SideStore sign it again with the player's Apple ID.
 """
 
 import argparse
+import platform as host_platform
 import subprocess
 import sys
 import tempfile
@@ -74,7 +76,8 @@ def main():
     args = p.parse_args()
     if args.unsigned and args.target != "ios":
         p.error("--unsigned is for --target ios")
-    platform = {"app": "macos"}.get(args.target, args.target)
+    desktop = "linux" if host_platform.system() == "Linux" else "macos"
+    platform = {"app": desktop}.get(args.target, args.target)
 
     if not args.skip_build:
         for game in GAMES:

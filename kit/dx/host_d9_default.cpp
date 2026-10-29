@@ -25,6 +25,14 @@ HOST_D9_DEFAULT void host_d9_buffer_upload(uint32_t, uint32_t, uint32_t, const u
                                            uint32_t) {}
 HOST_D9_DEFAULT void host_d9_buffer_drop(uint32_t) {}
 HOST_D9_DEFAULT void host_d9_draw(const HostD9Draw *) {}
+HOST_D9_DEFAULT int host_d9_vfetch_supported(void) {
+    return 0;
+}
+HOST_D9_DEFAULT void host_d9_vfetch_set_prelude(const char *) {}
+HOST_D9_DEFAULT const char *host_d9_vfetch_prelude(void) {
+    return nullptr;
+}
+HOST_D9_DEFAULT void host_d9_vfetch_check(HostD9VFetchVisit, void *) {}
 HOST_D9_DEFAULT int host_d9_admission_enabled(void) {
     return 0;
 }
@@ -45,3 +53,8 @@ HOST_D9_DEFAULT int host_d9_query_result(uint32_t, uint32_t *) {
     return -1;
 }
 HOST_D9_DEFAULT void host_d9_query_drop(uint32_t) {}
+HOST_D9_DEFAULT void host_d9_event_end(uint32_t) {}
+HOST_D9_DEFAULT int host_d9_event_done(uint32_t) {
+    return 1;
+}
+HOST_D9_DEFAULT void host_d9_event_drop(uint32_t) {}

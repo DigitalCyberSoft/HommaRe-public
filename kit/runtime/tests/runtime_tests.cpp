@@ -17,6 +17,7 @@
 #include "../../platform/os.h"
 #include "game_config.h"
 #include "../codepage.h"
+#include "../winsock.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +27,7 @@
 #include <map>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <set>
 #include <string>
 #include <thread>
@@ -6928,6 +6930,79 @@ static void test_delphi_dlls() {
 
 // zlib1.dll on the host's zlib, round trip through the guest's own z_stream,
 // and the offline stand-ins answer as failures, not as successes.
+// WinSock on the host's sockets (game.toml [game] sockets, runtime/winsock.cpp),
+// over loopback: WinSock's option numbers, guest addresses both ways, and a
+// send to a closed peer that fails instead of raising SIGPIPE.
+static void test_host_sockets(X86 *c) {
+    auto ws = [&](const char *name, const std::vector<uint32_t> &args) {
+        return call_import(c, "WSOCK32.dll", name, args);
+    };
+    const uint32_t BAD = 0xffffffffu, SOL = 0xffff;
+    uint32_t one = heap_alloc(4, true), val = heap_alloc(4, true), len = heap_alloc(4, true);
+    uint32_t addr = heap_alloc(16, true), from = heap_alloc(16, true), buf = heap_alloc(64, true);
+    wr32(one, 1);
+    auto loopback = [&](uint32_t a, uint16_t port_be) {
+        memset(g_mem + a, 0, 16);
+        wr16(a, 2); // AF_INET
+        wr16(a + 2, port_be);
+        wr32(a + 4, 0x0100007fu); // 127.0.0.1
+    };
+
+    uint32_t u = ws("socket", {2, 2, 0});
+    check(u != BAD, "socket(UDP) on the host's sockets -> %#x", u);
+    check(ws("setsockopt", {u, SOL, 0x20, one, 4}) == 0, "setsockopt SO_BROADCAST");
+    wr32(val, 0);
+    wr32(len, 4);
+    ws("getsockopt", {u, SOL, 0x20, val, len});
+    check(rd32(val) != 0, "SO_BROADCAST (WinSock's 0x20) reads back on");
+    ws("setsockopt", {u, SOL, 0x4, one, 4});
+    wr32(val, 0);
+    ws("getsockopt", {u, SOL, 0x4, val, len});
+    check(rd32(val) != 0, "SO_REUSEADDR (WinSock's 4) reads back on");
+    loopback(addr, 0);
+    check(ws("bind", {u, addr, 16}) == 0, "bind to 127.0.0.1");
+    wr32(len, 16);
+    check(ws("getsockname", {u, addr, len}) == 0 && rd16(addr) == 2 && rd16(addr + 2) != 0 &&
+              rd32(addr + 4) == 0x0100007fu,
+          "getsockname gives the guest's sockaddr_in");
+    gm_put_str(buf, "lobby", 64);
+    check(ws("sendto", {u, buf, 5, 0, addr, 16}) == 5, "sendto itself");
+    wr32(len, 16);
+    memset(g_mem + buf, 0, 64);
+    check(ws("recvfrom", {u, buf, 64, 0, from, len}) == 5 && gm_str(buf) == "lobby" &&
+              rd16(from) == 2 && rd32(from + 4) == 0x0100007fu,
+          "recvfrom gets the datagram and its sender");
+    check(ws("closesocket", {u}) == 0, "closesocket(UDP)");
+
+    uint32_t l = ws("socket", {2, 1, 0}), t = ws("socket", {2, 1, 0});
+    loopback(addr, 0);
+    wr32(len, 16);
+    check(l != BAD && t != BAD && ws("bind", {l, addr, 16}) == 0 && ws("listen", {l, 1}) == 0 &&
+              ws("getsockname", {l, addr, len}) == 0,
+          "a TCP listener on loopback");
+    ws("ioctlsocket", {t, 0x8004667Eu, one}); // FIONBIO: no guest wait in the test
+    uint32_t r = ws("connect", {t, addr, 16});
+    check(r == 0 || call_import(c, "WSOCK32.dll", "WSAGetLastError", {}) == 10035,
+          "connect starts (%#x)", r);
+    uint32_t p = ws("accept", {l, 0, 0});
+    check(p != BAD, "accept -> %#x", p);
+    ws("closesocket", {p});
+    // The peer is gone: a send fails (the first may still go out) and the
+    // process lives on, where a send without MSG_NOSIGNAL dies of SIGPIPE.
+    uint32_t sent = 0;
+    for (int i = 0; i < 20 && sent != BAD; ++i) {
+        sent = ws("send", {t, buf, 5, 0});
+        if (sent != BAD)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    uint32_t err = call_import(c, "WSOCK32.dll", "WSAGetLastError", {});
+    check(sent == BAD && (err == 10054 || err == 10053), "a send to a closed peer fails with %u", err);
+    ws("closesocket", {t});
+    ws("closesocket", {l});
+    for (uint32_t a : {one, val, len, addr, from, buf})
+        heap_free(a);
+}
+
 static void test_legacy_dlls(X86 *c) {
     printf("legacy DLLs\n");
     const uint32_t n = 4096;
@@ -6976,9 +7051,14 @@ static void test_legacy_dlls(X86 *c) {
     check(call_import(c, "WSOCK32.dll", "inet_addr", {dotted}) == 0xffffffffu,
           "inet_addr rejects 999");
     check(call_import(c, "WSOCK32.dll", "ord9", {0x1234}) == 0x3412, "htons swaps");
-    check(call_import(c, "WSOCK32.dll", "ord23", {2, 1, 0}) == 0xffffffffu,
-          "socket is INVALID_SOCKET");
-    check(call_import(c, "WSOCK32.dll", "ord111", {}) == 10050, "WSAGetLastError is WSAENETDOWN");
+    if (winsock_real())
+        test_host_sockets(c);
+    else {
+        check(call_import(c, "WSOCK32.dll", "ord23", {2, 1, 0}) == 0xffffffffu,
+              "socket is INVALID_SOCKET");
+        check(call_import(c, "WSOCK32.dll", "ord111", {}) == 10050,
+              "WSAGetLastError is WSAENETDOWN");
+    }
     check(call_import(c, "libcurl.dll", "curl_easy_init", {}) == 0, "curl_easy_init returns NULL");
     check(call_import(c, "dbghelp.dll", "SymInitialize", {0, 0, 1}) == 0, "SymInitialize fails");
     uint32_t uuid = heap_alloc(16, true);

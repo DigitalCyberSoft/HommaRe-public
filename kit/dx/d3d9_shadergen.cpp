@@ -1165,9 +1165,35 @@ const char *kVaryingsIn = "layout(location = 0) in vec4 i_d0;\n"
                           "layout(location = 10) in float i_fog;\n"
                           "layout(location = 11) in float i_fogz;\n";
 const char *kZeroes = "    for (int i_ = 0; i_ < 32; ++i_) r[i_] = vec4(0.0);\n";
+
+// vfetch_decode's GLSL: what the Vulkan renderer's vertex input hands the
+// shader for one element (vertex_format there), already in Direct3D's order.
+std::string vfetch_decode(uint32_t type, uint32_t offset) {
+    const std::string o = std::to_string(offset / 4), o1 = std::to_string(offset / 4 + 1);
+    const std::string o2 = std::to_string(offset / 4 + 2), o3 = std::to_string(offset / 4 + 3);
+    auto f = [](const std::string &i) { return "uintBitsToFloat(vw[" + i + "])"; };
+    switch (type) {
+    case 0: return "vec4(" + f(o) + ", 0.0, 0.0, 1.0)";
+    case 1: return "vec4(" + f(o) + ", " + f(o1) + ", 0.0, 1.0)";
+    case 2: return "vec4(" + f(o) + ", " + f(o1) + ", " + f(o2) + ", 1.0)";
+    case 3: return "vec4(" + f(o) + ", " + f(o1) + ", " + f(o2) + ", " + f(o3) + ")";
+    case 4: return "unpackUnorm4x8(vw[" + o + "]).zyxw";
+    case 5:
+    case 8: return "unpackUnorm4x8(vw[" + o + "])";
+    case 6: return "vec4(unpackSnorm2x16(vw[" + o + "]), 0.0, 1.0)";
+    case 7: return "vec4(unpackSnorm2x16(vw[" + o + "]), unpackSnorm2x16(vw[" + o1 + "]))";
+    }
+    return "vec4(0.0)";
+}
 } // namespace
 
 bool vertex_source(const d9sh::Program &p, std::string *out, std::string *why) {
+    return d9glsl::vertex_source(p, d9msl::VFetchLayout{}, nullptr, out, why);
+}
+
+bool vertex_source(const d9sh::Program &p, const d9msl::VFetchLayout &vf, const char *prelude,
+                   std::string *out, std::string *why) {
+    const bool fetch = prelude && vf.mask;
     if (!p.ok || p.pixel) {
         if (why)
             *why = p.ok ? "not a vertex shader" : p.why;
@@ -1181,7 +1207,18 @@ bool vertex_source(const d9sh::Program &p, std::string *out, std::string *why) {
          std::to_string(g.const_limit) +
          "]; };\n"
          "layout(std140, set = 0, binding = 1) uniform VSP { vec4 halfpix; vec4 ascale[16]; ivec4 "
-         "bgra; ivec4 bconst[4]; } P;\n";
+         "bgra; ivec4 bconst[4]; uvec4 vtag; } P;\n";
+    if (fetch) {
+        for (uint32_t k = 0; k < 4; ++k)
+            s += "layout(std430, set = 0, binding = " + std::to_string(kVFetchBinding + k) +
+                 ") readonly buffer D9VB" + std::to_string(k) + " { uint d9_b" + std::to_string(k) +
+                 "[]; };\n";
+        if (vf.check)
+            s += "layout(std430, set = 0, binding = " + std::to_string(kVFetchBinding + 4) +
+                 ") writeonly buffer D9VChk { uint d9_chk[]; };\n";
+        s += prelude;
+        s += "\n";
+    }
     const std::vector<uint32_t> order = d9msl::input_registers(p);
     const std::set<uint32_t> seen(order.begin(), order.end());
     for (uint32_t i : seen)
@@ -1202,6 +1239,23 @@ bool vertex_source(const d9sh::Program &p, std::string *out, std::string *why) {
         const std::string n = std::to_string(i);
         s += "    vv[" + n + "] = (((P.bgra.x >> " + n + ") & 1) != 0 ? v" + n + ".bgra : v" + n +
              ") * P.ascale[" + n + "];\n";
+    }
+    if (fetch) {
+        // The game's vertex, when it supplies one, in place of what the buffer holds.
+        const std::string n = std::to_string(vf.words), row = std::to_string(vf.words + 1);
+        s += "    {\n        uint vw[" + n + "];\n        uint vid = uint(gl_VertexIndex);\n"
+             "        if (d9_vfetch(vid, vw)) {\n";
+        for (uint32_t i : seen)
+            if (vf.mask >> i & 1)
+                s += "            vv[" + std::to_string(i) + "] = " +
+                     vfetch_decode(vf.type[i], vf.offset[i]) + " * P.ascale[" + std::to_string(i) +
+                     "];\n";
+        if (vf.check) {
+            s += "            for (uint k = 0u; k < " + n + "u; ++k)\n"
+                 "                d9_chk[vid * " + row + "u + k] = vw[k];\n"
+                 "            d9_chk[vid * " + row + "u + " + n + "u] = P.vtag.x;\n";
+        }
+        s += "        }\n    }\n";
     }
     s += g.body;
     s += "    gl_Position = opos;\n"

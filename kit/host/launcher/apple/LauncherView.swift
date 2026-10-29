@@ -727,7 +727,7 @@ struct WideLayout: View {
         let rail = min(340, max(270, size.width * 0.28))
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                Wordmark(title: model.title, tagline: model.config.tagline?.text)
+                Wordmark(title: model.title, tagline: model.config.platformTagline?.text)
                     .padding(.bottom, 30)
                 Text(L10n.games)
                     .font(.system(size: 11, weight: .semibold))
@@ -804,7 +804,7 @@ struct NarrowLayout: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Wordmark(title: model.title, tagline: model.config.tagline?.text)
+                    Wordmark(title: model.title, tagline: model.config.platformTagline?.text)
                         .padding(.horizontal, 22)
                         .padding(.top, 12)
                     TabView(selection: $model.selectedID) {

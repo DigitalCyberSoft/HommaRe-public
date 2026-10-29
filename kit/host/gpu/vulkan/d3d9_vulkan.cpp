@@ -266,6 +266,11 @@ bool vertex_format(uint32_t type, bool bgra_ok, VkFormat *fmt, float scale[4], b
     }
 }
 
+// One of the vertex fetch's buffers (dx/host_d9.h), which its shaders read as storage.
+bool vfetch_buffer(uint32_t id) {
+    return id - HOST_D9_VFETCH_BUFFER(0) < 5u;
+}
+
 // ---- resources -----------------------------------------------------------------
 
 struct VkFmt {
@@ -349,6 +354,27 @@ class VkRenderer final : public D9Backend {
     const char *name() const override {
         return "Vulkan";
     }
+    int vfetch() const override {
+        return vfetch_ ? HOST_D9_VFETCH_GLSL : 0;
+    }
+    // The vertex fetch check buffer (HOST_D9_VFETCH_BUFFER(4)), handed over once the frames
+    // that wrote it have finished.
+    void vfetch_check(HostD9VFetchVisit visit, void *user) override {
+        auto it = buffers_.find(HOST_D9_VFETCH_BUFFER(4));
+        if (it == buffers_.end() || !it->second.buf.map || vfetch_tags_.empty())
+            return;
+        poll();
+        const uint64_t done = completed_;
+        uint32_t done_tag = 0;
+        while (!vfetch_tags_.empty() && vfetch_tags_.front().first <= done) {
+            done_tag = vfetch_tags_.front().second;
+            vfetch_tags_.erase(vfetch_tags_.begin());
+        }
+        if (!done_tag)
+            return;
+        visit((const uint32_t *)(const void *)it->second.buf.map,
+              (uint32_t)(it->second.shadow.size() / 4), done_tag, user);
+    }
 
     explicit VkRenderer(VulkanDevice *device) : dev_(device), vk_(device->native_device()) {
         VkPhysicalDevice phys = device->native_physical();
@@ -359,6 +385,9 @@ class VkRenderer final : public D9Backend {
         precise_ = f.occlusionQueryPrecise;
         independent_blend_ = f.independentBlend;
         anisotropy_ = f.samplerAnisotropy;
+        vertex_stores_ = f.vertexPipelineStoresAndAtomics;
+        // The vertex fetch binds five storage buffers to the vertex stage.
+        vfetch_ = props_.limits.maxPerStageDescriptorStorageBuffers >= 5;
         auto supports = [&](VkFormat fmt, VkFormatFeatureFlags want, bool vertex) {
             VkFormatProperties fp;
             vkGetPhysicalDeviceFormatProperties(phys, fmt, &fp);
@@ -613,7 +642,8 @@ class VkRenderer final : public D9Backend {
             s.hi = std::max(s.hi, end);
         }
         const VkBufferUsageFlags usage =
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+            (vfetch_buffer(id) ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0);
         if (!b.buf.buffer || b.buf.size < total) {
             if (b.buf.buffer)
                 retire_buffer(b.buf, b.used);
@@ -659,6 +689,32 @@ class VkRenderer final : public D9Backend {
         }
         if (b.buf.map)
             memcpy(b.buf.map + offset, bytes, size);
+    }
+    void buffer_upload_inplace(uint32_t id, uint32_t total, uint32_t offset, const uint8_t *bytes,
+                               uint32_t size) override {
+        auto it = buffers_.find(id);
+        if (it == buffers_.end() || !it->second.buf.map || it->second.buf.size < total ||
+            offset + size > total || !bytes) {
+            buffer_upload(id, total, offset, bytes, size);
+            return;
+        }
+        // A dynamic vertex buffer filled batch by batch (Heroes V appends into
+        // 26 MB under NOOVERWRITE), and the vertex fetch's buffers, whose map
+        // changes with every part: replacing the whole buffer for every write
+        // a frame already drew from cost a new allocation and a copy of
+        // megabytes each time. The game writes only what no unfinished frame
+        // reads (event queries tell it which: dx/d3d9.cpp). The Metal
+        // renderer does the same.
+        Buf &b = it->second;
+        if (b.shadow.size() < total)
+            b.shadow.resize(total, 0);
+        memcpy(b.shadow.data() + offset, bytes, size);
+        const uint32_t end = offset + size;
+        for (SpareBuf &s : b.spares) {
+            s.lo = s.hi > s.lo ? std::min(s.lo, offset) : offset;
+            s.hi = std::max(s.hi, end);
+        }
+        memcpy(b.buf.map + offset, bytes, size);
     }
     void buffer_drop(uint32_t id) override {
         auto it = buffers_.find(id);
@@ -710,7 +766,12 @@ class VkRenderer final : public D9Backend {
                     variant.cube_mask |= (uint16_t)(1u << s);
             variant.projected_mask = (uint16_t)d.projected_mask;
         }
-        VkShaderModule vmod = module(vs_key, vp, variant, false);
+        d9msl::VFetchLayout vfl;
+        const d9msl::VFetchLayout *vf = d.vfetch ? vfetch_layout(d, vp, &vfl) : nullptr;
+        if (d.vfetch && !vf && vfetch_unfit_++ == 0)
+            fprintf(stderr, "d3d9 vulkan: a draw from the vertex fetch's buffer has an element "
+                            "type it cannot decode; such draws read the buffer as it is\n");
+        VkShaderModule vmod = module(vs_key, vp, variant, false, vf);
         VkShaderModule fmod = module(ps_key, pp, variant, true);
         if (!vmod || !fmod) {
             skip("untranslated shader");
@@ -828,6 +889,31 @@ class VkRenderer final : public D9Backend {
         vparams.halfpix[1] = d.viewport[3] ? -(63.0f / 64.0f) / d.viewport[3] : 0.0f;
         memcpy(vparams.ascale, layout.ascale, sizeof layout.ascale);
         vparams.bgra[0] = (int32_t)layout.bgra;
+        SetKey sk{};
+        if (vf) {
+            for (uint32_t k = 0; k < (vf->check ? 5u : 4u); ++k) {
+                auto b = buffers_.find(HOST_D9_VFETCH_BUFFER(k));
+                if (b == buffers_.end() || !b->second.buf.buffer) {
+                    skip("vertex fetch buffer missing");
+                    return;
+                }
+                if (b->second.buf.size > props_.limits.maxStorageBufferRange) {
+                    skip("vertex fetch buffer too large");
+                    return;
+                }
+                b->second.used = serial_;
+                sk.vfetch[k] = b->second.buf.buffer;
+            }
+            if (vf->check) {
+                vparams.vtag[0] = d.vfetch_tag;
+                if (vfetch_tags_.empty() || vfetch_tags_.back().first != serial_)
+                    vfetch_tags_.push_back({serial_, d.vfetch_tag});
+                else
+                    vfetch_tags_.back().second = d.vfetch_tag;
+                if (vfetch_tags_.size() > 64)
+                    vfetch_tags_.erase(vfetch_tags_.begin());
+            }
+        }
         D9PSParams pparams{};
         memcpy(pparams.bconst, d.pbool, sizeof pparams.bconst);
         pparams.alpha_func = rs[RS_ALPHATESTENABLE] ? (int32_t)rs[RS_ALPHAFUNC] : 8;
@@ -874,7 +960,6 @@ class VkRenderer final : public D9Backend {
             pp.sampler_mask = d9msl::pixel_sampler_mask(pp);
         }
         uint32_t used = (uint32_t)pp.sampler_mask;
-        SetKey sk{};
         sk.uniforms = u.buffer;
         sk.ranges[0] = vsize;
         sk.ranges[1] = sizeof vparams;
@@ -995,6 +1080,20 @@ class VkRenderer final : public D9Backend {
         end_query_slot();
         query_ = 0;
         queries_[id].ended = true;
+    }
+    bool events() const override {
+        return true;
+    }
+    uint64_t event_mark() override {
+        return cur_ ? cur_->serial : serial_;
+    }
+    bool event_done(uint64_t mark) override {
+        poll();
+        if (completed_ >= mark)
+            return true;
+        if (cur_ && cur_->serial <= mark)
+            flush(); // D3DGETDATA_FLUSH: the frame the mark is in goes to the GPU
+        return false;
     }
     int query_result(uint32_t id, uint32_t *count) override {
         auto it = queries_.find(id);
@@ -1554,6 +1653,14 @@ class VkRenderer final : public D9Backend {
         if (!cur_)
             return;
         end_pass();
+        if (!vfetch_tags_.empty() && vfetch_tags_.back().first == cur_->serial) {
+            // What the vertex fetch check wrote, for vfetch_check to read once the fence says so.
+            VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+            mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+            vkCmdPipelineBarrier(cur_->cb, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+                                 VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
+        }
         vkEndCommandBuffer(cur_->cb);
         vkResetFences(vk_, 1, &cur_->fence);
         cur_->submitted_at = now();
@@ -1879,22 +1986,58 @@ class VkRenderer final : public D9Backend {
     }
 
     // ---- shaders and pipelines ---------------------------------------------------
+    // Stream 0's elements feeding the shader's inputs, for the vertex fetch; null when one
+    // of them has a type it cannot decode.
+    const d9msl::VFetchLayout *vfetch_layout(const HostD9Draw &d, const d9sh::Program &vp,
+                                             d9msl::VFetchLayout *out) {
+        out->words = (uint8_t)std::min<uint32_t>(d.stream[0].stride / 4, 64);
+        out->check = d.vfetch == 2;
+        if (out->check && !vertex_stores_ && vfetch_unwritable_++ == 0)
+            fprintf(stderr, "d3d9 vulkan: the device cannot write from vertex shaders; the vertex "
+                            "fetch runs unchecked\n");
+        out->check = out->check && vertex_stores_;
+        for (const d9sh::DclIn &in : vp.inputs) {
+            if (in.type != d9sh::R_INPUT)
+                continue;
+            const uint32_t reg = in.index & 15;
+            for (uint32_t i = 0; i + 8 <= d.decl_size; i += 8) {
+                const uint8_t *e = d.decl + i;
+                const uint16_t stream = (uint16_t)(e[0] | e[1] << 8);
+                if (stream == 0xff)
+                    break;
+                const uint16_t offset = (uint16_t)(e[2] | e[3] << 8);
+                if (e[6] != in.usage || e[7] != in.usage_index || stream >= 8)
+                    continue;
+                if (stream == 0) {
+                    if (!d9msl::vfetch_type_ok(e[4]) || offset >= out->words * 4u || (offset & 3))
+                        return nullptr;
+                    out->type[reg] = e[4];
+                    out->offset[reg] = (uint8_t)offset;
+                    out->mask |= (uint16_t)(1u << reg);
+                }
+                break;
+            }
+        }
+        return out->mask && out->words ? out : nullptr;
+    }
+
     VkShaderModule module(uint64_t code_key, const d9sh::Program &p, const d9msl::PixelVariant &v,
-                          bool pixel) {
-        uint64_t key = mix(code_key, pixel ? v.key() + 1 : 0);
+                          bool pixel, const d9msl::VFetchLayout *vf = nullptr) {
+        uint64_t key = mix(code_key, pixel ? v.key() + 1 : vf ? vf->key() : 0);
         auto it = modules_.find(key);
         if (it != modules_.end())
             return it->second;
         std::string src, why;
-        bool ok =
-            pixel ? d9glsl::pixel_source(p, v, &src, &why) : d9glsl::vertex_source(p, &src, &why);
+        bool ok = pixel ? d9glsl::pixel_source(p, v, &src, &why)
+                  : vf  ? d9glsl::vertex_source(p, *vf, host_d9_vfetch_prelude(), &src, &why)
+                        : d9glsl::vertex_source(p, &src, &why);
         VkShaderModule m = VK_NULL_HANDLE;
         if (ok) {
             if (const char *dir = recomp_env("D3D9_SHADER_DUMP")) {
                 char path[1024];
                 snprintf(path, sizeof path, "%s/%016llx_%016llx.%s", dir,
-                         (unsigned long long)code_key, (unsigned long long)v.key(),
-                         pixel ? "frag" : "vert");
+                         (unsigned long long)code_key,
+                         (unsigned long long)(vf ? vf->key() : v.key()), pixel ? "frag" : "vert");
                 if (FILE *f = fopen(path, "w")) {
                     fputs(src.c_str(), f);
                     fclose(f);
@@ -2155,21 +2298,25 @@ class VkRenderer final : public D9Backend {
     }
 
     bool init_layout() {
-        VkDescriptorSetLayoutBinding b[4 + 16];
-        for (uint32_t i = 0; i < 4 + 16; ++i) {
+        VkDescriptorSetLayoutBinding b[4 + 16 + 5];
+        for (uint32_t i = 0; i < 4 + 16 + 5; ++i) {
             b[i] = {};
             b[i].binding = i;
             b[i].descriptorCount = 1;
             if (i < 4) {
                 b[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
                 b[i].stageFlags = i < 2 ? VK_SHADER_STAGE_VERTEX_BIT : VK_SHADER_STAGE_FRAGMENT_BIT;
-            } else {
+            } else if (i < d9glsl::kVFetchBinding) {
                 b[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                 b[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            } else {
+                // Left unwritten by every draw but a vertex fetch's, whose shaders alone use them.
+                b[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                b[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
             }
         }
         VkDescriptorSetLayoutCreateInfo lci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        lci.bindingCount = 4 + 16;
+        lci.bindingCount = 4 + 16 + (vfetch_ ? 5 : 0);
         lci.pBindings = b;
         if (vkCreateDescriptorSetLayout(vk_, &lci, nullptr, &set_layout_) != VK_SUCCESS)
             return false;
@@ -2188,6 +2335,7 @@ class VkRenderer final : public D9Backend {
         uint64_t ranges[4];
         VkImageView views[16];
         VkSampler samplers[16];
+        VkBuffer vfetch[5]; // HOST_D9_VFETCH_BUFFER(k), for a vertex fetch's draw
     };
     VkDescriptorSet descriptor_set(const SetKey &k) {
         const uint64_t key = fnv(&k, sizeof k);
@@ -2215,9 +2363,9 @@ class VkRenderer final : public D9Backend {
             if (vkAllocateDescriptorSets(vk_, &ai, &set) == VK_SUCCESS)
                 break;
         }
-        VkDescriptorBufferInfo bufs[4];
+        VkDescriptorBufferInfo bufs[4 + 5];
         VkDescriptorImageInfo imgs[16];
-        VkWriteDescriptorSet writes[20];
+        VkWriteDescriptorSet writes[4 + 16 + 5];
         for (uint32_t i = 0; i < 4; ++i) {
             bufs[i] = {k.uniforms, 0, k.ranges[i]};
             writes[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -2236,18 +2384,30 @@ class VkRenderer final : public D9Backend {
             writes[4 + i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             writes[4 + i].pImageInfo = &imgs[i];
         }
-        vkUpdateDescriptorSets(vk_, 20, writes, 0, nullptr);
+        uint32_t n = 4 + 16;
+        for (uint32_t j = 0; j < 5 && k.vfetch[j]; ++j) {
+            bufs[4 + j] = {k.vfetch[j], 0, VK_WHOLE_SIZE};
+            writes[n] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            writes[n].dstSet = set;
+            writes[n].dstBinding = d9glsl::kVFetchBinding + j;
+            writes[n].descriptorCount = 1;
+            writes[n].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writes[n].pBufferInfo = &bufs[4 + j];
+            ++n;
+        }
+        vkUpdateDescriptorSets(vk_, n, writes, 0, nullptr);
         cur_->sets[key] = set;
         return set;
     }
     static constexpr uint32_t kSetsPerPool = 1024;
     VkDescriptorPool make_descriptor_pool() {
-        VkDescriptorPoolSize sizes[2] = {
+        VkDescriptorPoolSize sizes[3] = {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 4 * kSetsPerPool},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16 * kSetsPerPool}};
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16 * kSetsPerPool},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5 * kSetsPerPool}};
         VkDescriptorPoolCreateInfo dpi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         dpi.maxSets = kSetsPerPool;
-        dpi.poolSizeCount = 2;
+        dpi.poolSizeCount = vfetch_ ? 3 : 2;
         dpi.pPoolSizes = sizes;
         VkDescriptorPool pool = VK_NULL_HANDLE;
         if (vkCreateDescriptorPool(vk_, &dpi, nullptr, &pool) != VK_SUCCESS)
@@ -2637,6 +2797,7 @@ class VkRenderer final : public D9Backend {
     bool bc_ = false, wireframe_ = false, precise_ = false, independent_blend_ = false,
          anisotropy_ = false;
     bool bgra_vertex_ = false;
+    bool vfetch_ = false, vertex_stores_ = false;
     VkFormat depth_format_ = VK_FORMAT_D32_SFLOAT_S8_UINT;
     uint64_t uniform_align_ = 16;
     VkDescriptorSetLayout set_layout_ = VK_NULL_HANDLE;
@@ -2689,6 +2850,9 @@ class VkRenderer final : public D9Backend {
     std::vector<uint8_t> scratch_;
     std::unordered_map<uint32_t, Query> queries_;
     uint32_t query_ = 0;
+    // Frames that wrote the vertex fetch check: serial, tag.
+    std::vector<std::pair<uint64_t, uint32_t>> vfetch_tags_;
+    uint64_t vfetch_unfit_ = 0, vfetch_unwritable_ = 0;
 
     uint64_t draws_ = 0, presents_ = 0, stat_calls_ = 0;
     double report_time_ = 0, gpu_wait_s_ = 0, gpu_s_ = 0;

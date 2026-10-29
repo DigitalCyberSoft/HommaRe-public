@@ -12,15 +12,19 @@ project(PopulousRecomp LANGUAGES C CXX)
 if(APPLE)
   enable_language(OBJCXX)
 endif()
-# The SwiftUI launcher (host/launcher/apple/) on macOS and iOS; the canvas
-# launcher everywhere else and with this off.
-option(RECOMP_NATIVE_LAUNCHER "Build the SwiftUI launcher on Apple platforms" ON)
-# Several games in one app (Apple): each game also builds as a module,
-# libgame.<id>.dylib with recomp_game_main for an entry, and the app the
+# The SwiftUI launcher (host/launcher/apple/) on macOS and iOS, the same one
+# drawn by the host on Linux (host/launcher/linux/); the canvas launcher
+# everywhere else and with this off.
+option(RECOMP_NATIVE_LAUNCHER "Build the native launcher (SwiftUI on Apple platforms, the host's on Linux)" ON)
+# Several games in one app (Apple, Linux): each game also builds as a module,
+# libgame.<id>.dylib (.so) with recomp_game_main for an entry, and the app the
 # launcher runs in loads the module of the game the player picks
 # (host/sdl/main.cpp run_game_module, tools/assemble_games.py). Modules and the
 # app share one SDL, so SDL links as a shared library in this mode.
-option(RECOMP_GAME_MODULES "Build the game as a loadable module and link SDL shared (Apple)" OFF)
+option(RECOMP_GAME_MODULES "Build the game as a loadable module and link SDL shared (Apple, Linux)" OFF)
+if(RECOMP_GAME_MODULES AND NOT APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  message(FATAL_ERROR "RECOMP_GAME_MODULES is for Apple and Linux builds")
+endif()
 if(APPLE AND RECOMP_NATIVE_LAUNCHER)
   if(IOS AND NOT CMAKE_GENERATOR STREQUAL "Xcode" AND NOT CMAKE_Swift_COMPILER_TARGET)
     set(CMAKE_Swift_COMPILER_TARGET "arm64-apple-ios${CMAKE_OSX_DEPLOYMENT_TARGET}")
@@ -43,10 +47,16 @@ if(EMSCRIPTEN)
   set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-if(ANDROID)
-  # All static and object libraries feed the shared SDL application.
+if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+  # All static and object libraries feed the shared SDL application (Android)
+  # or a game module (Linux; Apple's code is position independent already).
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
+# $<LINK_LIBRARY:AS_NEEDED,lib>: a library recorded only when something
+# links against it (mods/CMakeLists.txt: libatomic, which an optimised build
+# rarely calls and a desktop may not have installed).
+set(CMAKE_LINK_LIBRARY_USING_AS_NEEDED "LINKER:--push-state,--as-needed" "<LINK_ITEM>" "LINKER:--pop-state")
+set(CMAKE_LINK_LIBRARY_USING_AS_NEEDED_SUPPORTED TRUE)
 
 # Optimization is a per-target decision (cmake/Warnings.cmake). The
 # configuration only decides whether -O0 is forced.

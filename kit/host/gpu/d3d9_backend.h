@@ -50,8 +50,9 @@ class D9Backend {
     virtual void buffer_drop(uint32_t id) = 0;
 
     virtual void draw(const HostD9Draw &d) = 0;
-    // Whether draw() honours HostD9Draw::vfetch (dx/host_d9.h).
-    virtual bool vfetch() const { return false; }
+    // Whether draw() honours HostD9Draw::vfetch (dx/host_d9.h): the language
+    // it takes the prelude in (HOST_D9_VFETCH_MSL, _GLSL), 0 when it does not.
+    virtual int vfetch() const { return 0; }
     // The vertex fetch check buffer, once the frames that wrote it are done.
     virtual void vfetch_check(HostD9VFetchVisit visit, void *user) { (void)visit, (void)user; }
     virtual void admission_accounting(const HostD9Accounting &) {}
@@ -73,6 +74,17 @@ class D9Backend {
     // 1 with *count set, 0 while its frame is still running, -1 for no result.
     virtual int query_result(uint32_t id, uint32_t *count) = 0;
     virtual void query_drop(uint32_t id) = 0;
+    // Event queries: a mark for the point the command stream has reached, and
+    // whether the GPU has finished everything before it, flushing what is
+    // recorded so a mark the game waits on gets there. A backend without a
+    // GPU timeline (events() false) has every mark done at once, and the
+    // game's thread never waits on the render thread to learn it.
+    virtual bool events() const { return false; }
+    virtual uint64_t event_mark() { return 0; }
+    virtual bool event_done(uint64_t mark) {
+        (void)mark;
+        return true;
+    }
 
     virtual void probe_next(const char *tag) = 0;
 };
