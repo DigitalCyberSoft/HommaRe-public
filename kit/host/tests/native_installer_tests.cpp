@@ -14,17 +14,18 @@
 #undef inflate
 
 #include <cstdio>
-#include <fcntl.h>
 #include <cstdlib>
 #include <cstring>
 #include <map>
 #include <set>
 #include <string>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <vector>
 #ifdef _WIN32
 #include <thread>
+#else
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 static int g_failures = 0, g_checks = 0;
