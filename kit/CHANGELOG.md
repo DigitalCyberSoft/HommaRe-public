@@ -1,5 +1,19 @@
 # Changelog
 
+## The same arithmetic on every host
+
+- Every target compiles with `-ffp-contract=off` (no FMA contraction, which
+  arm64 did and x86_64 did not) and `-fsigned-char`.
+- The guest's transcendental functions (FSIN, FCOS, FPTAN, FPATAN, FYL2X,
+  FYL2XP1, F2XM1 and the CRT's `_CI*` and `_libm_sse2_*` imports) are a
+  bundled subset of musl's libm (`third_party/musl-libm`), not the host C
+  library's; a NaN they return is the x86 CRT's. FSCALE of an out-of-range
+  scale gives x86's answer on arm64 too.
+- `fp_determinism_tests` hashes the conversions, rounding and libm results and
+  fails where a host computes differently.
+- A translation made before this keeps calling the host's libm until it is
+  regenerated (`tools/build.py --regenerate`).
+
 ## Sockets on every platform
 
 - `runtime/winsock.cpp` runs on the platform layer's sockets: `platform/os.h`

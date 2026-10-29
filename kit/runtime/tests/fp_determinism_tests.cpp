@@ -6,16 +6,23 @@
 //     out-of-range value is undefined (x86_64 gives the "integer indefinite"
 //     0x80000000, arm64 saturates) and the helpers must give x86's answer;
 //   - the control word's rounding and precision, computed explicitly;
-//   - no FMA contraction (CMakeLists.txt's -ffp-contract=off).
+//   - no FMA contraction (CMakeLists.txt's -ffp-contract=off);
+//   - the transcendental functions (FSIN, FPATAN, FYL2X..., the CRT's sin,
+//     pow, exp...), from the bundled musl libm.
 //
-// Each part is checked against the x86 answer and folded into a hash, which
-// must come out the same on every host.
+// Each part is checked against the x86 answer where one is known, and folded
+// into a hash. The bundled libm's hash must equal the one recorded below on
+// every host, so a host that computes differently fails here instead of
+// desyncing a game. The host C library's own results are hashed too, for
+// information only: they differ between glibc, Apple's libm, the UCRT, bionic
+// and emscripten's musl, which is why the guest does not use them.
 //
-// Standalone on purpose (x86.h, nothing else), so the same file builds for a
-// cross target and runs under an emulator:
+// Standalone on purpose (x86.h and the libm, nothing else), so the same file
+// builds for a cross target and runs under an emulator:
 //   clang++ -std=c++20 -O2 -ffp-contract=off -I kit/runtime \
-//     kit/runtime/tests/fp_determinism_tests.cpp
+//     kit/runtime/tests/fp_determinism_tests.cpp <musl-libm objects>
 #include "x86.h"
+#include "../third_party/musl-libm/recomp_libm.h"
 
 #include <cmath>
 #include <cstdarg>
@@ -256,7 +263,161 @@ static void test_contraction(Hash &h) {
     h.f64((double)rf);
 }
 
-// The hash of everything above as x86_64 Linux computes it; every host must agree.
+// ------------------------------------------------------------ the libm --
+
+// The inputs: fixed, from a xorshift generator, plus the edges.
+struct Rng {
+    uint64_t s = 0x9e3779b97f4a7c15ull;
+    double unit() { // [0, 1), exactly
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        return (double)(s >> 11) * 0x1p-53;
+    }
+    double in(double lo, double hi) {
+        const double u = unit();
+        return lo + (hi - lo) * u;
+    }
+};
+
+struct Libm {
+    double (*sin)(double), (*cos)(double), (*tan)(double), (*asin)(double), (*acos)(double),
+        (*atan)(double), (*atan2)(double, double), (*exp)(double), (*log)(double), (*log10)(double),
+        (*log2)(double), (*log1p)(double), (*expm1)(double), (*pow)(double, double);
+};
+
+// Every function over its inputs, and the translator's compositions (FYL2X is
+// y * log2(x), FYL2XP1 y * log1p(x) / ln 2, F2XM1 expm1(x * ln 2)). Returns
+// the hash; `out`, when given, receives every result for comparison.
+static const double PI = 0x1.921fb54442d18p1; // M_PI, which strict C++ on Windows lacks
+static const int SAMPLES = 4000;
+static const int RESULTS = SAMPLES * 18 + 64;
+static uint64_t run_libm(const Libm &m, double *out) {
+    Hash h;
+    Rng g;
+    int n = 0;
+    // A NaN counts as one value: which NaN the hardware makes (x86 sets the
+    // sign, arm64 and wasm do not) is the caller's to settle, as fx87_exact
+    // and ucrt.cpp's math imports do.
+    auto put = [&](double v) {
+        if (v != v)
+            v = (double)NAN;
+        h.f64(v);
+        if (out)
+            out[n] = v;
+        ++n;
+    };
+    for (int i = 0; i < SAMPLES; ++i) {
+        const double small = g.in(-10, 10), big = g.in(-1e6, 1e6), unit = g.in(-1, 1);
+        put(m.sin(small));
+        put(m.cos(big));
+        put(m.tan(small));
+        put(m.asin(unit));
+        put(m.acos(unit));
+        put(m.atan(g.in(-100, 100)));
+        put(m.atan2(g.in(-10, 10), g.in(-10, 10)));
+        put(m.exp(g.in(-700, 700)));
+        const double pos = g.in(0, 1e6);
+        put(m.log(pos));
+        put(m.log10(pos));
+        put(m.log2(g.in(0.5, 2)));
+        put(m.log1p(g.in(-0.99, 10)));
+        put(m.expm1(g.in(-50, 50)));
+        put(m.pow(g.in(0, 100), g.in(-20, 20)));
+        put(m.pow(-g.in(0, 10), (double)(int)g.in(-9, 9)));
+        put(g.in(-100, 100) * m.log2(g.in(0, 1000)));            // FYL2X
+        put(g.in(-10, 10) * m.log1p(g.in(-0.29, 0.29)) / M_LN2); // FYL2XP1
+        put(m.expm1(g.in(-1, 1) * M_LN2));                       // F2XM1
+    }
+    const double edges[] = {
+        0.0, -0.0, 1.0,   -1.0,   0x1p-1074,        1e-300,           1e300, PI, PI / 2, 1e22,
+        0.5, 2.0,  710.0, -745.2, (double)INFINITY, -(double)INFINITY};
+    for (double e : edges) {
+        const double x = opaque(e);
+        put(m.sin(x));
+        put(m.cos(x));
+        put(m.tan(x));
+        put(m.exp(x));
+    }
+    return h.h;
+}
+
+#define LIBM_OF(prefix)                                                                            \
+    Libm {                                                                                         \
+        prefix##sin, prefix##cos, prefix##tan, prefix##asin, prefix##acos, prefix##atan,           \
+            prefix##atan2, prefix##exp, prefix##log, prefix##log10, prefix##log2, prefix##log1p,   \
+            prefix##expm1, prefix##pow                                                             \
+    }
+
+static double host_sin(double x) {
+    return std::sin(x);
+}
+static double host_cos(double x) {
+    return std::cos(x);
+}
+static double host_tan(double x) {
+    return std::tan(x);
+}
+static double host_asin(double x) {
+    return std::asin(x);
+}
+static double host_acos(double x) {
+    return std::acos(x);
+}
+static double host_atan(double x) {
+    return std::atan(x);
+}
+static double host_atan2(double y, double x) {
+    return std::atan2(y, x);
+}
+static double host_exp(double x) {
+    return std::exp(x);
+}
+static double host_log(double x) {
+    return std::log(x);
+}
+static double host_log10(double x) {
+    return std::log10(x);
+}
+static double host_log2(double x) {
+    return std::log2(x);
+}
+static double host_log1p(double x) {
+    return std::log1p(x);
+}
+static double host_expm1(double x) {
+    return std::expm1(x);
+}
+static double host_pow(double x, double y) {
+    return std::pow(x, y);
+}
+
+// What the bundled libm gives on x86_64 Linux; every other host must agree.
+static const uint64_t BUNDLED_LIBM_HASH = 0x01c07fad3cbb805cull;
+
+static void test_libm(Hash &total) {
+    static double ours[RESULTS], host[RESULTS];
+    const uint64_t a = run_libm(LIBM_OF(recomp_libm_), ours);
+    const uint64_t b = run_libm(LIBM_OF(host_), host);
+    int differ = 0;
+    for (int i = 0; i < RESULTS; ++i)
+        differ += bits(ours[i]) != bits(host[i]) && !(ours[i] != ours[i] && host[i] != host[i]);
+    printf("bundled libm hash %016llx\n", (unsigned long long)a);
+    printf("host libm hash    %016llx (%d of %d results differ from the bundled libm; information "
+           "only)\n",
+           (unsigned long long)b, differ, RESULTS);
+    check(a == BUNDLED_LIBM_HASH, "the bundled libm computes what it computes on x86_64 (%016llx)",
+          (unsigned long long)BUNDLED_LIBM_HASH);
+    // A few values every correct libm agrees on.
+    check(recomp_libm_sin(0.0) == 0.0 && recomp_libm_cos(0.0) == 1.0 &&
+              recomp_libm_exp(0.0) == 1.0 && recomp_libm_log(1.0) == 0.0 &&
+              recomp_libm_pow(2.0, 10.0) == 1024.0 && recomp_libm_log2(8.0) == 3.0 &&
+              recomp_libm_atan2(0.0, -1.0) == PI,
+          "the bundled libm's exact cases");
+    total.u64(a);
+}
+
+// The hash of the exact part as x86_64 Linux computes it; every host must agree.
 static const uint64_t EXACT_HASH = 0x576cfde6d47af9b1ull;
 
 int main() {
@@ -265,8 +426,12 @@ int main() {
     test_fscale(h);
     test_rounding(h);
     test_contraction(h);
+    const uint64_t exact = h.h;
+    test_libm(h);
+    printf("exact-semantics hash %016llx\n", (unsigned long long)exact);
+    check(exact == EXACT_HASH, "the exact part hashes as on x86_64 (%016llx)",
+          (unsigned long long)EXACT_HASH);
     printf("fp determinism hash  %016llx\n", (unsigned long long)h.h);
-    check(h.h == EXACT_HASH, "the hash x86_64 computes (%016llx)", (unsigned long long)EXACT_HASH);
     printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures ? 1 : 0;
 }

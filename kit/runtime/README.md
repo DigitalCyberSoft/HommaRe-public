@@ -49,6 +49,19 @@ from `0x00040004`, pseudo modules from `0x60000000`.
 `eflags_misc` `0x202` so `PUSHFD` reads `0x202`. The CRT's `__ftol`,
 `__ctrlfp` and `__statfp` depend on those x87 values.
 
+The guest's floating point gives the same bits on every host, which network
+play needs (each peer computes the game from the commands they exchange). The
+basic operations are IEEE doubles and floats, rounded once: every target
+compiles with `-ffp-contract=off`, so no `a * b + c` becomes an FMA on arm64
+alone. Conversions to integer, rounding modes and precision control are
+computed in `x86.h` with x86's answers (the integer indefinite, never the
+host's undefined cast). The transcendental functions, the translator's FSIN,
+FPATAN, FYL2X... and the CRT's `sin`, `pow`, `exp`... imports, are the bundled
+`recomp_libm_*` (`third_party/musl-libm`), not the host C library's, whose last
+bits differ between glibc, Apple, the UCRT, bionic and emscripten; a NaN they
+return is the x86 CRT's. `tests/fp_determinism_tests.cpp` hashes all of it and
+fails on a host that computes differently.
+
 ## The shim contract
 
 ```c
