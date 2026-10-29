@@ -180,3 +180,11 @@ exclude = ["__redist", "commonappdata", "tmp", "Editor", "Editor Documentation",
 rows = ["window", "frame_limit", "performance_overlay", "filtering"]
 page = "tabs"
 scaling = "smooth"
+
+# A second copy on the same machine (two players trying LAN play on one
+# computer): the game binds net_game_port (8888) and net_lan_match_maker_port
+# (8889) without SO_REUSEADDR, so on Windows the second copy cannot bind them.
+# The kit moves its binds to 8988/8989 (+100 per further copy) instead
+# (kit/runtime/winsock.cpp); a port changed in user.cfg is not covered.
+[net]
+movable_udp_ports = [8888, 8889]

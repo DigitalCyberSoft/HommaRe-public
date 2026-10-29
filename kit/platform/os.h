@@ -280,6 +280,119 @@ void os_audio_output_set_idle_callback(void (*callback)(void));
 void os_audio_on_service_restart(void (*callback)(void));
 
 // ---------------------------------------------------------------------------
+// Sockets: IPv4 only, and every socket is non-blocking. A caller that wants to
+// wait polls, because only it knows how to wait without stalling everything
+// else (the runtime yields the guest scheduler between polls). Addresses and
+// ports are in network byte order, exactly as a sockaddr_in holds them.
+// Failures return -1 (OS_SOCKET_INVALID for a socket) and leave the reason for
+// os_net_error() on the calling thread.
+// ---------------------------------------------------------------------------
+typedef int64_t OsSocket;
+#define OS_SOCKET_INVALID ((OsSocket) - 1)
+typedef enum OsNetError {
+    OS_NET_OK = 0,
+    OS_NET_WOULDBLOCK,   // nothing to read, no room to write, nothing to accept
+    OS_NET_INPROGRESS,   // a connect has started and will finish later
+    OS_NET_ALREADY,      // a connect is still in progress
+    OS_NET_ISCONN,       // already connected
+    OS_NET_NOTCONN,      // a stream socket that is not connected
+    OS_NET_ADDRINUSE,    // bind: the port is taken
+    OS_NET_ADDRNOTAVAIL, // bind: not a local address; connect: no such address
+    OS_NET_ACCES,        // a broadcast without OS_SO_BROADCAST, or a privileged port
+    OS_NET_CONNREFUSED,  // nobody listens there
+    OS_NET_CONNRESET,    // the peer reset the connection
+    OS_NET_CONNABORTED,  // the connection was aborted locally
+    OS_NET_NETUNREACH,
+    OS_NET_HOSTUNREACH,
+    OS_NET_NETDOWN,
+    OS_NET_TIMEDOUT,
+    OS_NET_MSGSIZE,    // a datagram larger than the protocol allows
+    OS_NET_NOBUFS,     // out of buffer space
+    OS_NET_SHUTDOWN,   // sending after shutdown
+    OS_NET_INVAL,      // a bad argument or a call in the wrong state
+    OS_NET_NOTSOCK,    // not a socket
+    OS_NET_MFILE,      // out of descriptors
+    OS_NET_NOPROTOOPT, // an option this layer does not have
+    OS_NET_OTHER       // anything else
+} OsNetError;
+enum { OS_SOCK_STREAM = 1, OS_SOCK_DGRAM = 2 };
+enum { OS_MSG_PEEK = 1, OS_MSG_OOB = 2 };
+typedef enum OsSockOption {
+    OS_SO_REUSEADDR, // a datagram socket may share its port with others that set it
+    OS_SO_BROADCAST,
+    OS_SO_KEEPALIVE,
+    OS_SO_DONTROUTE,
+    OS_SO_OOBINLINE,
+    OS_SO_SNDBUF,
+    OS_SO_RCVBUF,
+    OS_SO_LINGER, // seconds; -1 turns lingering off
+    OS_SO_ERROR,  // read only: the pending error as an OsNetError, then cleared
+    OS_TCP_NODELAY,
+    OS_IP_TTL
+} OsSockOption;
+OsNetError os_net_error(void);
+// Once per process before the first socket (Windows' WSAStartup); 0 or -1.
+int os_net_startup(void);
+OsSocket os_sock_open(int type); // OS_SOCK_STREAM or OS_SOCK_DGRAM
+int os_sock_close(OsSocket s);
+int os_sock_bind(OsSocket s, uint32_t addr, uint16_t port);
+int os_sock_listen(OsSocket s, int backlog);
+// The peer's address and port may be NULL.
+OsSocket os_sock_accept(OsSocket s, uint32_t *addr, uint16_t *port);
+// -1 with OS_NET_INPROGRESS while a stream connect continues; poll for
+// OS_POLL_OUT and read OS_SO_ERROR for its outcome.
+int os_sock_connect(OsSocket s, uint32_t addr, uint16_t port);
+// Bytes sent or received; 0 from a receive is an orderly close on a stream.
+// Sending never raises SIGPIPE.
+int64_t os_sock_send(OsSocket s, const void *buf, size_t n, int flags);
+int64_t os_sock_sendto(OsSocket s, const void *buf, size_t n, int flags, uint32_t addr,
+                       uint16_t port);
+int64_t os_sock_recv(OsSocket s, void *buf, size_t n, int flags);
+// `truncated`, when not NULL, is set to 1 when a datagram did not fit and its
+// tail was dropped (or, with OS_MSG_PEEK, would not fit). Any out pointer may be NULL.
+int64_t os_sock_recvfrom(OsSocket s, void *buf, size_t n, int flags, uint32_t *addr, uint16_t *port,
+                         int *truncated);
+int os_sock_shutdown(OsSocket s, int how); // 0 receive, 1 send, 2 both
+int os_sock_set_option(OsSocket s, OsSockOption option, int value);
+int os_sock_get_option(OsSocket s, OsSockOption option, int *value);
+int os_sock_name(OsSocket s, uint32_t *addr, uint16_t *port);
+int os_sock_peer(OsSocket s, uint32_t *addr, uint16_t *port);
+// Bytes a receive would return now (FIONREAD); 0 or -1.
+int os_sock_pending(OsSocket s, uint32_t *bytes);
+enum { OS_POLL_IN = 1, OS_POLL_OUT = 2, OS_POLL_PRI = 4, OS_POLL_ERR = 8, OS_POLL_HUP = 16 };
+typedef struct OsSockPoll {
+    OsSocket sock;
+    int events;  // OS_POLL_IN / OUT / PRI
+    int revents; // the above plus OS_POLL_ERR / HUP
+} OsSockPoll;
+// How many entries have revents set, 0 on timeout, -1 on failure. A timeout
+// of 0 only looks; negative waits for ever.
+int os_sock_poll(OsSockPoll *set, size_t count, int timeout_ms);
+// This machine's name; 0 or -1.
+int os_net_hostname(char *buf, size_t cap);
+// The IPv4 addresses `name` (a host name or a dotted quad) resolves to, at
+// most `max` of them: the count, or -1. May block on DNS for seconds; call it
+// from a thread that can afford that.
+int os_net_resolve(const char *name, uint32_t *addrs, int max);
+enum {
+    OS_IF_UP = 1,
+    OS_IF_BROADCAST = 2,
+    OS_IF_LOOPBACK = 4,
+    OS_IF_POINTTOPOINT = 8,
+    OS_IF_MULTICAST = 16
+};
+typedef struct OsNetInterface {
+    char name[32]; // "" where the platform does not say
+    uint32_t addr; // network byte order, like everything here
+    uint32_t netmask;
+    uint32_t broadcast; // the directed broadcast address (OS_IF_BROADCAST),
+                        // or the far end of a point-to-point link; else 0
+    uint32_t flags;     // OS_IF_*
+} OsNetInterface;
+// The IPv4 interfaces that have an address, at most `max`: the count, or -1.
+int os_net_interfaces(OsNetInterface *out, int max);
+
+// ---------------------------------------------------------------------------
 // Strings.
 // ---------------------------------------------------------------------------
 int os_strcasecmp(const char *a, const char *b);

@@ -5,6 +5,8 @@
 #include "os.h"
 
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>
@@ -639,6 +641,392 @@ uint64_t os_wall_time_us(void) {
 }
 void os_sleep_us(uint64_t us) {
     Sleep((DWORD)((us + 999) / 1000));
+}
+
+// ---------------------------------------------------------------------------
+// Sockets on Winsock 2. FIONBIO is set at creation, so every call answers at
+// once and the caller does the waiting.
+// ---------------------------------------------------------------------------
+static thread_local OsNetError t_net_error = OS_NET_OK;
+
+static OsNetError net_error_of(int e) {
+    switch (e) {
+    case 0:
+        return OS_NET_OK;
+    case WSAEWOULDBLOCK:
+        return OS_NET_WOULDBLOCK;
+    case WSAEINPROGRESS:
+        return OS_NET_INPROGRESS;
+    case WSAEALREADY:
+        return OS_NET_ALREADY;
+    case WSAEISCONN:
+        return OS_NET_ISCONN;
+    case WSAENOTCONN:
+    case WSAEDESTADDRREQ:
+        return OS_NET_NOTCONN;
+    case WSAEADDRINUSE:
+        return OS_NET_ADDRINUSE;
+    case WSAEADDRNOTAVAIL:
+        return OS_NET_ADDRNOTAVAIL;
+    case WSAEACCES:
+        return OS_NET_ACCES;
+    case WSAECONNREFUSED:
+        return OS_NET_CONNREFUSED;
+    case WSAECONNRESET:
+        return OS_NET_CONNRESET;
+    case WSAECONNABORTED:
+        return OS_NET_CONNABORTED;
+    case WSAENETUNREACH:
+        return OS_NET_NETUNREACH;
+    case WSAEHOSTUNREACH:
+        return OS_NET_HOSTUNREACH;
+    case WSAENETDOWN:
+        return OS_NET_NETDOWN;
+    case WSAETIMEDOUT:
+        return OS_NET_TIMEDOUT;
+    case WSAEMSGSIZE:
+        return OS_NET_MSGSIZE;
+    case WSAENOBUFS:
+        return OS_NET_NOBUFS;
+    case WSAESHUTDOWN:
+        return OS_NET_SHUTDOWN;
+    case WSAEINVAL:
+    case WSAEAFNOSUPPORT:
+    case WSAEFAULT:
+        return OS_NET_INVAL;
+    case WSAENOTSOCK:
+        return OS_NET_NOTSOCK;
+    case WSAEMFILE:
+        return OS_NET_MFILE;
+    case WSAENOPROTOOPT:
+        return OS_NET_NOPROTOOPT;
+    default:
+        return OS_NET_OTHER;
+    }
+}
+static int net_fail(void) {
+    t_net_error = net_error_of(WSAGetLastError());
+    return -1;
+}
+static sockaddr_in net_sockaddr(uint32_t addr, uint16_t port) {
+    sockaddr_in sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = addr;
+    sa.sin_port = port;
+    return sa;
+}
+static void net_split(const sockaddr_in &sa, uint32_t *addr, uint16_t *port) {
+    if (addr)
+        *addr = sa.sin_addr.s_addr;
+    if (port)
+        *port = sa.sin_port;
+}
+static int net_msg_flags(int flags) {
+    return ((flags & OS_MSG_PEEK) ? MSG_PEEK : 0) | ((flags & OS_MSG_OOB) ? MSG_OOB : 0);
+}
+
+OsNetError os_net_error(void) {
+    return t_net_error;
+}
+int os_net_startup(void) {
+    static int started = -1;
+    if (started < 0) {
+        WSADATA data;
+        started = WSAStartup(MAKEWORD(2, 2), &data) == 0 ? 1 : 0;
+    }
+    if (!started)
+        t_net_error = OS_NET_NETDOWN;
+    return started ? 0 : -1;
+}
+OsSocket os_sock_open(int type) {
+    if (os_net_startup() != 0)
+        return OS_SOCKET_INVALID;
+    SOCKET s = socket(AF_INET, type == OS_SOCK_STREAM ? SOCK_STREAM : SOCK_DGRAM, 0);
+    if (s == INVALID_SOCKET)
+        return net_fail();
+    u_long on = 1;
+    if (ioctlsocket(s, FIONBIO, &on) != 0) {
+        net_fail();
+        closesocket(s);
+        return OS_SOCKET_INVALID;
+    }
+    if (type != OS_SOCK_STREAM) {
+        // An ICMP port-unreachable would otherwise fail the next recvfrom
+        // with WSAECONNRESET, which POSIX never reports on an unconnected socket.
+        BOOL off = FALSE;
+        DWORD bytes = 0;
+        WSAIoctl(s, _WSAIOW(IOC_VENDOR, 12) /* SIO_UDP_CONNRESET */, &off, sizeof off, nullptr, 0,
+                 &bytes, nullptr, nullptr);
+    }
+    return (OsSocket)s;
+}
+int os_sock_close(OsSocket s) {
+    return closesocket((SOCKET)s) == 0 ? 0 : net_fail();
+}
+int os_sock_bind(OsSocket s, uint32_t addr, uint16_t port) {
+    sockaddr_in sa = net_sockaddr(addr, port);
+    return bind((SOCKET)s, (sockaddr *)&sa, sizeof sa) == 0 ? 0 : net_fail();
+}
+int os_sock_listen(OsSocket s, int backlog) {
+    return listen((SOCKET)s, backlog) == 0 ? 0 : net_fail();
+}
+OsSocket os_sock_accept(OsSocket s, uint32_t *addr, uint16_t *port) {
+    sockaddr_in sa;
+    int len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    SOCKET a = accept((SOCKET)s, (sockaddr *)&sa, &len);
+    if (a == INVALID_SOCKET)
+        return net_fail();
+    u_long on = 1; // inherited from the listener, but say so
+    ioctlsocket(a, FIONBIO, &on);
+    net_split(sa, addr, port);
+    return (OsSocket)a;
+}
+int os_sock_connect(OsSocket s, uint32_t addr, uint16_t port) {
+    sockaddr_in sa = net_sockaddr(addr, port);
+    if (connect((SOCKET)s, (sockaddr *)&sa, sizeof sa) == 0)
+        return 0;
+    net_fail();
+    // Winsock says WSAEWOULDBLOCK where POSIX says EINPROGRESS.
+    if (t_net_error == OS_NET_WOULDBLOCK)
+        t_net_error = OS_NET_INPROGRESS;
+    return -1;
+}
+int64_t os_sock_send(OsSocket s, const void *buf, size_t n, int flags) {
+    int r = send((SOCKET)s, (const char *)buf, (int)n, net_msg_flags(flags));
+    return r != SOCKET_ERROR ? (int64_t)r : net_fail();
+}
+int64_t os_sock_sendto(OsSocket s, const void *buf, size_t n, int flags, uint32_t addr,
+                       uint16_t port) {
+    sockaddr_in sa = net_sockaddr(addr, port);
+    int r = sendto((SOCKET)s, (const char *)buf, (int)n, net_msg_flags(flags), (sockaddr *)&sa,
+                   sizeof sa);
+    return r != SOCKET_ERROR ? (int64_t)r : net_fail();
+}
+int64_t os_sock_recv(OsSocket s, void *buf, size_t n, int flags) {
+    int r = recv((SOCKET)s, (char *)buf, (int)n, net_msg_flags(flags));
+    return r != SOCKET_ERROR ? (int64_t)r : net_fail();
+}
+// Winsock fills the buffer and fails with WSAEMSGSIZE when a datagram did not
+// fit; this layer reports that as a truncated success, as POSIX does.
+int64_t os_sock_recvfrom(OsSocket s, void *buf, size_t n, int flags, uint32_t *addr, uint16_t *port,
+                         int *truncated) {
+    sockaddr_in sa;
+    int len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    int r = recvfrom((SOCKET)s, (char *)buf, (int)n, net_msg_flags(flags), (sockaddr *)&sa, &len);
+    int cut = 0;
+    if (r == SOCKET_ERROR) {
+        if (WSAGetLastError() != WSAEMSGSIZE)
+            return net_fail();
+        r = (int)n;
+        cut = 1;
+    }
+    if (truncated)
+        *truncated = cut;
+    net_split(sa, addr, port);
+    return (int64_t)r;
+}
+int os_sock_shutdown(OsSocket s, int how) {
+    int h = how == 0 ? SD_RECEIVE : how == 1 ? SD_SEND : SD_BOTH;
+    return shutdown((SOCKET)s, h) == 0 ? 0 : net_fail();
+}
+static bool net_option(OsSockOption option, int *level, int *name) {
+    *level = SOL_SOCKET;
+    switch (option) {
+    case OS_SO_REUSEADDR:
+        *name = SO_REUSEADDR;
+        return true;
+    case OS_SO_BROADCAST:
+        *name = SO_BROADCAST;
+        return true;
+    case OS_SO_KEEPALIVE:
+        *name = SO_KEEPALIVE;
+        return true;
+    case OS_SO_DONTROUTE:
+        *name = SO_DONTROUTE;
+        return true;
+    case OS_SO_OOBINLINE:
+        *name = SO_OOBINLINE;
+        return true;
+    case OS_SO_SNDBUF:
+        *name = SO_SNDBUF;
+        return true;
+    case OS_SO_RCVBUF:
+        *name = SO_RCVBUF;
+        return true;
+    case OS_TCP_NODELAY:
+        *level = IPPROTO_TCP;
+        *name = TCP_NODELAY;
+        return true;
+    case OS_IP_TTL:
+        *level = IPPROTO_IP;
+        *name = IP_TTL;
+        return true;
+    default:
+        return false;
+    }
+}
+int os_sock_set_option(OsSocket s, OsSockOption option, int value) {
+    if (option == OS_SO_LINGER) {
+        linger l;
+        l.l_onoff = value >= 0;
+        l.l_linger = (u_short)(value >= 0 ? value : 0);
+        return setsockopt((SOCKET)s, SOL_SOCKET, SO_LINGER, (const char *)&l, sizeof l) == 0
+                   ? 0
+                   : net_fail();
+    }
+    int level = 0, name = 0;
+    if (!net_option(option, &level, &name)) {
+        t_net_error = OS_NET_NOPROTOOPT;
+        return -1;
+    }
+    int v = value;
+    if (option != OS_SO_SNDBUF && option != OS_SO_RCVBUF && option != OS_IP_TTL)
+        v = value ? 1 : 0;
+    return setsockopt((SOCKET)s, level, name, (const char *)&v, sizeof v) == 0 ? 0 : net_fail();
+}
+int os_sock_get_option(OsSocket s, OsSockOption option, int *value) {
+    if (option == OS_SO_LINGER) {
+        linger l;
+        int len = sizeof l;
+        if (getsockopt((SOCKET)s, SOL_SOCKET, SO_LINGER, (char *)&l, &len) != 0)
+            return net_fail();
+        *value = l.l_onoff ? l.l_linger : -1;
+        return 0;
+    }
+    if (option == OS_SO_ERROR) {
+        int v = 0, len = sizeof v;
+        if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, (char *)&v, &len) != 0)
+            return net_fail();
+        *value = (int)net_error_of(v);
+        return 0;
+    }
+    int level = 0, name = 0;
+    if (!net_option(option, &level, &name)) {
+        t_net_error = OS_NET_NOPROTOOPT;
+        return -1;
+    }
+    int v = 0, len = sizeof v;
+    if (getsockopt((SOCKET)s, level, name, (char *)&v, &len) != 0)
+        return net_fail();
+    *value = v;
+    return 0;
+}
+int os_sock_name(OsSocket s, uint32_t *addr, uint16_t *port) {
+    sockaddr_in sa;
+    int len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    if (getsockname((SOCKET)s, (sockaddr *)&sa, &len) != 0)
+        return net_fail();
+    net_split(sa, addr, port);
+    return 0;
+}
+int os_sock_peer(OsSocket s, uint32_t *addr, uint16_t *port) {
+    sockaddr_in sa;
+    int len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    if (getpeername((SOCKET)s, (sockaddr *)&sa, &len) != 0)
+        return net_fail();
+    net_split(sa, addr, port);
+    return 0;
+}
+int os_sock_pending(OsSocket s, uint32_t *bytes) {
+    u_long n = 0;
+    if (ioctlsocket((SOCKET)s, FIONREAD, &n) != 0)
+        return net_fail();
+    *bytes = (uint32_t)n;
+    return 0;
+}
+int os_sock_poll(OsSockPoll *set, size_t count, int timeout_ms) {
+    if (count == 0) {
+        if (timeout_ms > 0)
+            Sleep((DWORD)timeout_ms);
+        return 0;
+    }
+    WSAPOLLFD stack[64];
+    WSAPOLLFD *fds = count <= 64 ? stack : (WSAPOLLFD *)malloc(count * sizeof(WSAPOLLFD));
+    if (!fds) {
+        t_net_error = OS_NET_NOBUFS;
+        return -1;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        fds[i].fd = (SOCKET)set[i].sock;
+        // WSAPoll rejects POLLPRI; out-of-band data is not asked for here.
+        fds[i].events = (SHORT)(((set[i].events & OS_POLL_IN) ? POLLRDNORM : 0) |
+                                ((set[i].events & OS_POLL_OUT) ? POLLWRNORM : 0));
+        fds[i].revents = 0;
+    }
+    int r = WSAPoll(fds, (ULONG)count, timeout_ms);
+    if (r == SOCKET_ERROR) {
+        net_fail();
+        r = -1;
+    }
+    for (size_t i = 0; r >= 0 && i < count; ++i) {
+        const SHORT e = fds[i].revents;
+        set[i].revents =
+            ((e & POLLRDNORM) ? OS_POLL_IN : 0) | ((e & POLLWRNORM) ? OS_POLL_OUT : 0) |
+            ((e & (POLLERR | POLLNVAL)) ? OS_POLL_ERR : 0) | ((e & POLLHUP) ? OS_POLL_HUP : 0);
+    }
+    if (fds != stack)
+        free(fds);
+    return r;
+}
+int os_net_hostname(char *buf, size_t cap) {
+    if (!buf || cap == 0 || os_net_startup() != 0 || gethostname(buf, (int)cap) != 0)
+        return -1;
+    buf[cap - 1] = 0;
+    return 0;
+}
+int os_net_resolve(const char *name, uint32_t *addrs, int max) {
+    if (!name || os_net_startup() != 0)
+        return -1;
+    addrinfo hints;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    addrinfo *list = nullptr;
+    if (getaddrinfo(name, nullptr, &hints, &list) != 0)
+        return -1;
+    int n = 0;
+    for (addrinfo *a = list; a && n < max; a = a->ai_next)
+        if (a->ai_family == AF_INET && a->ai_addr)
+            addrs[n++] = ((sockaddr_in *)a->ai_addr)->sin_addr.s_addr;
+    freeaddrinfo(list);
+    return n;
+}
+int os_net_interfaces(OsNetInterface *out, int max) {
+    OsSocket s = os_sock_open(OS_SOCK_DGRAM);
+    if (s == OS_SOCKET_INVALID)
+        return -1;
+    INTERFACE_INFO list[64];
+    DWORD bytes = 0;
+    int r = WSAIoctl((SOCKET)s, SIO_GET_INTERFACE_LIST, nullptr, 0, list, sizeof list, &bytes,
+                     nullptr, nullptr);
+    if (r != 0)
+        net_fail();
+    closesocket((SOCKET)s);
+    if (r != 0)
+        return -1;
+    int n = 0;
+    for (DWORD k = 0; k < bytes / sizeof(INTERFACE_INFO) && n < max; ++k) {
+        const INTERFACE_INFO &ii = list[k];
+        OsNetInterface &i = out[n++];
+        memset(&i, 0, sizeof i);
+        i.addr = ii.iiAddress.AddressIn.sin_addr.s_addr;
+        i.netmask = ii.iiNetmask.AddressIn.sin_addr.s_addr;
+        const u_long f = ii.iiFlags;
+        i.flags = ((f & IFF_UP) ? OS_IF_UP : 0) | ((f & IFF_BROADCAST) ? OS_IF_BROADCAST : 0) |
+                  ((f & IFF_LOOPBACK) ? OS_IF_LOOPBACK : 0) |
+                  ((f & IFF_POINTTOPOINT) ? OS_IF_POINTTOPOINT : 0) |
+                  ((f & IFF_MULTICAST) ? OS_IF_MULTICAST : 0);
+        // Winsock reports 255.255.255.255 here; the directed form is what
+        // reaches one subnet, so work it out.
+        if (f & IFF_BROADCAST)
+            i.broadcast = i.addr | ~i.netmask;
+    }
+    return n;
 }
 
 int os_strcasecmp(const char *a, const char *b) {

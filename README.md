@@ -308,6 +308,7 @@ normally. Leave with *Exit → OK* once after creating a profile.
 
 **Is multiplayer supported?** Hot-seat on one device and games on your local network,
 yes. Ubisoft closed the game's Internet servers (Ubi.com) in 2015, so online play isn't.
+Network games use UDP ports 8888 and 8889.
 
 ## What's next
 
