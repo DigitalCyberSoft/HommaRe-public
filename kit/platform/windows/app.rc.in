@@ -1,7 +1,7 @@
 // The app's own resources on Windows (host/CMakeLists.txt configures this):
 // the icon Explorer, the taskbar and the window show, and the version
 // Explorer's Properties and Task Manager show. The manifest comes with the
-// platform layer (manifest.rc).
+// platform layer (platform/CMakeLists.txt).
 @POP_APP_ICON_RESOURCE@
 
 1 VERSIONINFO
