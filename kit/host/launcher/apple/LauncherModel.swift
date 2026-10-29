@@ -176,9 +176,18 @@ final class LauncherModel {
     private(set) var gogBusy = false
     /// What went wrong in the GOG panel, shown there.
     var gogError: String?
-    /// The language of the game's files a download brings (a code of L10n.languages).
+    /// The language of the game's files a download brings (a code of `gogLanguages`).
     var gogLanguage = L10n.language {
         didSet { if gogLanguage != oldValue { refreshGogSizes() } }
+    }
+    /// The languages a download from GOG.com is offered in: those every
+    /// installer has a manifest for ("gog-<id>-<code>.json"), whose files are
+    /// checked against it. GOG has all ten; the others wait for manifests.
+    var gogLanguages: [L10n.Language] {
+        let installers = config.installers ?? []
+        return L10n.languages.filter { language in
+            !installers.isEmpty && installers.allSatisfy { $0.manifests.contains { $0.hasSuffix("-\(language.code).json") } }
+        }
     }
     /// About how much each installer's download is in `gogLanguage` (InstallerSpec.id).
     private(set) var gogSizes: [String: Int64] = [:]
@@ -841,6 +850,10 @@ final class LauncherModel {
 
     func showGog() {
         guard importing == nil else { return }
+        let offered = gogLanguages.map(\.code)
+        if !offered.contains(gogLanguage) {
+            gogLanguage = offered.contains(L10n.language) ? L10n.language : offered.contains("en") ? "en" : offered.first ?? "en"
+        }
         gogError = nil
         settingsShown = false
         gogShown = true

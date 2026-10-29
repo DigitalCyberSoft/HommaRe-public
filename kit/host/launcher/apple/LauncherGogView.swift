@@ -108,7 +108,7 @@ struct GogPanel: View {
 
     private var languageMenu: some View {
         Menu {
-            ForEach(L10n.languages) { language in
+            ForEach(model.gogLanguages) { language in
                 Button {
                     model.gogLanguage = language.code
                 } label: {
