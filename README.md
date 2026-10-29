@@ -97,7 +97,7 @@ battery when nothing moves.
   native screens, built from the game's own pictures, words and frames, with text sized
   for a phone. iPad can have them too.
 - **Local network games.** *Multiplayer → Local Network* finds the games on your Wi-Fi:
-  host one, join one and play, between Macs, iPads and iPhones.
+  host one, join one and play, between Macs, iPads, iPhones and Linux PCs.
 - **Trackpad on a Mac.** Two fingers over the adventure map raise and lower the camera,
   or move it like on an iPad: scroll to pan, pinch to zoom, twist to turn. In battle the
   camera zooms towards the pointer, and lists scroll under your fingers.
@@ -308,6 +308,12 @@ normally. Leave with *Exit → OK* once after creating a profile.
 
 **Is multiplayer supported?** Hot-seat on one device and games on your local network,
 yes. Ubisoft closed the game's Internet servers (Ubi.com) in 2015, so online play isn't.
+To play over the Internet, put both computers on one virtual network: ZeroTier, Hamachi
+and other VPNs that carry broadcasts work as a LAN. A VPN that doesn't carry broadcasts
+(Tailscale, WireGuard) needs the other player's address: start the app with
+`RECOMP_NET_PEERS=100.64.1.2` (one or more addresses or names, separated by commas). The
+game uses UDP ports 8888 and 8889. Two copies on one computer work too: the second one
+moves to ports 8988 and 8989.
 
 ## What's next
 
