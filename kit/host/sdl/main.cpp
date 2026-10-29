@@ -2888,12 +2888,46 @@ static void apply_game_root(const std::string &exe, const std::string &chosen_ro
 }
 
 #if defined(__APPLE__) && TARGET_OS_IPHONE
+// game.toml [ios] cfg_seeds: a config file the install lacks, copied from the
+// one it is made from, so that its cfg_defaults below have a file to go in.
+static void apply_cfg_seeds(const std::string &root) {
+    const std::string records = RECOMP_IOS_CFG_SEEDS;
+    size_t at = 0;
+    while (at < records.size()) {
+        size_t end = records.find(';', at);
+        const std::string rec = records.substr(at, end - at);
+        at = end == std::string::npos ? records.size() : end + 1;
+        const size_t bar = rec.find('|');
+        if (bar == std::string::npos)
+            continue;
+        const std::string path = root + "/" + rec.substr(0, bar), from = root + "/" + rec.substr(bar + 1);
+        FILE *f = fopen(path.c_str(), "rb");
+        if (f) {
+            fclose(f);
+            continue;
+        }
+        FILE *in = fopen(from.c_str(), "rb");
+        if (!in)
+            continue;
+        FILE *out = fopen(path.c_str(), "wb");
+        if (out) {
+            char buf[4096];
+            for (size_t n; (n = fread(buf, 1, sizeof buf, in)) > 0;)
+                fwrite(buf, 1, n, out);
+            fclose(out);
+            fprintf(stderr, "[ios] %s: made from %s\n", rec.substr(0, bar).c_str(), rec.substr(bar + 1).c_str());
+        }
+        fclose(in);
+    }
+}
+
 // game.toml [ios] cfg_defaults: a touch device's own starting settings, set in
 // the game's config files ("setvar key = value") of the imported copy before
 // the game reads them. Only those lines change, and only when they differ.
 static void apply_cfg_defaults(const std::string &exe) {
     const char *root_env = recomp_env("GAME_ROOT");
     std::string root = root_env && *root_env ? root_env : exe.substr(0, exe.find_last_of('/'));
+    apply_cfg_seeds(root);
     const std::string records = RECOMP_IOS_CFG_DEFAULTS;
     size_t at = 0;
     while (at < records.size()) {

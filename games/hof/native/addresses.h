@@ -219,6 +219,11 @@
 #define NS_MENU_REACTION 0x008b0a30     /* V hash; ECX = screen+0x168 */
 #define NS_MENU_SWITCH 0x008b0df0       /* V vt 00fbf4c0 slot 0; ECX = screen+0x170; RET 4; index 0..9 only */
 #define NS_MENU_CREDITS 0x00947150      /* V queues CCreateCreditsScreenCmd (vt 00fc8340) */
+/* V the main menu's "options" handler (registered by name in 008b1b90); ECX =
+ * screen, RET 4 (the argument unused): switch(3), which in HoF only hides the
+ * panel (no case 3, base 008ad570 opens Options there), then the options'
+ * setup and CCreateGameOptionsScreen queued (00878380). */
+#define NS_MENU_OPTIONS 0x008b1210
 #define NS_MENU_EXIT 0x00820030         /* V hash */
 #define NS_PROFILE_VALID 0x0093f940     /* V hash */
 #define NS_PROFILE_NAME 0x0093f990      /* V hash */

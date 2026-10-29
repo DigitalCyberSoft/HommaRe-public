@@ -555,7 +555,6 @@ struct SkinDetails: View {
 
     @ViewBuilder private var primary: some View {
         let style = SkinButtonStyle(skin: skin, kind: .large)
-        #if os(macOS) || RECOMP_INNOEXTRACT_LIB
         if PrimaryButton.installs(entry) {
             install(style)
         } else if entry.isInterrupted {
@@ -565,20 +564,11 @@ struct SkinDetails: View {
         } else {
             play(style)
         }
-        #else
-        if PrimaryButton.installs(entry) { install(style) } else { play(style) }
-        #endif
     }
 
     /// The game is not here (or not whole): Install is the main button.
     private func install(_ style: SkinButtonStyle) -> some View {
-        Button(L10n.installFromGog) {
-            #if os(macOS)
-            model.pickInstaller()
-            #else
-            importerShown = true
-            #endif
-        }
+        Button(L10n.installFromGog) { model.showGog() }
         .buttonStyle(style)
         .keyboardShortcut(.defaultAction)
     }
@@ -629,7 +619,7 @@ struct SkinGameScroll: View {
             Spacer(minLength: 0)
             SkinDivider().padding(.horizontal, 16).padding(.vertical, 10)
             #if os(macOS)
-            SkinMenuLink(title: L10n.installFromGog) { model.pickInstaller() }
+            SkinMenuLink(title: L10n.installFromGog) { model.showGog() }
             SkinMenuLink(title: L10n.settings) { withAnimation(.easeOut(duration: 0.2)) { model.settingsShown = true } }
             #else
             // A finger wants a button, not a line of the menu.
@@ -936,6 +926,7 @@ struct SkinProgressDialog: View {
         case .extracting: return L10n.phaseUnpacking
         case .verifying: return L10n.phaseVerifying
         case .patching: return L10n.phasePatching
+        case .downloading: return L10n.phaseDownloading
         }
     }
 }

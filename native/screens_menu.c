@@ -308,8 +308,15 @@ static void menu_command(Scratch *s, uint32_t screen, const char *cmd) {
             switch_to(s, screen, P_SINGLE);
         else if (strcmp(name, "multi") == 0)
             switch_to(s, screen, P_MULTI);
-        else if (strcmp(name, "options") == 0)
+        else if (strcmp(name, "options") == 0) {
+#ifdef NS_MENU_OPTIONS
+            /* The game's own handler: HoF's switch has no Options panel. */
+            const uint32_t unused = 0;
+            ns_call(s, NS_MENU_OPTIONS, screen, 0, &unused, 1);
+#else
             switch_to(s, screen, 3);
+#endif
+        }
         else if (strcmp(name, "credits") == 0)
             ns_call(s, NS_MENU_CREDITS, 0, 0, NULL, 0);
         else if (strcmp(name, "main_menu_exit") == 0)
