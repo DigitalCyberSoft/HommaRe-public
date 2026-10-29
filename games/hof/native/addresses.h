@@ -371,3 +371,142 @@
 #define NS_E_MAIN 0x178
 #define NS_E_MODE 0x1b4
 #define NS_PAK_DIRS "data,dataa1" /* the paks it mounts, for the native views' pictures */
+
+/* ---- ubi.com screens (native/screens_ubi.c): Hammers of Fate 2.1 ----
+ * research notes lan/ubi-screens-expansions.md. Base 1.60 value in the comment. */
+#define NS_UBI_VT_LOGIN         0x00fc6150  /* base 00fc2cb0; V RTTI CMPRegisterScreen IScreen */
+#define NS_UBI_SUB_LOGIN        0x1d0       /* base 0x1e0; V (alloc 0x1d8 in 0091f7d0) */
+#define NS_UBI_LOGIN_OK         0x0091e250  /* base 00947010; V reg "ok" in ctor 0091d570, RET 4 */
+#define NS_UBI_LOGIN_CANCEL     0x0091e620  /* base 009473e0; V reg "cancel"/"esc_pressed" → 0091d400 (logout + main menu) */
+#define NS_UBI_VT_EDIT_BOX      0x00fcb610  /* base 00fc83e8; V (= NS_VT_EDIT_BOX; the .c falls back to it) */
+#define NS_UBI_SUB_EDIT_BOX     0x1ac       /* base 0x1b8; V (= NS_SUB_EDIT_BOX) */
+#define NS_UBI_BOX_CALLBACK     0x00fc60e8  /* base 00fc2c48; V RTTI ISimpleEditBoxCallBack @0x170; CD key box built with ECX = screen+0x170 (0091e213) */
+#define NS_UBI_BOX_OK           0x009801d0  /* base 009a7b80; V (= NS_EDIT_BOX_OK) */
+#define NS_UBI_BOX_CANCEL       0x00980120  /* base 009a7ad0; V (lan-screens-hof.md) */
+#define NS_UBI_VT_CHANNELS      0x00fbb398  /* base 00fb70f0; V RTTI CMPChangeChannelScreen IScreen */
+#define NS_UBI_SUB_CHANNELS     0x1d4       /* base 0x1e0; V (alloc 0x1dc in 00875610) */
+#define NS_UBI_CHANNELS_JOIN    0x00873de0  /* base 0088e7a0; V reg "join" in ctor 00873250, RET 4 */
+#define NS_UBI_CHANNELS_CANCEL  0x00873d80  /* base 0088e740; V reg "cancel", RET 4 */
+#define NS_UBI_VT_WAIT_BOX      0x00fb3294  /* base 00fadd04; V RTTI CWaitBox */
+#define NS_UBI_RTTI_IWINDOW     0x010ebfb0  /* base 010e9ab0; V (pushed by IListControl vt+0x24 00e56d80) */
+#define NS_UBI_RTTI_LIST_ITEM   0x010efb84  /* base 010ed854; V (same) */
+#define NS_UBI_RTTI_OBJECT      0x010e90a8  /* base 010e67a0; V (join 00873ea8) */
+#define NS_UBI_RTTI_CHANNEL     0x010efa88  /* base 010ed774; V TD CChannelData (join 00873ea3) */
+#define NS_UBI_DYNAMIC_CAST     0x009e5205  /* base 009fe372; V */
+/* inner offsets that differ (the .c's #ifndef defaults are base) */
+#define NS_UBI_UL_LOGIN         0x19c       /* base 0x1a8; V init 0091da00 "login", OK 0091e269 */
+#define NS_UBI_UL_PASSWORD      0x1a0       /* base 0x1ac; V init "password", OK 0091e423 */
+#define NS_UBI_UL_LOGGING       0x1a4       /* base 0x1b0; V OK 0091e4ea (CUbiLoginListener) */
+#define NS_UBI_UL_WAIT          0x1a8       /* base 0x1b4; V OK 0091e359, init-start 0091d399 */
+#define NS_UBI_UL_INIT          0x1ac       /* base 0x1b8; V init-start 0091d2eb (CUbiInitListener) */
+#define NS_UBI_UL_FORM          0x1b0       /* base 0x1bc; V init "mp_register", SetVisible(0) at 0091da00 */
+#define NS_UBI_UB_CALLBACK      0x170       /* base 0x17c; V (CSimpleEditBox, lan-screens-hof.md §2.2) */
+#define NS_UBI_UB_EDIT          0x174       /* base 0x180; V */
+#define NS_UBI_UC_LIST          0x188       /* base 0x194; V init 00873550 "channels-table" */
+#define NS_UBI_UC_JOIN          0x1b4       /* base 0x1c0; V init "ButtonJoin" */
+#define NS_UBI_UC_WAIT          0x1b8       /* base 0x1c4; V join 00873fbc; join-ok reads [ecx(+0x170)+0x48] */
+/* same as base (no define needed): CH_NAME 0x0c, CH_MODE 0x18, CH_PLAYERS 0x24 (V fill 008741b0);
+ * WAIT_BOX_FROM 0xf8 (V 007c3793), WAIT_BOX_NOTIFY 0x108 (V cancel 007c5940); EDIT_TEXT 0x3c (V 006aab30);
+ * LIST_ROWS 0x20 / LIST_SELECTED 0x24 / LIST_SELECT 0x28 (V 00e56d60/80/a0); ITEM_DATA 0x04 (V 00873eb5). */
+
+/* ---- lobbies in LAN and ubi.com mode + name box (native/screens_lan.c) ---- */
+#define NS_LAN_VT_LOBBY         0x00fc5b00  /* base 00fc2180; V RTTI CLobbyScreen */
+#define NS_LAN_SUB_LOBBY        0x208       /* base 0x200; V */
+#define NS_LAN_VT_DUEL_LOBBY    0x00fc5d08  /* base 00fc237c; V RTTI CMPDMLobbyScreen */
+#define NS_LAN_SUB_DUEL_LOBBY   0x200       /* base 0x1f8; V */
+#define NS_LAN_LOBBY_REACTION   0x00916f00  /* base 0093b320; V re-checked: ECX = screen+0x168, RET 0xc, falls through to 00974670 */
+#define NS_LAN_DUEL_LOBBY_REACTION 0x009188e0 /* base 0093cda0; V re-checked (same) */
+#define NS_LAN_SELECTED         0x009b6b50  /* base 0099a1a0; V hash, fastcall ECX = games view */
+#define NS_LAN_RTTI_IWINDOW     0x010ebfb0  /* base 010e9ab0; V */
+#define NS_LAN_RTTI_LIST_ITEM   0x010efb84  /* base 010ed854; V */
+#define NS_LAN_RTTI_OBJECT      0x010e90a8  /* base 010e67a0; V */
+#define NS_LAN_RTTI_GAME_DATA   0x010f3ce0  /* base 010f0b6c; V */
+#define NS_LAN_RTTI_PLAYER_DATA 0x010f3b70  /* base 010f17d0; V */
+#define NS_LAN_BOX_CALLBACK_STD 0x00fc5aa8  /* base 00fc2134; V */
+#define NS_LAN_BOX_CALLBACK_DUEL 0x00fc5cb4 /* base 00fc2334; V */
+#define NS_LAN_BOX_OK           0x009801d0  /* base 009a7b80; V */
+#define NS_LAN_BOX_CANCEL       0x00980120  /* base 009a7ad0; V */
+#define NS_LAN_DYNAMIC_CAST     0x009e5205  /* base 009fe372; V */
+#define NS_LAN_TEXT             0x009f0330  /* base 00a09de0; V (= NS_TEXT) */
+#define NS_LAN_MAP_NAME         0x009b8550  /* base 009d9400; V the formatter calls it with ECX = info+0xcc (009b6d98) */
+#define NS_LAN_MAP_SIZE         0x00734ea0  /* base 00729b30; V (= NS_MAP_SIZE) */
+/* NS_LAN_SPEED_NAME: none (no combat speed in HoF, §3.1). The .c needs a guard. V */
+#define NS_LAN_SERVICES         0x00611ab0  /* base 005e8050; V re-checked (lobby init 0097577b, login cancel 0091d405) */
+#define NS_LAN_MATCHMAKER_ID    0x8c348b00  /* same; V */
+#define NS_LAN_CONTAINER_MODE   0x20        /* same; V re-checked (lobby init 00975784, entry-name 00975dd4) */
+/* lobby fields (CLobbyScreenBase) */
+#define NS_LAN_L_REACTIONS      0x168       /* base 0x174; V re-checked */
+#define NS_LAN_L_CHAT           0x198       /* base 0x19c; V */
+#define NS_LAN_L_PLAYERS        0x1a0       /* base 0x1a4; V re-checked (player_profile [ebx+0x38]) */
+#define NS_LAN_L_PROFILE        0x1a4       /* base 0x1a8; V re-checked (init "MenuProfile" store 0097599d) */
+#define NS_LAN_L_EDIT           0x1a8       /* base 0x1ac; V re-checked (chat [ebx+0x40]) */
+#define NS_LAN_L_LEAVING        0x1ac       /* base 0x1b0; V re-checked (channel vt+0x48 00974ce0: CLobbyLeaveListener) */
+#define NS_LAN_L_JOINING        0x1b0       /* base 0x1b4; V re-checked (join 00974a70) */
+#define NS_LAN_L_JOIN           0x1b4       /* base 0x1b8; V re-checked */
+#define NS_LAN_L_GAMES          0x1d0       /* base 0x1d4; V re-checked */
+/* same as base: PLAYERS_LIST 0x38, GV_LIST 0x08, LIST_ROWS 0x20, LIST_SELECT 0x28, ITEM_DATA 0x04, GAME_INFO 0x0c;
+ * GI_OPEN 0x18, GI_NAME 0x1c, GI_LOCKED 0x34 (now = password non-empty), GI_MAX 0x6c, GI_SIZE 0x70, GI_SAVED 0x90,
+ * GI_MAP 0xcc, GI_ARENA 0xf8; CHAT_LINES 0x0c, CHAT_STRIDE 0x18, CHAT_TEXT 0x0c; PLAYER_NAME 0x0c; EDIT_TEXT 0x3c.
+ * V (lan-screens-hof.md §2.4). */
+/* GI_SPEED, GV_RUNNING, GV_OBSERVABLE: none (§3.1). */
+/* the name / password box */
+#define NS_LAN_BOX_CB           0x170       /* base 0x17c; V */
+#define NS_LAN_BOX_EDIT         0x174       /* base 0x180; V */
+#define NS_LAN_BOX_ID           0x17c       /* base 0x188; V */
+/* HoF lacks (research notes lan/ubi-screens-expansions.md §3.1): */
+#define NS_LAN_HAS_FILTERS      0           /* no show/hide_running, show/hide_observable, no CGamesView2 bytes; V */
+#define NS_LAN_HAS_SPEED        0           /* no SGameInfo combat speed, no speed names; V */
+#define NS_LAN_GI_PLAYERS       0x84        /* players in = [info+0x84], as HoF's own list reads it (009b6cf1); V */
+#define NS_LAN_UBI_ONLY         1           /* the lobbies natively in ubi.com mode only */
+
+/* ---- network game: create (ns_mp_create) and players (ns_mp_wait), Hammers of Fate 2.1 ----
+ * research notes lan/mp-create-wait-expansions.md. Base 1.60 value in the comment. */
+#define NS_VT_MPC              0x00fcafa0  /* base 00fc797c; V RTTI CMPCreateScreen IScreen */
+#define NS_SUB_MPC             0x198       /* base 0x1a0; V (alloc 0x1a0) */
+#define NS_MPC_MAPSELECTED     0x00977de0  /* base 00997fe0; V re-checked (reg in 00977eb0, RET 4) */
+#define NS_MPC_CREATE          0x00977930  /* base 00997b30; V re-checked */
+#define NS_MPC_LOAD            0x00977d70  /* base 00997f50; V re-checked (LAN load / ubi.com load by mode) */
+#define NS_MPC_BACK            0x00977900  /* base 00997b00; V re-checked */
+#define NS_MPC_RMG             0x00977e10  /* new; V `rmg_screen`: [screen+0x180] = 1, push CCreateRMGScreen (009c2250), RET 4 */
+#define NS_MPC_MAPS            0x170       /* base 0x17c; V re-checked (mapselected, create) */
+#define NS_MPC_OPTIONS         0x178       /* base 0x184; V re-checked */
+#define NS_MPC_CREATING        0x17c       /* base 0x188; V re-checked (create listener) */
+/* CMPCreateOptions (init 009bc1a0, re-checked) */
+#define NS_MPO_NAME            0x10        /* same; V */
+#define NS_MPO_PASSWORD        0x14        /* same; V (always enabled; non-empty = private game) */
+#define NS_MPO_LOCKED          0           /* base 0x18 `lockedgame`: NONE (§3) */
+#define NS_MPO_GHOST           0x18        /* base 0x1c; V `ghostmode` → info+0x35 */
+#define NS_MPO_QUICK           0x1c        /* base 0x20 (`simultaneus` «Быстрый бой» → +0x36); V `quick_combat` «Быстрая схватка» → info+0x36 */
+#define NS_MPO_AUTOSAVE        0x20        /* base 0x24; V `realtime`, HoF text «Динамичные бои» → info+0x37 (§3) */
+#define NS_MPO_SIMULTANEOUS    0x3c        /* new; V `simultaneus` «Одновременные ходы» → info+0x154 */
+#define NS_MPO_TIME            0x24        /* base 0x28; V `timelimitscroll` */
+#define NS_MPO_DIFFICULTY      0x28        /* base 0x2c; V `difficultyscroll` */
+#define NS_MPO_ANIMATION       0x34        /* base 0x38; V `animationspeedscroll` */
+#define NS_MPO_COMBAT          0           /* base 0x40: NONE (no combat-turn-speed slider) */
+/* NS_MPC_SPEED_NAME: none (no combat speed in HoF). */
+
+#define NS_VT_MPW              0x00fbd9f4  /* base 00fbaae0; V RTTI CMPWaitScreen IScreen */
+#define NS_SUB_MPW             0x1c0       /* base 0x1cc; V */
+#define NS_MPW_START           0x00927720  /* base 00962750; V re-checked ([+0x180], [+0x1a8]; RET 4) */
+#define NS_MPW_BACK            0x009276f0  /* base 00962720; V re-checked */
+#define NS_MPW_SEND            0x00927860  /* base 00962890; V re-checked ([+0x1a0]) */
+#define NS_MPW_SLOT_OF         0x00bc7ed0  /* base 00c98d20; V hash (lan-screens-hof.md) */
+#define NS_MPW_SERVICES        0x00611ab0  /* base 005e8050; V */
+#define NS_MPW_MATCHMAKER_ID   0x8c348b00  /* same; V */
+#define NS_MPW_MM_GAME         0x44        /* same; V (IMatchMaker slots unchanged) */
+#define NS_MPW_INFO_CTOR       0x0072fa60  /* base 0071bfa0; V */
+#define NS_MPW_INFO_DTOR       0x00730270  /* base 0071d020; V */
+#define NS_MPW_INFO_SIZE       0x158       /* base 0x128; V */
+#define NS_MPW_HOST            0x1a4       /* base 0x1b0; V */
+#define NS_MPW_LOGIC           0x1a8       /* base 0x1b4; V re-checked */
+#define NS_MPW_CHAT            0x19c       /* base 0x1a8; V */
+#define NS_MPW_EDIT            0x1a0       /* base 0x1ac; V re-checked */
+#define NS_MPW_STARTING        0x180       /* base 0x18c; V re-checked */
+#define NS_MPW_ML_ACCEPTING    0x100       /* base 0x108 (the enum ML_ACCEPTING); V host start 00984788 */
+/* same as base (V): GI_TIME 0x38, GI_DIFFICULTY 0x3c, GI_GOAL 0xec, GI_NAME 0x1c, GI_MAX 0x6c, GI_SIZE 0x70,
+ * GI_MAP 0xcc; logic +0x10 session, +0x18 status (box at +0x18), +0x34 host id, +0x38 rows, +0x60 got-id,
+ * +0x74 model, CanStart vt+0x18; row +0x28 state, +0x44 colour, +0x60 race, +0x7c bonus, +0x80 hero,
+ * +0xbc/+0xc0 request, +0xc4 locks, +0xf4 name (lan-screens-hof.md §2.6). */
+#define NS_MPW_GI_PLAYERS      0x84        /* players in = [info+0x84], as HoF's own list reads it; V */
+#define NS_MPO_QUICK_LABEL     "Быстрая схватка", "Quick combat"   /* HoF's own words; V */
+#define NS_MPO_AUTOSAVE_LABEL  "Динамичные бои", "Dynamic battles" /* `realtime` in HoF; V */
