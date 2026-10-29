@@ -63,6 +63,10 @@ bool parse_config(const std::string &text, Config *out, std::string *error) {
     Config c;
     c.title = localized(root.get("title"));
     c.tagline = localized(root.get("tagline"));
+    // "taglines": the tagline of each platform; Linux's, when there is one, wins.
+    if (const Json *taglines = root.get("taglines"))
+        if (const Json *own = taglines->get("linux"))
+            c.tagline = localized(own);
     c.legal = localized(root.get("legal"));
     c.install_names = strings(root.get("installNames"));
     c.exclude = strings(root.get("exclude"));
