@@ -5,6 +5,7 @@
 #include "../imports.h"
 #include "../loader.h"
 #include "../memory.h"
+#include "../net_order.h"
 #include "../win32.h"
 #include "../../platform/os.h"
 #include <cstdarg>
@@ -340,6 +341,64 @@ static void test_names(X86 *c) {
     call(c, "closesocket", {s});
 }
 
+// Byte order: network-order values are their wire bytes on any host, and what
+// the guest gets back is laid out byte for byte as a Windows sockaddr_in,
+// hostent and in_addr hold it, whatever the host's own order.
+static void test_byte_order(X86 *c) {
+    const uint32_t ip = net_ip(192, 168, 1, 20);
+    const uint8_t *b = (const uint8_t *)&ip;
+    check(b[0] == 192 && b[1] == 168 && b[2] == 1 && b[3] == 20,
+          "net_ip lays out the octets in order");
+    check(net_ip_octet(ip, 0) == 192 && net_ip_octet(ip, 3) == 20, "net_ip_octet");
+    const uint16_t port = net_port(8888);
+    const uint8_t *p = (const uint8_t *)&port;
+    check(p[0] == 0x22 && p[1] == 0xb8 && net_port_number(port) == 8888,
+          "net_port is big-endian, both ways");
+    check(net_port_number(net_port(8888 + 100)) == 8988, "a moved port's number");
+    uint32_t g = block(4);
+    wr32(g, 0x11223344u);
+    check(g_mem[g] == 0x44 && rd8(g + 3) == 0x11, "guest memory is little-endian");
+
+    // A bound socket's name, byte for byte: family 02 00, the port
+    // big-endian, then 127 0 0 1.
+    uint16_t bound = 0;
+    uint32_t s = bound_udp(c, LOOPBACK, &bound);
+    uint32_t sa = block(16), len = block(4);
+    wr32(len, 16);
+    check(call(c, "getsockname", {s, sa, len}) == 0 && rd8(sa) == 2 && rd8(sa + 1) == 0 &&
+              rd8(sa + 2) == (bound >> 8) && rd8(sa + 3) == (bound & 0xff) && rd8(sa + 4) == 127 &&
+              rd8(sa + 5) == 0 && rd8(sa + 6) == 0 && rd8(sa + 7) == 1,
+          "getsockname: 02 00 | port big-endian | 7f 00 00 01");
+    // A short name buffer gets what fits, and nothing past it.
+    uint32_t small = block(16);
+    memset(g_mem + small, 0xcc, 16);
+    wr32(len, 4);
+    call(c, "getsockname", {s, small, len});
+    check(rd8(small) == 2 && rd8(small + 4) == 0xcc, "a 4-byte name buffer is not overrun");
+    call(c, "closesocket", {s});
+
+    uint32_t text = block(32);
+    gm_put_str(text, "10.20.30.40", 32);
+    uint32_t he = call(c, "gethostbyname", {text});
+    const uint32_t a0 = he ? rd32(rd32(he + 12)) : 0;
+    check(he && rd8(a0) == 10 && rd8(a0 + 1) == 20 && rd8(a0 + 2) == 30 && rd8(a0 + 3) == 40,
+          "gethostbyname(10.20.30.40): the address's bytes in order");
+    uint32_t addr = block(4);
+    wr8(addr, 10);
+    wr8(addr + 1, 20);
+    wr8(addr + 2, 30);
+    wr8(addr + 3, 40);
+    he = call(c, "gethostbyaddr", {addr, 4, 2});
+    check(he && gm_str(rd32(he), 256) == "10.20.30.40",
+          "gethostbyaddr names an address by its bytes");
+    check(call(c, "gethostbyaddr", {0xfffffff0u, 4, 2}) == 0 && last_error(c) == 10014,
+          "gethostbyaddr of a pointer outside guest memory is WSAEFAULT");
+    check(call(c, "inet_addr", {text}) == 0x281e140au, "inet_addr: the guest's in_addr value");
+    check(call(c, "htons", {8888}) == 0xb822u && call(c, "ntohs", {0xb822u}) == 8888,
+          "the guest's htons and ntohs swap");
+    check(call(c, "htonl", {0x0a141e28u}) == 0x281e140au, "the guest's htonl swaps");
+}
+
 // SO_REUSEADDR shares a UDP port, and a limited broadcast reaches it through
 // every broadcasting interface; RECOMP_NET_PEERS adds a unicast copy.
 static void test_broadcast(X86 *c) {
@@ -431,6 +490,8 @@ int main() {
     test_udp(&c);
     printf("winsock tcp\n");
     test_tcp(&c);
+    printf("winsock byte order\n");
+    test_byte_order(&c);
     printf("winsock names\n");
     test_names(&c);
     printf("winsock broadcast\n");
