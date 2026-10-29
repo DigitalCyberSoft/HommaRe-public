@@ -105,26 +105,32 @@ void recomp_touch_hover(int state) {
  * iPad app is closed from the app switcher instead. Going to the background,
  * the host asks for a save; the game's own thread does it in its next frame
  * (the hover getter runs every frame), and the host waits for that. */
-static volatile int g_save_wanted, g_save_done;
+/* A request is a number; the game's thread answers the latest one it saw.
+ * Requests that pile up while one save is under way (a scene's and the app's
+ * notification, a module's and its launcher's) are answered by one save, and
+ * no request resets the answer another one is waiting for. */
+static volatile uint32_t g_save_asked, g_save_answered;
 void homm5_save_settings(X86 *c); /* native/save.cpp */
 
 void recomp_app_background(void) {
     int waited = 0;
-    g_save_done = 0;
-    __atomic_store_n(&g_save_wanted, 1, __ATOMIC_RELEASE);
-    while (!__atomic_load_n(&g_save_done, __ATOMIC_ACQUIRE) && waited < 3000) {
+    const uint32_t ask = __atomic_add_fetch(&g_save_asked, 1u, __ATOMIC_ACQ_REL);
+    while ((int32_t)(__atomic_load_n(&g_save_answered, __ATOMIC_ACQUIRE) - ask) < 0 && waited < 3000) {
         struct timespec ts = {0, 10 * 1000000};
         nanosleep(&ts, NULL);
         waited += 10;
     }
     fprintf(stderr, "[homm5] settings %s before going to the background\n",
-            g_save_done ? "saved" : "not saved (the game did not reach a frame)");
+            (int32_t)(__atomic_load_n(&g_save_answered, __ATOMIC_ACQUIRE) - ask) >= 0
+                ? "saved"
+                : "not saved (the game did not reach a frame)");
 }
 
 void homm5_hover_timeout(X86 *c) {
-    if (__atomic_exchange_n(&g_save_wanted, 0, __ATOMIC_ACQ_REL)) {
+    const uint32_t asked = __atomic_load_n(&g_save_asked, __ATOMIC_ACQUIRE);
+    if (asked != __atomic_load_n(&g_save_answered, __ATOMIC_ACQUIRE)) {
         homm5_save_settings(c);
-        __atomic_store_n(&g_save_done, 1, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_save_answered, asked, __ATOMIC_RELEASE);
     }
     const int state = g_hover;
     int32_t ms;

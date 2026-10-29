@@ -200,6 +200,7 @@ bool platform_ui_handle_lifecycle(const SDL_Event &event) {
 
 void platform_ui_camera_buttons(SDL_Window *, bool, bool, void (*)(int)) {}
 void platform_ui_split_ring(SDL_Window *, bool, double, double, double) {}
+void platform_ui_hand_over_lifecycle() {}
 
 void platform_ui_native_screen(SDL_Window *, const char *, void (*)(const char *)) {}
 

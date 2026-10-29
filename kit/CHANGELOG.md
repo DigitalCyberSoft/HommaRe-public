@@ -1,5 +1,24 @@
 # Changelog
 
+## iOS: inactive is not background
+
+- SDL3 reports "will resign active" (Control Center, Notification Center, a call
+  banner, the app switcher) as `SDL_EVENT_WILL_ENTER_BACKGROUND`, often twice.
+  The lifecycle watcher now tells inactive from background: inactive pauses the
+  sound only; the game's settings are saved after 2 s inactive or at once in the
+  background, where presentation stops too. Repeated notifications are no-ops,
+  and save requests that pile up are answered by one save.
+- `host_note_app_active`: SDL3 never queues lifecycle events, so the host's
+  "away / just back" state, which keeps a foldable's transient scene sizes from
+  resizing the game, was never set. The watcher sets it now.
+- A multi-game app's launcher hands the lifecycle over to the game module it
+  starts (`platform_ui_hand_over_lifecycle`).
+- The run before's log is also kept in `Documents/Logs` (the newest ten), where
+  the Files app shows it.
+- `RECOMP_IOS_LIFECYCLE_STRESS=<ms>` posts the inactive/active (and every fourth
+  time background) notifications in a loop, for a lifecycle test with nobody at
+  the device.
+
 ## Touch: a stack dragged and held still splits
 
 - Hover gestures: a finger that rests ~0.7 s during a drag the game marks

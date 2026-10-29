@@ -111,6 +111,17 @@ void platform_ui_camera_buttons(SDL_Window *window, bool visible, bool phone, vo
 // and Android: nothing.
 void platform_ui_split_ring(SDL_Window *window, bool visible, double x, double y, double progress);
 
+// The multi-game app's launcher hands the app over to a game module, which
+// has its own copy of this platform layer: from then on the launcher's copy
+// leaves the app's lifecycle events (background, foreground) to it. iOS only;
+// elsewhere nothing.
+void platform_ui_hand_over_lifecycle();
+
+// The host's side of the lifecycle (main.cpp): the app is in the foreground
+// and active (1) or inactive or away (0). The iOS layer reports it from its
+// lifecycle watcher.
+extern "C" void host_note_app_active(int active);
+
 // A screen of the game drawn natively over it (runtime/native_seam.h,
 // recomp_screen_state): `state` is the screen's new JSON document, or null
 // when no native screen shows; a command from the view goes to `command`.

@@ -30,9 +30,12 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <algorithm>
+#include <sys/stat.h>
+#include <vector>
 #include <dlfcn.h>
 #include <filesystem>
 #include <objc/runtime.h>
+#include <atomic>
 #include <thread>
 #include <unistd.h>
 
@@ -58,10 +61,40 @@ std::string documents_dir() {
     return paths.count ? std::string([paths[0] fileSystemRepresentation]) : "";
 }
 
+// The run before's log, kept where a player can reach it (the Files app shows
+// the app's Documents): Documents/Logs/host-<when it ended>.log, the newest
+// ten. A run that crashed is otherwise gone two launches later.
+void archive_previous_log(const std::string &prev) {
+    std::error_code ec;
+    if (!fs::exists(prev, ec) || fs::file_size(prev, ec) == 0)
+        return;
+    NSArray *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    if (!docs.count)
+        return;
+    const fs::path logs = fs::path([docs[0] fileSystemRepresentation]) / "Logs";
+    fs::create_directories(logs, ec);
+    struct stat st{};
+    if (stat(prev.c_str(), &st) != 0)
+        return;
+    char name[64];
+    struct tm tm{};
+    localtime_r(&st.st_mtime, &tm);
+    strftime(name, sizeof name, "host-%Y-%m-%d_%H%M%S.log", &tm);
+    fs::copy_file(prev, logs / name, fs::copy_options::overwrite_existing, ec);
+    std::vector<fs::path> kept;
+    for (const auto &entry : fs::directory_iterator(logs, ec))
+        if (entry.path().filename().string().rfind("host-", 0) == 0)
+            kept.push_back(entry.path());
+    std::sort(kept.begin(), kept.end()); // the names sort by time
+    for (size_t i = 0; i + 10 < kept.size(); ++i)
+        fs::remove(kept[i], ec);
+}
+
 // Started from the home screen the app has no console, and the host's log
 // went nowhere: it is kept in Library/Caches/host.log (the run before in
-// host-prev.log) and still reaches a console when one is attached. Once a
-// process, a game module's copy included (RECOMP_HOST_LOG_TEE marks it).
+// host-prev.log, and in Documents/Logs) and still reaches a console when one
+// is attached. Once a process, a game module's copy included
+// (RECOMP_HOST_LOG_TEE marks it).
 void tee_log_to_file() {
     if (getenv("RECOMP_HOST_LOG_TEE"))
         return;
@@ -73,6 +106,7 @@ void tee_log_to_file() {
     const std::string path = dir + "/host.log";
     std::error_code ec;
     fs::rename(path, dir + "/host-prev.log", ec);
+    archive_previous_log(dir + "/host-prev.log");
     FILE *file = fopen(path.c_str(), "w");
     int fds[2];
     if (!file || pipe(fds) != 0) {
@@ -354,12 +388,52 @@ bool lifecycle_watch(void *, SDL_Event *e) {
 }
 } // namespace
 
+// A test of the lifecycle with nobody at the device (RECOMP_IOS_LIFECYCLE_STRESS
+// = a period in ms, e.g. in Documents/switches.txt): UIKit's own notifications
+// are posted as a pulled-down Control Center would raise them - inactive for
+// half the period, then active again - and every fourth time the app goes to
+// the background and back as well. SDL's observers turn them into the events
+// lifecycle_watch takes, so the whole path runs.
+static void start_lifecycle_stress() {
+    const char *v = getenv("RECOMP_IOS_LIFECYCLE_STRESS");
+    const int period = v ? atoi(v) : 0;
+    if (period <= 0)
+        return;
+    fprintf(stderr, "[ios] lifecycle stress: a Control Center pull every %d ms\n", period);
+    static int round = 0;
+    auto post = [](NSNotificationName name) {
+        [NSNotificationCenter.defaultCenter postNotificationName:name
+                                                          object:UIApplication.sharedApplication];
+    };
+    [NSTimer
+        scheduledTimerWithTimeInterval:period / 1000.0
+                               repeats:YES
+                                 block:^(NSTimer *) {
+                                   const bool away = ++round % 4 == 0;
+                                   post(UIApplicationWillResignActiveNotification);
+                                   if (away)
+                                       post(UIApplicationDidEnterBackgroundNotification);
+                                   const int64_t half = (int64_t)period * 500000ll;
+                                   dispatch_after(
+                                       dispatch_time(DISPATCH_TIME_NOW, half),
+                                       dispatch_get_main_queue(), ^{
+                                         if (away)
+                                             post(UIApplicationWillEnterForegroundNotification);
+                                         post(UIApplicationDidBecomeActiveNotification);
+                                         if (round % 20 == 0)
+                                             fprintf(stderr, "[ios] lifecycle stress: %d pulls\n",
+                                                     round);
+                                       });
+                                 }];
+}
+
 SDL_Window *platform_ui_create_window(const char *title, int, int, int, int,
                                       SDL_WindowFlags surface_flag, int *window_mode) {
     static bool watching = false;
     if (!watching) {
         SDL_AddEventWatch(lifecycle_watch, nullptr);
         watching = true;
+        start_lifecycle_stress();
     }
     SDL_Window *w = SDL_CreateWindow(
         title, 0, 0, surface_flag | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
@@ -388,11 +462,15 @@ SDL_Window *platform_ui_create_window(const char *title, int, int, int, int,
 }
 
 // The game may be closed from the app switcher without reaching its own exit,
-// so it saves now (runtime/native_seam.h recomp_app_background). Its own
-// thread does that in its next frame, which may need this (main) thread, so
-// the wait runs on a background queue under a background task that keeps the
-// process alive until it is over.
+// so it saves before the app goes away (runtime/native_seam.h
+// recomp_app_background). Its own thread does that in its next frame, which
+// may need this (main) thread, so the wait runs on a background queue under a
+// background task that keeps the process alive until it is over. One save at
+// a time: another request while one is under way is the same save.
+static std::atomic<bool> g_saving{false};
 static void save_before_background() {
+    if (g_saving.exchange(true))
+        return;
     UIApplication *app = UIApplication.sharedApplication;
     __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
     task = [app beginBackgroundTaskWithName:@"save settings"
@@ -402,6 +480,7 @@ static void save_before_background() {
                           }];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
       recomp_app_background();
+      g_saving.store(false);
       dispatch_async(dispatch_get_main_queue(), ^{
         if (task != UIBackgroundTaskInvalid) {
             [app endBackgroundTask:task];
@@ -411,16 +490,72 @@ static void save_before_background() {
     });
 }
 
+// Where the app stands, by UIKit's three states. SDL3 hands both "will resign
+// active" (the scene's and the application's, so often twice) to
+// SDL_EVENT_WILL_ENTER_BACKGROUND, though a pulled-down Control Center or
+// Notification Center, a call banner or the app switcher only make the app
+// inactive: it stays on screen and may draw. Only DID_ENTER_BACKGROUND means
+// it is away. So inactive pauses the sound and nothing else; the save waits a
+// little (a glance at Control Center does not write the profile mid-frame) and
+// happens at once when the app really goes to the background, where the
+// presentation stops too (no GPU work in the background).
+enum class AppState { Active, Inactive, Background };
+static AppState g_app_state = AppState::Active; // main thread
+static uint64_t g_away_generation = 0;          // main thread: one per time away
+static bool g_saved_this_time = false;          // main thread
+// A game module run from this app (the multi-game app's launcher hands over
+// to libgame.<id>.dylib, main.cpp run_game_module) has its own copy of this
+// file and its own watcher: the launcher's copy then leaves the events to it.
+static bool g_lifecycle_handed_over = false;
+static constexpr int64_t kInactiveSaveDelayNs = 2000ll * 1000000ll;
+
+static void save_once() {
+    if (g_saved_this_time)
+        return;
+    g_saved_this_time = true;
+    save_before_background(); // the game may never see its own exit
+}
+
+void platform_ui_hand_over_lifecycle() {
+    g_lifecycle_handed_over = true;
+}
+
 bool platform_ui_handle_lifecycle(const SDL_Event &e) {
+    if (g_lifecycle_handed_over)
+        return false;
     switch (e.type) {
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
-        fprintf(stderr, "[ios] will enter background: suspending presentation and audio\n");
-        save_before_background(); // the game may never see its own exit
-        host_present_suspend(true);
-        host_audio_pause(true);
+        if (g_app_state != AppState::Active)
+            return true; // the second "will resign active" of the pair
+        g_app_state = AppState::Inactive;
+        g_saved_this_time = false;
+        host_note_app_active(0);
+        {
+            const uint64_t away = ++g_away_generation;
+            fprintf(stderr, "[ios] inactive: pausing audio\n");
+            host_audio_pause(true);
+            // Still away after a while: the player may be leaving for good
+            // (the app switcher), so the settings are written now.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kInactiveSaveDelayNs),
+                           dispatch_get_main_queue(), ^{
+                             if (away == g_away_generation && g_app_state == AppState::Inactive) {
+                                 fprintf(stderr, "[ios] inactive for a while: saving settings\n");
+                                 save_once();
+                             }
+                           });
+        }
         return true;
     case SDL_EVENT_DID_ENTER_BACKGROUND:
-        fprintf(stderr, "[ios] did enter background\n");
+        if (g_app_state == AppState::Background)
+            return true;
+        if (g_app_state == AppState::Active) {
+            ++g_away_generation;
+            g_saved_this_time = false;
+        }
+        g_app_state = AppState::Background;
+        host_note_app_active(0);
+        fprintf(stderr, "[ios] did enter background: saving, suspending presentation and audio\n");
+        save_once();
         host_present_suspend(true);
         host_audio_pause(true);
         return true;
@@ -428,9 +563,17 @@ bool platform_ui_handle_lifecycle(const SDL_Event &e) {
         fprintf(stderr, "[ios] will enter foreground\n");
         return true;
     case SDL_EVENT_DID_ENTER_FOREGROUND:
-        fprintf(stderr, "[ios] did enter foreground: resuming audio and presentation\n");
+        if (g_app_state == AppState::Active)
+            return true; // the second "did become active" of the pair
+        fprintf(stderr, "[ios] active again (%s): resuming audio%s\n",
+                g_app_state == AppState::Background ? "from the background" : "was inactive",
+                g_app_state == AppState::Background ? " and presentation" : "");
+        if (g_app_state == AppState::Background)
+            host_present_suspend(false);
         host_audio_pause(false);
-        host_present_suspend(false);
+        g_app_state = AppState::Active;
+        host_note_app_active(1);
+        ++g_away_generation; // a pending inactive save is off
         return true;
     case SDL_EVENT_TERMINATING:
         fprintf(stderr, "[ios] terminating\n");

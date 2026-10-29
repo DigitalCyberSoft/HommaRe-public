@@ -278,6 +278,15 @@ void note_screen_size() {
     g_fullscreen_w.store(w);
     g_fullscreen_h.store(fh);
 }
+// The app left the foreground or came back (platform_ui_ios.mm, from the
+// lifecycle watcher: SDL3 never queues those events, so handle_event never
+// sees them). Inactive counts as away: a pulled-down Control Center on a
+// foldable hands the scene sizes as transient as a lock does.
+extern "C" void host_note_app_active(int active) {
+    if (active)
+        g_foreground_ns.store(os_monotonic_ns());
+    g_app_active.store(active != 0);
+}
 extern "C" int host_display_fullscreen_size(int *w, int *h) {
     const int fw = g_fullscreen_w.load(), fh = g_fullscreen_h.load();
     if (!w || !h || fw <= 0 || fh <= 0)
@@ -1547,12 +1556,6 @@ void audio_service_restarted() {
 // One SDL event, translated into both of the input paths the game reads: the
 // DirectInput device state, and the Win32 message queue.
 void handle_event(const SDL_Event &event) {
-    if (event.type == SDL_EVENT_WILL_ENTER_BACKGROUND || event.type == SDL_EVENT_DID_ENTER_BACKGROUND) {
-        g_app_active.store(false);
-    } else if (event.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
-        g_foreground_ns.store(os_monotonic_ns());
-        g_app_active.store(true);
-    }
     if (platform_ui_handle_lifecycle(event))
         return;
     if (handle_editor_event(event))
@@ -2763,6 +2766,7 @@ static int run_game_module(const launcher::NativeChoice &choice, const char *arg
     os_setenv("RECOMP_LAUNCHER_SETTINGS", settings.c_str());
     os_setenv("RECOMP_LAUNCHER_SKIP_INTRO", intro_skipped(host_layout().profile_dir) ? "1" : "0");
     fprintf(stderr, "[host] %s goes to module %s\n", choice.game.c_str(), path.c_str());
+    platform_ui_hand_over_lifecycle(); // the module's own copy takes the app's lifecycle
     std::string exe = choice.exe;
     char flag[] = "--exe";
     char *args[] = {const_cast<char *>(argv0), flag, exe.data(), nullptr};
