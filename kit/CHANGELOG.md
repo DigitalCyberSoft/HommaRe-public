@@ -22,6 +22,12 @@
 - Failed socket calls go to the log; `RECOMP_TRACE_SOCKETS=1` also shows each
   datagram's first bytes.
 
+## Linux
+
+- The kit builds and runs on Linux (x86-64): Vulkan for Direct3D 9, GPU skinning
+  included, the native launcher, and several games in one app.
+- The launcher's tagline can differ per platform (`launcher-games.json` `taglines`).
+
 ## Renaming an app
 
 - `[game] previous_app_names` and `previous_bundle_ids` name what an app was called

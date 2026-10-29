@@ -46,6 +46,8 @@ struct LocalizedText: Decodable, Hashable {
 struct LauncherConfig: Decodable {
     var title: LocalizedText?
     var tagline: LocalizedText?
+    /// The tagline of each platform ("macos", "ios", "linux"...), over `tagline`.
+    var taglines: [String: LocalizedText]?
     var legal: LocalizedText?
     /// Folder names worth looking for under the usual places.
     var installNames: [String]?
@@ -54,6 +56,16 @@ struct LauncherConfig: Decodable {
     var games: [GameSpec]
     /// GOG offline installers the Mac app installs from (LauncherInstaller.swift).
     var installers: [InstallerSpec]?
+
+    /// This platform's tagline, else the common one.
+    var platformTagline: LocalizedText? {
+        #if os(iOS)
+        let platform = "ios"
+        #else
+        let platform = "macos"
+        #endif
+        return taglines?[platform] ?? tagline
+    }
 }
 
 struct GameSpec: Decodable, Identifiable, Hashable {
