@@ -72,7 +72,15 @@ std::string g_cur_dir = RECOMP_GUEST_ROOT;
 // The guest folder holding the EXE: the root, or <root>\bin for an install
 // whose EXE sits below its data (win32_init's exe_subdir).
 std::string g_exe_guest_dir = RECOMP_GUEST_ROOT;
-uint32_t g_last_error = 0;
+// GetLastError's value, which Windows keeps per thread (the TEB's
+// LastErrorValue). Every guest thread runs on a host thread of its own, and
+// any call into the runtime may hand the baton to another guest thread
+// (imports_dispatch's checkpoint), so one value for the process lets another
+// thread's error land between a failed call and its GetLastError. Heroes V's
+// Ubi.com thread read the main thread's ERROR_FILE_NOT_FOUND after a recv
+// that would block, took it for a broken lobby connection and closed that,
+// and creating a game failed.
+__thread uint32_t t_last_error = 0;
 jmp_buf g_exit_jmp;
 bool g_exit_jmp_valid = false;
 bool g_exited = false;
@@ -499,10 +507,10 @@ std::string win32_guest_path(const std::string &host_path) {
 }
 
 void set_last_error(uint32_t code) {
-    g_last_error = code;
+    t_last_error = code;
 }
 uint32_t get_last_error() {
-    return g_last_error;
+    return t_last_error;
 }
 
 jmp_buf *process_exit_jmp() {
@@ -571,7 +579,7 @@ void win32_init(const std::string &game_dir, const std::string &exe_subdir) {
     for (const std::string &c : split_path(exe_subdir))
         g_exe_guest_dir += "\\" + c;
     g_cur_dir = g_exe_guest_dir;
-    g_last_error = 0;
+    t_last_error = 0;
     g_exited = false;
     g_exit_code = 0;
     g_cmdline_addr = 0;
@@ -1523,10 +1531,10 @@ void k_OutputDebugStringA(X86 *c) {
 }
 
 void k_GetLastError(X86 *c) {
-    set_eax(c, g_last_error);
+    set_eax(c, t_last_error);
 }
 void k_SetLastError(X86 *c) {
-    g_last_error = arg(c, 0);
+    t_last_error = arg(c, 0);
     set_eax(c, 0);
 }
 
