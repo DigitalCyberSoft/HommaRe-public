@@ -1,0 +1,335 @@
+name: Builds
+
+# The app built for each platform, and the native suites run where a runner
+# can run them. The game is translated from the player's own executables,
+# which are never in the repository, so everything here links against the
+# kit's stub translation (kit/tools/gen_stub_translation.py): HommaRe's
+# game.toml (its launcher, native screens and settings) with no game code,
+# and native/ compiled but not linked (recomp_native_check). Nothing of the
+# game is built, run or uploaded; the one artifact is the Windows test
+# binaries, made here from the kit and the stub.
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: builds-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+jobs:
+  linux:
+    name: Linux x86-64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: clang 20, SDL3's build dependencies, glslc and lavapipe
+        run: |
+          sudo apt-get update -qq
+          # SDL3's documented Linux build dependencies (README-linux), as
+          # kit/.github has them; clang 20 for native/'s #embed.
+          sudo apt-get install -y -qq ccache glslc mesa-vulkan-drivers build-essential pkg-config \
+            libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+            libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+            libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
+          sudo apt-get install -y -qq clang-20 lld-20
+          echo /usr/lib/llvm-20/bin >> "$GITHUB_PATH"
+      - uses: ./.github/actions/kit-setup
+        with:
+          ffmpeg-trees: build/cmake/linux-stub
+          ccache: linux
+      - name: The app, against the stub translation
+        run: python kit/tools/build.py --game-dir "$PWD" --stub --target app
+      - name: Every test binary, the headless hosts, and native/ compiled
+        run: |
+          python kit/tools/test.py --game-dir "$PWD" --preset linux-stub --compile-only
+          cmake --build build/cmake/linux-stub --target pop_headless pop_smoke
+          ccache -s
+      - name: The suites that need no game; the GPU ones on lavapipe
+        env:
+          SDL_VIDEODRIVER: offscreen
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: ctest --test-dir build/cmake/linux-stub -L "nogame|game|gpu" --output-on-failure
+      - name: GPU skinning's GLSL compiles
+        run: python tools/check_gpu_skin.py --glsl
+      - name: Keep the compiler cache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .ccache
+          key: ccache-linux-${{ github.run_id }}-${{ github.run_attempt }}
+
+  macos:
+    name: macOS Apple silicon
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: ccache
+        run: |
+          brew install ccache
+          xcodebuild -version
+      - uses: ./.github/actions/kit-setup
+        with:
+          ffmpeg-trees: build/cmake/macos-stub
+          ccache: macos
+      - name: The app, against the stub translation
+        run: python kit/tools/build.py --game-dir "$PWD" --stub --target app
+      - name: Every test binary, the headless hosts, and native/ compiled
+        run: |
+          python kit/tools/test.py --game-dir "$PWD" --preset macos-stub --compile-only
+          cmake --build build/cmake/macos-stub --target pop_headless pop_smoke
+          ccache -s
+      - name: The suites that need no game; the GPU ones on Metal
+        run: ctest --test-dir build/cmake/macos-stub -L "nogame|game|gpu" --output-on-failure
+      - name: GPU skinning's Metal Shading Language compiles, for macOS and iOS
+        run: python tools/check_gpu_skin.py --msl
+      - name: Keep the compiler cache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.run_id }}-${{ github.run_attempt }}
+
+  ios:
+    name: iOS ${{ matrix.target }}, unsigned
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ios
+            tree: build/cmake/ios-stub
+          - target: ios-sim
+            tree: build/cmake/ios-sim-stub
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/kit-setup
+        with:
+          ffmpeg-trees: ${{ matrix.tree }}
+      - name: The app, against the stub translation, with no signing
+        run: python kit/tools/build.py --game-dir "$PWD" --stub --target ${{ matrix.target }} --no-install
+      - name: native/ compiled for iOS
+        run: cmake --build ${{ matrix.tree }} --config Release --target recomp_native_check -- CODE_SIGNING_ALLOWED=NO
+      - name: The bundle is there
+        run: find build/${{ matrix.target }}-stub -maxdepth 4 -name HommaRe.app | grep .
+
+  windows-cross:
+    name: Windows x86-64, cross-built with llvm-mingw
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: ccache
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ccache
+      - name: llvm-mingw from the cache
+        id: llvm-mingw
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/llvm-mingw
+          key: llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64
+      - name: llvm-mingw 20261020 (UCRT)
+        if: steps.llvm-mingw.outputs.cache-hit != 'true'
+        run: |
+          curl -fL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/llvm-mingw.tar.xz" \
+            https://github.com/mstorsjo/llvm-mingw/releases/download/20261020/llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64.tar.xz
+          echo "55064b60b991a1e1e8090b8c2f84e82b22cfe5903d12c159d65064cf5e8ae335  $RUNNER_TEMP/llvm-mingw.tar.xz" | sha256sum -c -
+          mkdir -p ~/llvm-mingw
+          tar -xf "$RUNNER_TEMP/llvm-mingw.tar.xz" -C ~/llvm-mingw --strip-components=1
+      - name: Keep llvm-mingw
+        if: steps.llvm-mingw.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/llvm-mingw
+          key: llvm-mingw-20261020-ucrt-ubuntu-22.04-x86_64
+      - run: echo "LLVM_MINGW_ROOT=$HOME/llvm-mingw" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/kit-setup
+        with:
+          ffmpeg-trees: build/cmake/windows-cross-stub
+          ccache: windows-cross
+      - name: The app, against the stub translation
+        run: python kit/tools/build.py --game-dir "$PWD" --preset windows-cross --stub --target app
+      - name: Every test binary, and native/ compiled
+        run: |
+          python kit/tools/test.py --game-dir "$PWD" --preset windows-cross-stub --compile-only
+          ccache -s
+      - name: The tests, for the Windows runner
+        run: |
+          ctest --test-dir build/cmake/windows-cross-stub --show-only=json-v1 > build/windows-stub/tests.json
+          echo "$PWD" > build/windows-stub/root.txt
+          ls -la build/windows-stub/recomp
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows-test-binaries
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            build/windows-stub/recomp/*.exe
+            build/windows-stub/recomp/*.dll
+            build/windows-stub/tests.json
+            build/windows-stub/root.txt
+      - name: Keep the compiler cache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .ccache
+          key: ccache-windows-cross-${{ github.run_id }}-${{ github.run_attempt }}
+
+  windows-cross-tests:
+    name: Windows, the cross-built suites run
+    needs: windows-cross
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: windows-test-binaries
+          path: build/windows-stub
+      - name: The suites that need no game and no GPU
+        shell: bash
+        run: python tools/run_cross_tests.py build/windows-stub/tests.json --root "$(cat build/windows-stub/root.txt)" --labels "nogame|game"
+
+  windows:
+    name: Windows x86-64, native clang
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: The Visual Studio developer environment
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+      - uses: ./.github/actions/kit-setup
+        with:
+          ffmpeg-trees: build/cmake/windows-stub
+      - name: MSYS2's make for the FFmpeg build
+        run: C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed make diffutils
+      - name: Configure HommaRe against the stub translation
+        run: |
+          $ws = $env:GITHUB_WORKSPACE -replace '\\', '/'
+          cd kit
+          cmake --preset windows-stub -B "$ws/build/cmake/windows-stub" "-DRECOMP_GAME_DIR=$ws" `
+            "-DPOP_BUILD_ROOT=$ws/build" "-DPython3_EXECUTABLE=$ws/.ci/Scripts/python.exe" `
+            -DRECOMP_FFMPEG_MAKE=C:/msys64/usr/bin/make.exe
+      - name: The app, every test binary, the headless hosts, and native/ compiled
+        run: cmake --build build/cmake/windows-stub --target recomp_app check_binaries pop_headless pop_smoke
+      - name: The suites that need no game and no GPU
+        run: ctest --test-dir build/cmake/windows-stub -L "nogame|game" --output-on-failure
+
+  android:
+    name: Android x86_64 and arm64-v8a
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      NDK_VERSION: 29.0.14206865
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: ccache
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ccache
+      - name: NDK r29 from the cache
+        id: ndk
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/android-ndk
+          key: android-ndk-29.0.14206865
+      - name: NDK r29 (native/gpu_skin.cpp's #embed needs its clang 21)
+        if: steps.ndk.outputs.cache-hit != 'true'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$HOME/android-ndk" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$HOME/android-ndk" "ndk;$NDK_VERSION" > /dev/null
+      - name: Keep the NDK
+        if: steps.ndk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/android-ndk
+          key: android-ndk-29.0.14206865
+      - name: The SDK's platform and build tools, JDK 21
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;37.0.0" > /dev/null
+          echo "ANDROID_NDK_HOME=$HOME/android-ndk/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+      - name: Gradle's downloads from the cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('kit/platform/android/**') }}
+          restore-keys: gradle-
+      - uses: ./.github/actions/kit-setup
+        with:
+          ffmpeg-trees: build/cmake/android-stub-x86_64 build/cmake/android-stub-arm64-v8a
+          ccache: android
+      - name: The APKs, against the stub translation
+        run: python kit/tools/build.py --game-dir "$PWD" --stub --target android --no-install
+      - name: native/ compiled for both ABIs
+        run: |
+          cmake --build build/cmake/android-stub-x86_64 --target recomp_native_check
+          cmake --build build/cmake/android-stub-arm64-v8a --target recomp_native_check
+          ccache -s
+      - name: Each APK carries its libraries and nothing of the game
+        run: |
+          apks=build/android/app/build/outputs/apk/debug
+          ls -la "$apks"
+          for abi in x86_64 arm64-v8a; do
+            unzip -l "$apks/app-$abi-debug.apk" | grep -q "lib/$abi/libmain.so"
+            unzip -l "$apks/app-universal-debug.apk" | grep -q "lib/$abi/libmain.so"
+          done
+          for apk in "$apks"/*.apk; do python tools/check_bundle.py "$apk"; done
+      - name: Keep the compiler cache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .ccache
+          key: ccache-android-${{ github.run_id }}-${{ github.run_attempt }}
+
+  web:
+    name: Web, Emscripten
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: The Emscripten SDK from the cache
+        id: emsdk
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/emsdk
+          key: emsdk-6.0.5
+      - name: The Emscripten SDK 6.0.5
+        if: steps.emsdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 6.0.5 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install 6.0.5
+          ~/emsdk/emsdk activate 6.0.5
+      - uses: ./.github/actions/kit-setup
+      - name: The site, against the stub translation, and native/ compiled
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          python kit/tools/build.py --game-dir "$PWD" --stub --target web
+          cmake --build build/cmake/web-stub --target recomp_native_check
+      - name: Keep the Emscripten SDK, with the ports it built
+        if: steps.emsdk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/emsdk
+          key: emsdk-6.0.5
+      - name: The launcher's tests
+        run: node --test kit/web/launcher/tests/*.test.mjs
+      - name: The site carries nothing of the game
+        run: python tools/check_bundle.py build/web-stub-site

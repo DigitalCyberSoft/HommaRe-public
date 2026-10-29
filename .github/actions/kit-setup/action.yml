@@ -1,0 +1,90 @@
+name: Kit build setup
+description: >-
+  The kit's pinned CMake, Ninja and Python tools in .ci, on PATH; FFmpeg's
+  source tarball, from the cache or ffmpeg.org (retried), in each CMake tree
+  that builds FFmpeg, where ExternalProject finds it by its hash and downloads
+  nothing; and the job's compiler cache (ccache, which the job installs).
+inputs:
+  ffmpeg-trees:
+    description: The CMake binary directories that build FFmpeg, space-separated
+    required: false
+    default: ""
+  ccache:
+    description: The name of the job's compiler cache; none when empty. The job saves it (.ccache).
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: The pinned tools
+      shell: bash
+      run: |
+        python3 -m venv .ci
+        if [ -d .ci/Scripts ]; then BIN=.ci/Scripts; else BIN=.ci/bin; fi
+        "$BIN/python" -m pip install -q -r kit/requirements-dev.txt
+        if [ "$RUNNER_OS" = Windows ]; then
+          cygpath -w "$PWD/$BIN" >> "$GITHUB_PATH"
+        else
+          echo "$PWD/$BIN" >> "$GITHUB_PATH"
+        fi
+    - name: FFmpeg's source from the cache
+      id: ffmpeg
+      if: inputs.ffmpeg-trees != ''
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: .ffmpeg-source
+        key: ffmpeg-7.1.1-733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+        enableCrossOsArchive: true
+    - name: FFmpeg's source from ffmpeg.org
+      if: inputs.ffmpeg-trees != '' && steps.ffmpeg.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        tarball=.ffmpeg-source/ffmpeg-7.1.1.tar.xz
+        sum=733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+        check() { [ -f "$tarball" ] && [ "$(cmake -E sha256sum "$tarball" | cut -d' ' -f1)" = "$sum" ]; }
+        mkdir -p .ffmpeg-source
+        for attempt in 1 2 3 4 5; do
+          curl -fsSL --retry 3 --retry-all-errors -o "$tarball" https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz || true
+          check && break
+          echo "FFmpeg download attempt $attempt failed" >&2
+          sleep $((attempt * 15))
+        done
+        check
+    - name: Keep FFmpeg's source
+      if: inputs.ffmpeg-trees != '' && steps.ffmpeg.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6.1.0
+      with:
+        path: .ffmpeg-source
+        key: ffmpeg-7.1.1-733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+        enableCrossOsArchive: true
+    - name: FFmpeg's source in each tree
+      if: inputs.ffmpeg-trees != ''
+      shell: bash
+      env:
+        TREES: ${{ inputs.ffmpeg-trees }}
+      run: |
+        for tree in $TREES; do
+          mkdir -p "$tree/ffmpeg-prefix/src"
+          cp .ffmpeg-source/ffmpeg-7.1.1.tar.xz "$tree/ffmpeg-prefix/src/"
+        done
+    - name: The compiler cache
+      if: inputs.ccache != ''
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: .ccache
+        key: ccache-${{ inputs.ccache }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: ccache-${{ inputs.ccache }}-
+    - name: Compile through it
+      if: inputs.ccache != ''
+      shell: bash
+      run: |
+        for lang in C CXX OBJC OBJCXX; do
+          echo "CMAKE_${lang}_COMPILER_LAUNCHER=ccache" >> "$GITHUB_ENV"
+        done
+        {
+          echo "CCACHE_DIR=$PWD/.ccache"
+          echo "CCACHE_BASEDIR=$PWD"
+          echo "CCACHE_NOHASHDIR=1"
+          echo "CCACHE_COMPILERCHECK=content"
+          echo "CCACHE_MAXSIZE=700M"
+        } >> "$GITHUB_ENV"
