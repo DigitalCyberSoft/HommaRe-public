@@ -1,16 +1,16 @@
 {
   "title": "HommaRe",
   "tagline": {
-    "en": "Native port for macOS and iOS",
-    "ru": "Нативный порт для macOS и iOS",
-    "cs": "Nativní port pro macOS a iOS",
-    "de": "Nativer Port für macOS und iOS",
-    "es": "Port nativo para macOS e iOS",
-    "fr": "Portage natif pour macOS et iOS",
-    "it": "Port nativo per macOS e iOS",
-    "hu": "Natív port macOS-re és iOS-re",
-    "pl": "Natywny port na macOS i iOS",
-    "zh-Hans": "适用于 macOS 和 iOS 的原生移植版"
+    "en": "Native port for macOS, iOS and Linux",
+    "ru": "Нативный порт для macOS, iOS и Linux",
+    "cs": "Nativní port pro macOS, iOS a Linux",
+    "de": "Nativer Port für macOS, iOS und Linux",
+    "es": "Port nativo para macOS, iOS y Linux",
+    "fr": "Portage natif pour macOS, iOS et Linux",
+    "it": "Port nativo per macOS, iOS e Linux",
+    "hu": "Natív port macOS-re, iOS-re és Linuxra",
+    "pl": "Natywny port na macOS, iOS i Linuksa",
+    "zh-Hans": "适用于 macOS、iOS 和 Linux 的原生移植版"
   },
   "legal": {
     "en": "An unofficial fan port, not affiliated with Ubisoft. No game files are included: play your own GOG copy.",

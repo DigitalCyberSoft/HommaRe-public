@@ -145,7 +145,8 @@ Pro 13" (M5) и iPhone 15 Pro Max (iOS 27), в основном с **русск�
 |---|---|
 | Mac (Apple silicon) | [Скачайте DMG](../../releases/latest) или [соберите сами](#сборка-из-исходников). |
 | iPad и iPhone | [Установите IPA](../../releases/latest) через Sideloadly, AltStore или SideStore либо соберите сами на Mac в Xcode. |
-| Windows, Linux, Android | Пока не планируется: на Windows оригинальная игра и так работает. |
+| Linux (x86-64) | [Соберите сами](#сборка-из-исходников); рисует через Vulkan. |
+| Windows, Android | Пока не планируется: на Windows оригинальная игра и так работает. |
 
 ### Системные требования
 
@@ -387,7 +388,7 @@ x86-игр под Windows.
 ### Сборка из исходников
 
 В репозитории нет кода игры: сборка транслирует **ваши собственные** исполняемые файлы,
-поэтому на Mac, где идёт сборка, игра должна быть установлена (сборка читает её
+поэтому на Mac или ПК с Linux, где идёт сборка, игра должна быть установлена (сборка читает её
 исполняемые файлы `H5_Game.exe` и `granny2.dll`). Готовое приложение не несёт ни данных игры,
 ни модов, сделанных из них: игру в него вы устанавливаете на устройстве из своих
 инсталляторов GOG, как в [быстром старте](#быстрый-старт). Сгенерированный код, анализ
@@ -402,7 +403,16 @@ x86-игр под Windows.
 | «Повелители Орды» 3.1 | `bin/H5_Game.exe` | `3eb6fce81071f48631360202d81d41c67b09d8b1807105b1f22c402e15d16268` |
 
 **1. Зависимости.** Xcode, CMake, Ninja, Python 3 с зависимостями набора (`capstone`,
-`pefile`, `numpy`, `Pillow`) и Ghidra с JDK для анализа.
+`pefile`, `numpy`, `Pillow`) и Ghidra с JDK для анализа. На Linux вместо Xcode — clang и
+lld, заголовки SDL для X11, Wayland и звука (список в `kit/.github/workflows/checks.yml`),
+драйвер Vulkan и `innoextract`, чтобы лончер ставил игру из инсталляторов GOG. На Fedora:
+
+```bash
+sudo dnf install clang lld innoextract glslc java-21-openjdk-devel nas-devel \
+  pulseaudio-libs-devel pipewire-jack-audio-connection-kit-devel libXScrnSaver-devel \
+  mesa-libgbm-devel mesa-libGL-devel mesa-libEGL-devel libglvnd-devel ibus-devel \
+  pipewire-devel libdecor-devel liburing-devel
+```
 
 **2. Подключите свою игру и проанализируйте её.**
 
@@ -426,7 +436,9 @@ tools/analyze.py
 которая первой его зарегистрировала, поэтому для сборки на устройство поменяйте
 `bundle_id` в `game.toml`, `games/hof/game.toml` и `games/toe/game.toml` на свой префикс
 (окончания `.hof` и `.toe` оставьте). Ключей подписи и профилей в репозитории нет: Xcode
-подписывает вашей командой. `--overlay` оставляет оверлей
+подписывает вашей командой. На Linux `--target app` оставляет `build/package/HommaRe` (и
+архив рядом): исполняемый файл `HommaRe` с дополнениями в `modules/`, запускается из этой
+папки. `--overlay` оставляет оверлей
 производительности набора (F11). Трансляция занимает около 10–15 минут на игру,
 компиляция — около 25 минут на игру и платформу на M1 Max; следующие сборки
 инкрементальные. После изменений в трансляторе запускайте `kit/tools/build.py` с
