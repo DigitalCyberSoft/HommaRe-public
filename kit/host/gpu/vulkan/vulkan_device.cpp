@@ -1061,6 +1061,7 @@ void VulkanDevice::reap_loop() {
             retired_order_.pop_front();
         }
         free_cmds_.push_back(std::move(s.cmd));
+        completing_ = s.id;
         retired_cv_.notify_all();
         lock.unlock();
         for (auto &fn : callbacks)
@@ -1068,6 +1069,8 @@ void VulkanDevice::reap_loop() {
         if (presented)
             presented(done_at);
         lock.lock();
+        completing_ = 0;
+        retired_cv_.notify_all();
     }
 }
 
@@ -1085,6 +1088,8 @@ void VulkanDevice::wait(CommandBuffer cb) {
         }
     } done{this, t0};
     retired_cv_.wait(lock, [&] {
+        if (cb.id == completing_)
+            return false; // its callbacks are still running
         if (retired_.count(cb.id))
             return true;
         for (auto &s : submitted_)
@@ -1107,7 +1112,7 @@ CommandStatus VulkanDevice::status(CommandBuffer cb) {
 
 void VulkanDevice::wait_all_submitted() {
     std::unique_lock lock(mutex_);
-    retired_cv_.wait(lock, [&] { return submitted_.empty(); });
+    retired_cv_.wait(lock, [&] { return submitted_.empty() && !completing_; });
 }
 
 uint64_t VulkanDevice::submission_watermark() {

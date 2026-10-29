@@ -292,6 +292,9 @@ class VulkanDevice final : public Device {
     std::vector<Grave> graves_;
     std::unordered_map<uint64_t, CommandStatus> retired_; // bounded: last 1024
     std::deque<uint64_t> retired_order_;
+    // The buffer whose on_complete callbacks the reaper is running: wait()
+    // returns only after them, as gpu.h's "blocks until complete" means.
+    uint64_t completing_ = 0;
     std::condition_variable reaper_cv_, retired_cv_;
     std::thread reaper_;
     bool stopping_ = false;
