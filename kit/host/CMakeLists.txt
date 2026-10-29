@@ -376,6 +376,7 @@ if(TARGET recomp_gen)
             ${HOST}/controls/controls_host.cpp ${HOST}/controls/gamepad_sdl.cpp
             ${HOST}/controls/vpad_host_api.cpp
             ${HOST}/game_path.cpp ${HOST}/present.cpp ${HOST}/text_overrides.cpp ${HOST}/ui_mods.cpp
+            ${HOST}/server_prompt.cpp
             ${HOST}/page_overlay.cpp
             ${POP_PRESENT_SOURCES}
             ${HOST}/input.cpp ${HOST}/input_gate.cpp ${HOST}/input_touch.cpp
@@ -546,7 +547,7 @@ pop_host(host_tests UI_LAYER
           ${POP_ROOT}/runtime/tests/stub_recomp_call.cpp
           ${HOST}/report_lock.cpp ${HOST}/script.cpp ${HOST}/present.cpp
           ${POP_ROOT}/mods/font6x8.cpp
-          ${HOST}/game_path.cpp
+          ${HOST}/game_path.cpp ${HOST}/server_prompt.cpp
           ${HOST}/page_overlay.cpp ${POP_PRESENT_SOURCES} ${HOST}/input.cpp ${HOST}/input_gate.cpp
           ${POP_AUDIO_SOURCES}
           ${POP_ROOT}/dx/com.cpp ${POP_ROOT}/dx/host_api.cpp

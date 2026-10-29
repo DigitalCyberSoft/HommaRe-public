@@ -5,7 +5,9 @@
 
 namespace {
 bool g_enabled = false;
-}
+// Installed once, before the guest starts; only read after that.
+const HostPagePrompt *g_prompt = nullptr;
+} // namespace
 
 void host_page_set_enabled(bool enabled) {
     g_enabled = enabled;
@@ -73,7 +75,48 @@ bool host_page_rgba(std::vector<uint8_t> *rgba) {
 }
 
 int host_page_menu(int w, int h, uint64_t *generation, const uint8_t **pixels) {
+    // A prompt takes the menu's place, mods or no mods: the guest that asked
+    // is waiting for it.
+    if (g_prompt && g_prompt->open())
+        return g_prompt->render(w, h, generation, pixels);
     if (!g_enabled)
         return 0;
     return mods_menu_render(w, h, generation, pixels);
+}
+
+void host_page_set_prompt(const HostPagePrompt *prompt) {
+    g_prompt = prompt;
+}
+bool host_page_prompt_open() {
+    return g_prompt && g_prompt->open();
+}
+int host_page_prompt_render(int w, int h, uint64_t *generation, const uint8_t **pixels) {
+    if (!g_prompt || !g_prompt->open())
+        return 0;
+    return g_prompt->render(w, h, generation, pixels);
+}
+bool host_page_prompt_key(uint8_t dik, bool down) {
+    return g_prompt && g_prompt->key(dik, down);
+}
+bool host_page_prompt_text(const char *utf8) {
+    if (!host_page_prompt_open() || !utf8)
+        return false;
+    g_prompt->text(utf8);
+    return true;
+}
+bool host_page_prompt_pointer(float u, float v, int button, bool down, int wheel) {
+    if (!host_page_prompt_open())
+        return false;
+    g_prompt->pointer(u, v, button, down ? 1 : 0, wheel);
+    return true;
+}
+bool host_page_prompt_wants_text() {
+    return g_prompt && g_prompt->wants_text();
+}
+void host_page_prompt_cancel() {
+    if (g_prompt)
+        g_prompt->cancel();
+}
+bool host_page_visible() {
+    return mods_page_visible() || host_page_prompt_open();
 }
