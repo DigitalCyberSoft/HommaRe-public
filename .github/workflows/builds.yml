@@ -234,45 +234,6 @@ jobs:
         with:
           name: windows-test-binaries
           path: build/windows-stub
-      - name: TEMPORARY diagnostic, UDP ports
-        shell: bash
-        run: |
-          netsh int ipv4 show excludedportrange protocol=udp
-          python - <<'EOF'
-          import socket, subprocess, time, csv, io, getpass
-          print("this process runs as", getpass.getuser())
-          def scan():
-              bad = {}
-              for p in range(49152, 65536):
-                  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                  try:
-                      s.bind(("0.0.0.0", p))
-                  except OSError as e:
-                      bad[p] = e.winerror
-                  s.close()
-              return bad
-          def owners():
-              out = subprocess.run(["netstat", "-ano", "-p", "UDP"], capture_output=True, text=True).stdout
-              own = {}
-              for line in out.splitlines():
-                  f = line.split()
-                  if len(f) >= 4 and f[0] == "UDP" and ":" in f[1]:
-                      own.setdefault(int(f[1].rsplit(":", 1)[1]), set()).add(int(f[-1]))
-              return own
-          tl = subprocess.run(["tasklist", "/svc", "/fo", "csv"], capture_output=True, text=True).stdout
-          names = {int(r["PID"]): "%s [%s]" % (r["Image Name"], r["Services"]) for r in csv.DictReader(io.StringIO(tl))}
-          seen = {}
-          for i in range(10):
-              bad, own = scan(), owners()
-              print("scan %d: %d refused (10013), %d in use (10048), %d other" % (i, sum(e == 10013 for e in bad.values()),
-                    sum(e == 10048 for e in bad.values()), sum(e not in (10013, 10048) for e in bad.values())))
-              for p, e in sorted(bad.items()):
-                  if p not in seen:
-                      seen[p] = e
-                      print("  %d: %d, held by %s" % (p, e, ", ".join(names.get(pid, str(pid)) for pid in own.get(p, ())) or "nobody in netstat"))
-              time.sleep(2)
-          print("distinct refused or taken ports over 10 scans:", len(seen))
-          EOF
       - name: The suites that need no game and no GPU
         shell: bash
         env:
