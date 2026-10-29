@@ -31,6 +31,9 @@ if(APPLE AND RECOMP_NATIVE_LAUNCHER)
   elseif(NOT IOS AND CMAKE_OSX_DEPLOYMENT_TARGET AND NOT CMAKE_Swift_COMPILER_TARGET)
     set(CMAKE_Swift_COMPILER_TARGET "${CMAKE_SYSTEM_PROCESSOR}-apple-macos${CMAKE_OSX_DEPLOYMENT_TARGET}")
   endif()
+  # Swift 5 for every target. Xcode 16 otherwise gets CMake's default, 4,
+  # after the targets' own -swift-version 5, and the launcher fails there.
+  set(CMAKE_Swift_LANGUAGE_VERSION 5.0)
   enable_language(Swift)
 endif()
 
@@ -90,6 +93,8 @@ if(ANDROID AND POP_TRANSLATE STREQUAL "STUB")
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/android-stub)
 elseif(ANDROID)
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/android)
+elseif(IOS AND POP_TRANSLATE STREQUAL "STUB" AND CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+  set(POP_BUILD_DIR ${POP_BUILD_ROOT}/ios-sim-stub)
 elseif(IOS AND POP_TRANSLATE STREQUAL "STUB")
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/ios-stub)
 # Cross builds (the web, Windows from macOS or Linux) keep theirs apart from

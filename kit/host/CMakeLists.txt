@@ -376,14 +376,16 @@ if(TARGET recomp_gen)
             ${HOST}/controls/controls_host.cpp ${HOST}/controls/gamepad_sdl.cpp
             ${HOST}/controls/vpad_host_api.cpp
             ${HOST}/game_path.cpp ${HOST}/present.cpp ${HOST}/text_overrides.cpp ${HOST}/ui_mods.cpp
+            ${HOST}/server_prompt.cpp
             ${HOST}/page_overlay.cpp
             ${POP_PRESENT_SOURCES}
             ${HOST}/input.cpp ${HOST}/input_gate.cpp ${HOST}/input_touch.cpp
             ${HOST}/input_trackpad.cpp ${POP_AUDIO_SOURCES})
   # The game's own screens drawn natively over it on iOS (sdl/platform_ui.h
   # platform_ui_native_screen): SwiftUI sources in the game repository's
-  # native-screens/, one module, RecompScreens, linked into the app and the
-  # game's module. Swift is there whenever the native launcher is.
+  # native-screens/, one module, RecompScreens, linked into the app alone (a
+  # game's module calls the app's copy). Swift is there whenever the native
+  # launcher is.
   file(GLOB pop_screen_sources ${RECOMP_GAME_DIR}/native-screens/*.swift)
   if(IOS AND TARGET launcher_native AND pop_screen_sources)
     add_library(native_screens STATIC ${pop_screen_sources})
@@ -504,7 +506,11 @@ if(TARGET recomp_gen)
       LIBS ${POP_CORE_LIBS}
       FRAMEWORKS ${FW_METAL})
     pop_link_sdl(recomp_game)
-    pop_link_native_screens(recomp_game)
+    # The module uses the app's RecompScreens (sdl/platform_ui_ios.mm): a
+    # second copy would register its Objective-C classes twice in the process.
+    if(TARGET native_screens)
+      target_compile_definitions(recomp_game PRIVATE RECOMP_NATIVE_SCREENS=1)
+    endif()
     if(APPLE AND NOT IOS)
       # The static SDL brought AppKit in for metal_surface.mm; the shared one does not.
       target_link_libraries(recomp_game PRIVATE "-framework AppKit")
@@ -556,7 +562,7 @@ pop_host(host_tests UI_LAYER
           ${POP_ROOT}/runtime/tests/stub_recomp_call.cpp
           ${HOST}/report_lock.cpp ${HOST}/script.cpp ${HOST}/present.cpp
           ${POP_ROOT}/mods/font6x8.cpp
-          ${HOST}/game_path.cpp
+          ${HOST}/game_path.cpp ${HOST}/server_prompt.cpp
           ${HOST}/page_overlay.cpp ${POP_PRESENT_SOURCES} ${HOST}/input.cpp ${HOST}/input_gate.cpp
           ${POP_AUDIO_SOURCES}
           ${POP_ROOT}/dx/com.cpp ${POP_ROOT}/dx/host_api.cpp

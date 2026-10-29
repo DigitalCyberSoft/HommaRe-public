@@ -21,6 +21,33 @@
   a unicast datagram to one of its sockets only.
 - Failed socket calls go to the log; `RECOMP_TRACE_SOCKETS=1` also shows each
   datagram's first bytes.
+- `GetLastError`/`WSAGetLastError` are per thread, as on Windows: a call into
+  the runtime may run another guest thread, whose error then replaced the
+  caller's. Heroes V's Ubi.com thread took the main thread's
+  `ERROR_FILE_NOT_FOUND` for its lobby connection's error after a `recv` that
+  would block, closed the connection, and creating a game failed.
+
+## A GS game's server list from a community server (ubi-gs)
+
+- `[online] gsconnect_host` names the host a Ubisoft Game Service title asks for its
+  servers (Heroes V: `gsconnect.ubisoft.com`). libcurl.dll's stand-in
+  (`runtime/curl_http.cpp`) sends that one request, over plain HTTP, to a server the
+  player names instead; Ubisoft's domain is never contacted, and every other URL still
+  fails offline. Without the key nothing changes.
+- The host asks while the game waits (`host/server_prompt.cpp`): `[online] prompt_title`
+  and `prompt_text`, a field for an IP address or host name with an optional `:port`,
+  and the servers that answered before, most recent first, the first one preselected.
+  They are kept in the profile's `ubi-gs-servers.txt` (ten at most). A server that does
+  not answer brings the question back with the reason; Cancel gives the game the
+  failure it had before.
+- The question is a page in the settings menu's place (`page_overlay.h`
+  `HostPagePrompt`). A game asking from the thread that presents its frames gets it on
+  the presenter's repeated frames, so a blocked main thread still shows it; text input
+  (a phone's keyboard) is raised while it is open.
+- `[online] default_server` ("host" or "host:port") is offered in the field and the list
+  while the profile's list is empty; once a server answered, the most recent one is.
+- `RECOMP_AUTO_KEYS` takes `text:...`, typed into such a prompt.
+- The settings menu's TrueType canvas moved to `runtime/gdi32_canvas.h`, shared with it.
 
 ## The web: a whole game in the browser
 

@@ -7,6 +7,18 @@ set(POP_RUNTIME_SOURCES
   media_foundation.cpp layout.cpp interp.cpp discovery.cpp)
 # zlib1.dll on the host's zlib, and the offline stand-ins (legacy_dlls.cpp).
 list(APPEND POP_RUNTIME_SOURCES legacy_dlls.cpp winsock.cpp)
+# libcurl.dll's one useful request, a GS game's server list, over plain HTTP
+# (curl_http.cpp); the sockets are POSIX's, and a Windows build fails it. So
+# does the web's: a page has no sockets of its own (Emscripten's would be
+# WebSockets to a proxy the site does not have), as with WinSock there.
+list(APPEND POP_RUNTIME_SOURCES curl_http.cpp)
+if(WIN32 OR EMSCRIPTEN)
+  list(APPEND POP_RUNTIME_SOURCES http_get_none.cpp)
+else()
+  list(APPEND POP_RUNTIME_SOURCES http_get_posix.cpp)
+endif()
+# The pages the host draws over the game, in the kit's Open Sans.
+list(APPEND POP_RUNTIME_SOURCES gdi32_canvas.cpp)
 if(NOT TARGET ZLIB::ZLIB) # the web's is Emscripten's port (cmake/Dependencies.cmake)
   find_package(ZLIB REQUIRED)
 endif()
@@ -56,6 +68,18 @@ add_test(NAME interp_tests COMMAND interp_tests WORKING_DIRECTORY ${POP_ROOT})
 # forever: a regression in them is a hang, not a failure, and a hung run
 # reports nothing at all. The suite takes under a second.
 set_tests_properties(interp_tests PROPERTIES LABELS nogame TIMEOUT 120)
+endif()
+
+# libcurl's stand-in and its HTTP GET against a server on 127.0.0.1, which the
+# suite runs itself over POSIX sockets, as the stand-in does.
+if(NOT IOS AND NOT ANDROID AND NOT WIN32)
+add_executable(curl_http_tests tests/curl_http_tests.cpp tests/stub_recomp_call.cpp)
+target_link_libraries(curl_http_tests PRIVATE recomp_platform recomp_runtime)
+target_compile_options(curl_http_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(curl_http_tests 1)
+pop_test_binary(curl_http_tests)
+add_test(NAME curl_http_tests COMMAND curl_http_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(curl_http_tests PROPERTIES LABELS nogame TIMEOUT 120)
 endif()
 
 # Linked by the hosts, the fixture and the mod tests, not by the unit tests.

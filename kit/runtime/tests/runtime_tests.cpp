@@ -7059,7 +7059,10 @@ static void test_legacy_dlls(X86 *c) {
         check(call_import(c, "WSOCK32.dll", "ord111", {}) == 10050,
               "WSAGetLastError is WSAENETDOWN");
     }
-    check(call_import(c, "libcurl.dll", "curl_easy_init", {}) == 0, "curl_easy_init returns NULL");
+    // libcurl's stand-in hands out handles now; curl_http_tests covers its requests.
+    const uint32_t curl = call_import(c, "libcurl.dll", "curl_easy_init", {});
+    check(curl != 0, "curl_easy_init gives a handle");
+    call_import(c, "libcurl.dll", "curl_easy_cleanup", {curl});
     check(call_import(c, "dbghelp.dll", "SymInitialize", {0, 0, 1}) == 0, "SymInitialize fails");
     uint32_t uuid = heap_alloc(16, true);
     check(call_import(c, "RPCRT4.dll", "UuidCreate", {uuid}) == 0 && (rd16(uuid + 6) >> 12) == 4,

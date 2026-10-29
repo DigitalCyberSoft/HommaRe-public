@@ -28,10 +28,12 @@ static bool check(bool ok, const char *fmt, ...) {
 }
 
 // Pushes the arguments and a return address, dispatches, and checks the shim
-// popped exactly what its declared argument count says.
-static uint32_t call(X86 *c, const char *name, const std::vector<uint32_t> &args) {
-    uint32_t tramp = imports_resolve("WSOCK32.dll", name);
-    if (!tramp)
+// popped exactly what its declared argument count says. A WinSock call unless
+// `dll` names another.
+static uint32_t call(X86 *c, const char *name, const std::vector<uint32_t> &args,
+                     const char *dll = nullptr) {
+    uint32_t tramp = imports_resolve(dll ? dll : "WSOCK32.dll", name);
+    if (!tramp && !dll)
         tramp = imports_resolve("WS2_32.dll", name);
     if (!tramp) {
         check(false, "no trampoline for %s", name);
@@ -300,6 +302,54 @@ static void test_tcp(X86 *c) {
     call(c, "closesocket", {refused});
 }
 
+// The last error is per thread, as on Windows. Heroes V's Ubi.com thread
+// polls its lobby connection with recv and asks WSAGetLastError whether the
+// failure was WSAEWOULDBLOCK; any call into the runtime may let another guest
+// thread run, and when the main thread failed to open a file in between, the
+// Ubi.com thread read ERROR_FILE_NOT_FOUND, closed the connection as broken,
+// and creating a game failed. Here the other guest thread is a host thread,
+// as the scheduler gives each guest thread one.
+struct OtherThread {
+    X86 ctx;
+    uint32_t read_back = 0;
+};
+static void *other_thread_fails_a_file(void *arg) {
+    OtherThread *t = (OtherThread *)arg;
+    call(&t->ctx, "SetLastError", {2}, "KERNEL32.dll"); // ERROR_FILE_NOT_FOUND
+    t->read_back = call(&t->ctx, "GetLastError", {}, "KERNEL32.dll");
+    return nullptr;
+}
+static void test_last_error_per_thread(X86 *c) {
+    uint32_t listener = call(c, "socket", {2, 1, 0});
+    uint32_t sa = sockaddr_at(LOOPBACK, 0), len = block(4), on = block(4);
+    wr32(len, 16);
+    wr32(on, 1);
+    call(c, "bind", {listener, sa, 16});
+    call(c, "listen", {listener, 4});
+    call(c, "getsockname", {listener, sa, len});
+    uint32_t client = call(c, "socket", {2, 1, 0});
+    check(call(c, "connect", {client, sockaddr_at(LOOPBACK, sockaddr_port(sa)), 16}) == 0,
+          "connect to the listener");
+    uint32_t server = call(c, "accept", {listener, 0, 0});
+    call(c, "ioctlsocket", {client, 0x8004667eu, on});
+
+    uint32_t buf = block(64);
+    check(call(c, "recv", {client, buf, 64, 0}) == SOCKET_ERROR,
+          "a non-blocking recv with nothing to read fails");
+    OtherThread other;
+    other.ctx = *c;
+    other.ctx.r[R_ESP] = block(0x1000) + 0x1000; // its own guest stack
+    OsThread *t = os_thread_create(other_thread_fails_a_file, &other, 0);
+    check(t != nullptr, "another thread runs");
+    if (t)
+        os_thread_join(t);
+    check(other.read_back == 2, "that thread reads its own ERROR_FILE_NOT_FOUND (%u)", other.read_back);
+    const uint32_t e = last_error(c);
+    check(e == 10035, "WSAGetLastError still says WSAEWOULDBLOCK on the recv's thread (%u)", e);
+    for (uint32_t s : {client, server, listener})
+        call(c, "closesocket", {s});
+}
+
 static void test_names(X86 *c) {
     uint32_t name = block(256);
     check(call(c, "gethostname", {name, 256}) == 0 && rd8(name) != 0, "gethostname: %s",
@@ -431,6 +481,8 @@ int main() {
     test_udp(&c);
     printf("winsock tcp\n");
     test_tcp(&c);
+    printf("winsock last error per thread\n");
+    test_last_error_per_thread(&c);
     printf("winsock names\n");
     test_names(&c);
     printf("winsock broadcast\n");

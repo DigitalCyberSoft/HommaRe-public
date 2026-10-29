@@ -34,6 +34,8 @@
 #include "../input.h"
 #include "../input_gate.h"
 #include "../text_overrides.h"
+#include "../page_overlay.h"
+#include "../server_prompt.h"
 #include "../ui_mods.h"
 #include "../input_touch.h"
 #include "../input_trackpad.h"
@@ -535,7 +537,7 @@ void update_idle_cursor() {
     // Test128: a Direct3D 9 game (NFSMW) never has a DirectDraw primary, so the arrow never hid; the GPU renderer
     // running (the device took the game's draws) counts as the game's picture too (RC5 launcher log, 2 Oct 2026).
     const bool primary = ddraw_gdi_primary_active() || host_d9_active() != 0, focus = g_window && (SDL_GetWindowFlags(g_window) & SDL_WINDOW_INPUT_FOCUS),
-               page = mods_page_visible() || mods_controls_editing();
+               page = host_page_visible() || mods_controls_editing();
     const bool want = idle && primary && focus && !page && !g_close_requested;
     if (want != g_idle_hidden) {
         g_idle_hidden = want;
@@ -591,7 +593,7 @@ bool pointer_capture_wanted() {
         return false;
     if (window_minimized_or_hidden())
         return false;
-    if (mods_page_visible() || mods_controls_editing())
+    if (host_page_visible() || mods_controls_editing())
         return false;
     return true;
 }
@@ -801,7 +803,7 @@ void apply_button(int button, bool down, int32_t x, int32_t y, bool inside, bool
     }
     if (!host_pointer_captured() &&
         host_pointer_can_capture(pointer_capture_wanted(), inside, down, g_escape_held,
-                                 mods_page_visible() || mods_controls_editing()))
+                                 host_page_visible() || mods_controls_editing()))
         apply_pointer_capture(true);
     x = hit.gx;
     y = hit.gy;
@@ -1419,6 +1421,21 @@ void update_editor_text_input() {
         SDL_StopTextInput(g_window);
 }
 
+// SDL's text input follows a host prompt (the ubi-gs server): on a phone or a
+// tablet that is what raises the system keyboard; on a desktop it is what
+// makes SDL deliver the typed text (SDL_EVENT_TEXT_INPUT) the prompt reads.
+void update_prompt_text_input() {
+    static bool on = false;
+    const bool want = host_page_prompt_wants_text();
+    if (want == on || !g_window)
+        return;
+    on = want;
+    if (want)
+        SDL_StartTextInput(g_window);
+    else
+        SDL_StopTextInput(g_window);
+}
+
 // Test128 (RC3 and Development 61 test sessions): when the Mac sleeps, the TV's HDMI audio device
 // disappears and comes back on wake as a new device (#15 removed, #39 'LG TV' added). The output - the Dolby Digital
 // bitstream or PCM - stayed on the vanished device, so the game was silent until it was restarted, and the game's
@@ -1578,11 +1595,26 @@ void handle_event(const SDL_Event &event) {
         break;
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP:
+        // Ctrl+V or Command-V pastes into a host prompt (the ubi-gs server's
+        // address); the clipboard is read here, on the window's thread.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_V &&
+            (event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) && host_page_prompt_open()) {
+            if (char *clip = SDL_GetClipboardText()) {
+                (void)host_page_prompt_text(clip);
+                SDL_free(clip);
+            }
+            break;
+        }
         // Command combinations belong to the application, not the game:
         // Command-Q quits through SDL_EVENT_QUIT and Command-H hides.
         if (event.key.mod & SDL_KMOD_GUI)
             break;
         handle_key(event.key, event.type == SDL_EVENT_KEY_DOWN);
+        break;
+    case SDL_EVENT_TEXT_INPUT:
+        // Typed text (and a phone's keyboard's) goes to a host prompt; the
+        // game takes its characters from the key events instead.
+        (void)host_page_prompt_text(event.text.text);
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         trace_state("focus LOST");
@@ -1738,16 +1770,19 @@ void handle_event(const SDL_Event &event) {
         static bool sent[256] = {};
         bool down = false;
         const int dik = controls::gamepad_menu_key(event, &down);
-        if (dik && down && mods_page_visible()) {
+        if (dik && down && host_page_visible()) {
             sent[dik] = true;
             // The page's press stays the page's: when it closes the page (East = Escape), the game
             // must not see the button still held.
             if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
                 controls::gamepad_mask_until_release(event.gbutton.button);
-            (void)mods_input_key(uint8_t(dik), 0, true);
+            // A host prompt (the ubi-gs server) before the settings page, as the keyboard's.
+            if (!host_page_prompt_key(uint8_t(dik), true))
+                (void)mods_input_key(uint8_t(dik), 0, true);
         } else if (dik && !down && sent[dik]) {
             sent[dik] = false;
-            (void)mods_input_key(uint8_t(dik), 0, false);
+            if (!host_page_prompt_key(uint8_t(dik), false))
+                (void)mods_input_key(uint8_t(dik), 0, false);
         }
         controls::gamepad_handle_event(event);
         break;
@@ -1761,6 +1796,9 @@ void handle_event(const SDL_Event &event) {
             fprintf(stderr, "[host] %s: asking the game to close\n",
                     event.type == SDL_EVENT_QUIT ? "quit requested" : "window close requested");
         g_close_requested = true;
+        // A guest thread waiting on a host prompt gets its "no" now, so it
+        // can take part in the shutdown.
+        host_page_prompt_cancel();
         break;
     default:
         break;
@@ -1784,6 +1822,8 @@ void handle_event(const SDL_Event &event) {
 //   total: points, scale change, degrees; ":X:Y" puts the game's cursor
 //   there first, in window points) is a trackpad gesture through the same
 //   handler AppKit's events reach (sdl/trackpad_mac.h), a step every 16 ms.
+//   "30:text:127.0.0.1:8080" types the rest of the item (no commas) as an
+//   SDL text-input event would deliver it, into a host prompt.
 struct AutoInput {
     double at;
     bool click, down;
@@ -1793,6 +1833,7 @@ struct AutoInput {
     int trackpad = -1, phase = 0, momentum = 0;
     double amount = 0;
     bool place = false; // put the game's cursor at x, y (trackpad gestures)
+    std::string text;   // typed text; non-empty for a text item
 };
 
 // The trackpad gesture of a RECOMP_AUTO_KEYS item, as the timed steps a
@@ -1868,6 +1909,12 @@ std::vector<AutoInput> parse_auto_input(const char *spec) {
                 fprintf(stderr, "[host] RECOMP_AUTO_KEYS: bad trackpad item %s\n", what.c_str());
             continue;
         }
+        if (what.compare(0, 5, "text:") == 0) {
+            a.text = what.substr(5);
+            if (!a.text.empty())
+                out.push_back(a); // no release
+            continue;
+        }
         if (what.compare(0, 6, "click:") == 0) {
             a.click = true;
             if (sscanf(what.c_str() + 6, "%f:%f", &a.x, &a.y) != 2)
@@ -1921,6 +1968,14 @@ void auto_input_tick() {
     while (ours && next < script.size() && script[next].at <= now) {
         AutoInput a = script[next++]; // a copy: fractional clicks become points below
         SDL_Event e{};
+        if (!a.text.empty()) {
+            // What SDL_EVENT_TEXT_INPUT does with it (handle_event), without
+            // an event whose text SDL would have to own.
+            const bool taken = host_page_prompt_text(a.text.c_str());
+            fprintf(stderr, "[host] auto input at %.1f s: text \"%s\"%s\n", now, a.text.c_str(),
+                    taken ? "" : " (no prompt open; dropped)");
+            continue;
+        }
         if (a.place || a.trackpad >= 0) {
 #if defined(__APPLE__) && !TARGET_OS_IPHONE
             if (a.place) {
@@ -2192,6 +2247,7 @@ void sync_native_screen() {
 void after_events() {
     publish_safe_insets();
     install_trackpad();
+    update_prompt_text_input();
     {
         // Time-based gestures (a long press) fire from the clock, not an event,
         // and deferred clicks go out once the game's cursor has caught up and
@@ -3240,7 +3296,7 @@ int main(int argc, char **argv) {
     }
     os_audio_on_service_restart(audio_service_restarted);
     // While the settings page is up it owns the pad; the game sees nothing held.
-    controls::gamepad_set_suppressed_query([] { return mods_page_visible(); });
+    controls::gamepad_set_suppressed_query([] { return host_page_visible(); });
 
     g_gpu = gpu::create_default_device();
     if (!g_gpu) {
@@ -3384,6 +3440,11 @@ int main(int argc, char **argv) {
         host_text_overrides(root, host_layout().profile_dir, RECOMP_TEXTS_PAK, RECOMP_TEXTS_FILES,
                             RECOMP_TEXTS_REPLACE);
     }
+    // game.toml [online]: the game's GS server list comes from a server the
+    // player names when its online mode asks (server_prompt.h).
+    if (*RECOMP_ONLINE_GSCONNECT_HOST)
+        server_prompt_install(host_layout().profile_dir, RECOMP_ONLINE_PROMPT_TITLE,
+                              RECOMP_ONLINE_PROMPT_TEXT, RECOMP_ONLINE_DEFAULT_SERVER);
 
     // The renderer first: the presenter shares its device, so a present
     // cannot run ahead of the scene it is showing.

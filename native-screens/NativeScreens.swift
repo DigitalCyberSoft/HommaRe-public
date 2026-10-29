@@ -53,6 +53,8 @@ private let documentTypes: [String: any ScreenDocument.Type] = [
     "mp_players": PlayersScreen.self,
     "lan_duel": DuelScreen.self,
     "lan_duel3": DuelScreen.self,
+    // ubi-gs (screens_ubi.c): the login is a "form", the CD key a "lan_name".
+    "table": TableScreen.self,
 ]
 
 /// The document the game sent last, decoded for the view of its screen.
