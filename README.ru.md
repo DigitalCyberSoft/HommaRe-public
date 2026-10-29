@@ -151,6 +151,7 @@ Pro 13" (M5) и iPhone 15 Pro Max (iOS 27), в основном с **русск�
 | Mac (Apple silicon) | [Скачайте DMG](../../releases/latest) или [соберите сами](#сборка-из-исходников). |
 | iPad и iPhone | [Установите IPA](../../releases/latest) через Sideloadly, AltStore или SideStore либо соберите сами на Mac в Xcode. |
 | Linux (x86-64) | [Соберите сами](#сборка-из-исходников); рисует через Vulkan. |
+| Linux (64-битный ARM) | [Соберите сами](#сборка-из-исходников), на самом ARM-компьютере или кросс-компиляцией на ПК с x86-64; Vulkan. Для ARM-хромбуков, ноутбуков на Snapdragon X, Asahi Linux, Raspberry Pi 5. Собирается; на железе ещё не проверялась. |
 | Windows, Android | Пока не планируется: на Windows оригинальная игра и так работает. |
 
 ### Системные требования
@@ -447,6 +448,19 @@ sudo dnf install clang lld innoextract glslc java-21-openjdk-devel nas-devel \
   pipewire-devel libdecor-devel liburing-devel
 ```
 
+На Debian 13, Ubuntu 24.04 и новее, а также на основанных на них Raspberry Pi OS и
+Linux-окружении хромбука (сборка проверена с clang 20; clang 14 из Debian 12 может
+оказаться слишком старым для C++20 набора, там соберите кросс-компиляцией, как ниже):
+
+```bash
+sudo apt install clang lld make pkg-config python3-venv innoextract glslc openjdk-21-jdk \
+  libasound2-dev libpulse-dev libaudio-dev libjack-jackd2-dev libsndio-dev libx11-dev \
+  libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+  libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+  libdbus-1-dev libibus-1.0-dev libudev-dev libpipewire-0.3-dev libwayland-dev \
+  libdecor-0-dev liburing-dev mesa-vulkan-drivers
+```
+
 **2. Подключите свою игру и проанализируйте её.**
 
 ```bash
@@ -476,6 +490,26 @@ tools/analyze.py
 компиляция — около 25 минут на игру и платформу на M1 Max; следующие сборки
 инкрементальные. После изменений в трансляторе запускайте `kit/tools/build.py` с
 `--regenerate`.
+
+**Linux на 64-битном ARM** (ARM-хромбуки, ноутбуки на Snapdragon X, Asahi Linux,
+Raspberry Pi 5) собирается так же на самом ARM-компьютере. ПК с x86-64 и Linux собирает
+его кросс-компиляцией своими clang и lld, с sysroot из Debian 12, который делает
+контейнер podman (или docker) без root; apt в контейнере работает через qemu-user
+(Fedora: `qemu-user-static-aarch64`, Debian и Ubuntu: `qemu-user-static`):
+
+```bash
+kit/tools/linux_sysroot.py --arch arm64     # один раз: kit/build/sysroots/debian12-arm64
+.venv/bin/python tools/build_app.py --target app --arch arm64
+```
+
+Результат — `build/linux-arm64/package/HommaRe` (и рядом `HommaRe-linux-aarch64.tar.gz`)
+для Debian 12, Ubuntu 22.04 и всего новее (glibc 2.35, libstdc++ из GCC 12). Трансляция — обычный C, общий со сборкой
+для x86-64, так что дважды ничего не транслируется; то же с `analysis/`, поэтому анализ
+можно сделать на другом компьютере, если у вашей Ghidra нет декомпилятора для ARM Linux.
+ARM-компьютеру нужен драйвер Vulkan 1.3 или Vulkan 1.1 с `VK_KHR_dynamic_rendering`:
+Honeykrisp (Asahi), Turnip (Adreno), PanVK (Mali) или V3DV (Raspberry Pi) из Mesa. Ядра со
+страницами по 16 КБ (Asahi, как на Mac) или 64 КБ подходят: приложение работает в размере
+страницы самого ядра.
 
 ### Полезные переключатели
 

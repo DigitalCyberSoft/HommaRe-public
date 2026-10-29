@@ -149,6 +149,7 @@ haven't been tested yet: reports welcome.
 | Mac (Apple silicon) | [Download the DMG](../../releases/latest), or [build it yourself](#building-from-source). |
 | iPad and iPhone | [Sideload the IPA](../../releases/latest) with Sideloadly, AltStore or SideStore, or build it yourself on a Mac with Xcode. |
 | Linux (x86-64) | [Build it yourself](#building-from-source); it draws with Vulkan. |
+| Linux (64-bit ARM) | [Build it yourself](#building-from-source), on the ARM computer or cross-compiled on an x86-64 PC; Vulkan. For ARM Chromebooks, Snapdragon X laptops, Asahi Linux, Raspberry Pi 5. Builds; not yet tried on the hardware. |
 | Windows, Android | Not planned for now: the original game already runs on Windows. |
 
 ### System requirements
@@ -441,6 +442,19 @@ sudo dnf install clang lld innoextract glslc java-21-openjdk-devel nas-devel \
   pipewire-devel libdecor-devel liburing-devel
 ```
 
+On Debian 13, Ubuntu 24.04 or newer, and Raspberry Pi OS or a Chromebook's Linux
+environment based on them (the build is tried with clang 20; Debian 12's clang 14 may be
+too old for the kit's C++20, so there cross-compile as below):
+
+```bash
+sudo apt install clang lld make pkg-config python3-venv innoextract glslc openjdk-21-jdk \
+  libasound2-dev libpulse-dev libaudio-dev libjack-jackd2-dev libsndio-dev libx11-dev \
+  libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+  libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+  libdbus-1-dev libibus-1.0-dev libudev-dev libpipewire-0.3-dev libwayland-dev \
+  libdecor-0-dev liburing-dev mesa-vulkan-drivers
+```
+
 **2. Link your game and analyse it.**
 
 ```bash
@@ -468,6 +482,26 @@ it): the `HommaRe` executable with the expansions in `modules/`, started from th
 performance overlay (F11). Translation takes about 10–15 minutes per game and
 compilation about 25 minutes per game and platform on an M1 Max; later builds are
 incremental. Use `--regenerate` with `kit/tools/build.py` after changing the translator.
+
+**Linux on 64-bit ARM** (ARM Chromebooks, Snapdragon X laptops, Asahi Linux, Raspberry Pi 5)
+builds the same way on the ARM computer itself. An x86-64 Linux PC cross-compiles it with
+its own clang and lld, against a Debian 12 sysroot that a rootless podman (or docker)
+container makes; the container's apt runs under qemu-user (Fedora:
+`qemu-user-static-aarch64`, Debian and Ubuntu: `qemu-user-static`):
+
+```bash
+kit/tools/linux_sysroot.py --arch arm64     # once: kit/build/sysroots/debian12-arm64
+.venv/bin/python tools/build_app.py --target app --arch arm64
+```
+
+That leaves `build/linux-arm64/package/HommaRe` (and `HommaRe-linux-aarch64.tar.gz` beside
+it) for Debian 12, Ubuntu 22.04 or anything newer (glibc 2.35, GCC 12's libstdc++). The translation is plain C and shared
+with the x86-64 build, so nothing is translated twice; the same holds for `analysis/`, so
+the analysis can run on another computer if your Ghidra has no decompiler for ARM Linux.
+The ARM computer needs a Vulkan 1.3 driver, or Vulkan 1.1 with
+`VK_KHR_dynamic_rendering`: Mesa's Honeykrisp (Asahi), Turnip (Adreno), PanVK (Mali) or
+V3DV (Raspberry Pi). Kernels with 16 KiB pages (Asahi, as on the Mac) or 64 KiB pages
+are fine: the app works in the kernel's own page size.
 
 ### Useful switches
 
