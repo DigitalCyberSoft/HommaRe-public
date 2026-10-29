@@ -25,8 +25,9 @@ Play your own GOG copy on Apple silicon Macs, iPad and iPhone.
 > sponsored by Ubisoft, Nival or GOG.
 >
 > **No game files are included or distributed.** To play, you need your own legally
-> obtained copy of the game from GOG. The launcher installs it from GOG's own offline
-> installers and verifies every file. Please don't ask for, or share, game files.
+> obtained copy of the game from GOG. The launcher downloads it from your GOG.com library
+> or installs it from GOG's own offline installers, and verifies every file. Please don't
+> ask for, or share, game files.
 > See the full [legal notice](#legal-notice).
 
 **Contents:** [What it is](#what-is-hommare) · [What's new](#whats-new) · [Highlights](#highlights) ·
@@ -50,13 +51,15 @@ battery when nothing moves.
 
 ## What's new
 
-**0.1-playable-286** (October 2026) · [all changes](CHANGELOG.md)
+**0.1-playable-344** (October 2026) · [all changes](CHANGELOG.md)
 
-- **Local network games:** *Multiplayer → Local Network* works between Macs, iPads and
-  iPhones on one network.
-- **Native menus on iPhone:** the game's menus drawn as native screens from its own
-  pictures and words; on iPad, choose *Menus → For the screen* in the launcher.
-- **Foldable iPhone:** no more fall back to 1024x768 after a screen lock.
+- **Install from GOG.com:** sign in to GOG in the launcher and it downloads the games you
+  own straight onto the Mac, iPad or iPhone, in English or Russian. No installer files
+  needed; they still work too.
+- **Online play through ubi-gs:** *Multi Player → Ubi.com* connects to a community server
+  standing in for Ubisoft's closed one.
+- **Hammers of Fate:** full screen with the English game on iPhone and iPad, and the
+  main menu's *Options* works with native menus.
 
 ## Highlights
 
@@ -70,6 +73,9 @@ battery when nothing moves.
   your installed game's own data at run time, so the app ships no game art. It has the
   ten languages of GOG's installers (English, Russian, Czech, German, Spanish, French,
   Italian, Hungarian, Polish and Simplified Chinese) and stands upright on an iPhone.
+- **Downloads from your GOG.com library, on every device.** Sign in to GOG in the
+  launcher and it downloads the games you own, English or Russian, checks every file's
+  SHA-256 and resumes a stopped download. No installer files and no Files app needed.
 - **Installs from your GOG installers, on every device.** Give the launcher GOG's offline
   installer: the `.exe`, the `.bin`, the folder they are in, or several at once; on a Mac
   you can also drop them onto the window. It unpacks only what the game needs, checks
@@ -132,8 +138,8 @@ haven't been tested yet: reports welcome.
 
 > [!NOTE]
 > **Mac:** a ready-made build is in [Releases](../../releases/latest)
-> (`HommaRe-<version>-macOS.dmg`). It holds no game data: you give it your own GOG
-> installers. macOS can't verify its developer, so it asks once on the first start (see
+> (`HommaRe-<version>-macOS.dmg`). It holds no game data: it downloads the game from
+> your GOG.com library or installs it from your own GOG installers. macOS can't verify its developer, so it asks once on the first start (see
 > [Quick start](#quick-start)). **iPad and iPhone:** an unsigned IPA is in the same
 > release (`HommaRe-<version>-iOS.ipa`); sideload it with Sideloadly, AltStore or
 > SideStore, or build the app yourself on a Mac.
@@ -150,7 +156,7 @@ haven't been tested yet: reports welcome.
 - **Everyone:** your own copy of Heroes of Might and Magic V from GOG: *Heroes of Might
   and Magic V* (with Hammers of Fate) and/or *Heroes of Might and Magic V: Tribes of the
   East*. About 4 GB of free space for Heroes V with Hammers of Fate, and 2.2 GB more for
-  Tribes of the East, plus room for the installers while you install.
+  Tribes of the East, plus room for the installers if you install from them.
 - **Mac:** Apple silicon, macOS 14 Sonoma or later. There is no Intel Mac build.
 - **iPad and iPhone:** an M-series iPad or a recent iPhone (tested on iPhone 15 Pro Max).
   The app asks iOS for more memory than most apps. The game plays in landscape.
@@ -164,17 +170,18 @@ haven't been tested yet: reports welcome.
    macOS can't verify the app's developer, so the first start fails: open *System Settings → Privacy &
    Security*, scroll down and press *Open Anyway* next to HommaRe. Later starts just work.
    (Or [build it yourself](#building-from-source).)
-1. **Download your installers from GOG.** In your GOG library, open *Heroes of Might and
-   Magic V* (and *Tribes of the East*, if you own it) and download the offline backup
-   installers: one `.exe` and one or more `.bin` files for each, and the update
-   (`patch_*.exe`) if GOG offers one.
-2. **Open HommaRe.** A game that isn't installed says *Not installed*. Press *Install from
-   GOG…* and choose the `.exe`, the `.bin` or the folder they are in, or drop them onto
-   the window. A file renamed by the browser is recognised, and the launcher says how to
-   name it.
-3. **Install.** The launcher unpacks the game, checks every file and marks it ready.
-   One GOG installer gives you both the original game and Hammers of Fate. If the game is
-   already installed somewhere, choose *Game folder…* instead.
+1. **Open HommaRe.** A game that isn't installed says *Not installed*. Press *Install from
+   GOG…*.
+2. **Sign in to GOG and download.** Sign in on GOG's own page in the panel that opens,
+   choose the game's language and press *Download* next to each game you own. The
+   launcher downloads it, checks every file and marks it ready. *Heroes of Might and Magic
+   V* gives you both the original game and Hammers of Fate. A stopped download resumes
+   where it stopped.
+3. **Or use your installer files.** If you already have GOG's offline installers (one
+   `.exe` and one or more `.bin` files for each game, and `patch_*.exe` if GOG offers
+   one), press *Use installer files…* in the same panel and choose the `.exe`, the `.bin`
+   or their folder, or drop them onto the window. If the game is already installed
+   somewhere, choose *Game folder…* instead.
 4. **Play.** Pick a game in the launcher and press *Play*. Your profiles, saves and
    settings are kept apart from the game files, so they survive updates and reinstalls.
 
@@ -185,10 +192,13 @@ First install the app: sideload `HommaRe-<version>-iOS.ipa` from
 with your Apple ID; turn on Developer Mode on the device), or
 [build it](#building-from-source) yourself.
 
-1. **Put the GOG installers on the device**: the `.exe` and `.bin` files, in the Files
-   app (on the device or in iCloud Drive), or with Finder from a Mac.
-2. **Open HommaRe**, press *Install from GOG…* and choose them. The launcher unpacks and
-   checks the game inside the app. Afterwards you can delete the installers.
+1. **Open HommaRe**, press *Install from GOG…* and sign in to GOG. Choose the game's
+   language and press *Download* next to each game you own: the launcher downloads it
+   into the app and checks every file (2–4 GB per game, use Wi-Fi).
+2. **Or use your GOG installers**: put the `.exe` and `.bin` files on the device in the
+   Files app (on the device or in iCloud Drive) or with Finder from a Mac, press *Use
+   installer files…* in the same panel and choose them. Afterwards you can delete the
+   installers.
 3. **Already have the game installed?** Copy its folder to the device instead and choose
    it with *Add game files…*.
 
@@ -284,8 +294,9 @@ tested.
 x86 code was translated ahead of time into C and compiled for arm64. A runtime written for
 this port stands in for the parts of Windows the game uses.
 
-**Can I install on the iPad or iPhone without a Mac?** Yes. Put GOG's installer files on
-the device (the Files app or iCloud Drive) and press *Install from GOG…* in the launcher.
+**Can I install on the iPad or iPhone without a Mac?** Yes. Press *Install from GOG…* in
+the launcher and sign in to GOG: it downloads the games you own. Or put GOG's installer
+files on the device (the Files app or iCloud Drive) and choose *Use installer files…*.
 
 **Can I bring my Windows saves and profiles?** Profiles and saves use the game's own
 formats. Copy them into the profile folder (see below); this hasn't been tested much yet.
