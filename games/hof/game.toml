@@ -156,6 +156,8 @@ files = [
 # (another language, whose hint starts with the same markup).
 [texts.replace]
 "<body><color_default>If you have forgotten your password or need to manage your account use the <color_bright>Account <color_default>button." = "<body><color_bright>Not your Ubisoft login!<color_default> Make up a name and password for this ubi-gs server."
+# The Russian install's hint the same way, in its own words, before the line below adds the English one.
+"<body><color_default>Если вы забыли свой пароль или хотите изменить личные данные, нажмите кнопку <color_bright>Профиль<color_default>." = "<body><color_bright>Это не ваш логин Ubisoft!<color_default> Придумайте имя и пароль для этого сервера ubi-gs."
 "<body><color_default>" = "<body><color_bright>Not your Ubisoft login!<color_default> Make up a name and password for this ubi-gs server.<br><color_default>"
 "в Windows" = "в систему"
 "to Windows" = "to Desktop"

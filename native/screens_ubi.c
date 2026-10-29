@@ -266,10 +266,12 @@ static void login_document(Json *j, Scratch *s, uint32_t screen) {
     j_text_field(j, 0, F_PASSWORD, "secret", ns_label(s, "/UI/MPRegiter/password.txt", "Пароль", "Password"),
                  password);
     j_lit(j, "],");
-    j_kv_str(j, "note", ns_tr("Подойдёт любой CD-ключ. Новое имя с паролем создаёт учётную запись на этом сервере; "
-                              "не используйте пароль от других сервисов.",
-                              "Any CD key works. A new name and password make an account on this server; "
-                              "don't use a password you use elsewhere."));
+    j_kv_str(j, "note", ns_tr("Подойдёт любой CD-ключ. Новое имя с паролем создаёт учётную запись на этом сервере. "
+                              "Пароль уходит туда только в виде хеша, но всё равно придумайте новый, "
+                              "не от Ubisoft и не от других сервисов.",
+                              "Any CD key works. A new name and password make an account on this server. "
+                              "The password reaches it only as a hash, but still make up a new one, "
+                              "not your Ubisoft login or one you use elsewhere."));
     if (busy) {
         const char *what = rd32(screen + UL_INIT)      ? ns_tr("Подключение к серверу...", "Connecting to the server...")
                            : rd32(screen + UL_LOGGING) ? ns_tr("Входим на сервер...", "Logging in...")
