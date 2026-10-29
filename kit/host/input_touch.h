@@ -62,6 +62,15 @@ constexpr double kTouchZoomNotches = 2.0;
 // one direction and up once the fingers have not turned for kTouchTwistIdleNs.
 constexpr double kTouchTwistStep = 0.05;
 constexpr uint64_t kTouchTwistIdleNs = 120ull * 1000000ull;
+// Hover: a drag the game says a held Shift would split (RECOMP_TOUCH_DRAG_SPLIT)
+// whose finger rests this long within kTouchSplitSlop holds Shift until the
+// drop. The ring that counts it down shows after kTouchSplitShowNs, so a
+// passing pause draws nothing; moving kTouchSplitCancel from where Shift went
+// down lets it go again.
+constexpr uint64_t kTouchSplitHoldNs = 700ull * 1000000ull;
+constexpr uint64_t kTouchSplitShowNs = 300ull * 1000000ull;
+constexpr double kTouchSplitSlop = 10.0;
+constexpr double kTouchSplitCancel = 40.0;
 
 // A hardware pointer stops at the inner side of a strip the system keeps along
 // a window edge (a status bar): it cannot go further. A pointer resting within
@@ -143,7 +152,10 @@ class TouchMapper {
     // once; a finger that rests or moves after resting only moves the cursor
     // and lifts without a click; a tap with a second finger while the first
     // rests right-clicks where the first one is. Taps, drags and two-finger
-    // gestures are as in the classic table.
+    // gestures are as in the classic table, except that a drag of the
+    // interface is never snapped onto the window's edges, and one the game
+    // would split with Shift (RECOMP_TOUCH_DRAG_SPLIT) holds Shift once its
+    // finger rests kTouchSplitHoldNs (split_ring shows the count).
     void set_hover(bool on) {
         hover_ = on;
     }
@@ -204,6 +216,10 @@ class TouchMapper {
     bool text_input_wanted() const {
         return text_input_;
     }
+    // A resting drag counting down to a split (RECOMP_TOUCH_DRAG_SPLIT): where
+    // the finger is, in window points, and how far the count is (0 to 1; 1 once
+    // Shift is held). False when there is nothing to show.
+    bool split_ring(uint64_t now_ns, double *x, double *y, double *progress) const;
 
   private:
     struct Finger {
@@ -252,7 +268,7 @@ class TouchMapper {
     double twist_acc_ = 0;
     void two_finger_world(uint64_t now, std::vector<TouchAction> *out);
     void scroll(std::vector<TouchAction> *out, double x, double y);
-    void start_hover_drag(std::vector<TouchAction> *out);
+    void start_hover_drag(uint64_t now, std::vector<TouchAction> *out);
     void pan_begin(std::vector<TouchAction> *out, double fx, double fy);
     void pan_move(std::vector<TouchAction> *out, double fx, double fy);
     void pan_end(std::vector<TouchAction> *out, double fx, double fy);
@@ -289,6 +305,21 @@ class TouchMapper {
     bool presents_known_ = false;
     uint32_t presents_ = 0;
     uint32_t presents_at_press_ = 0;
+    // A drag the game would split with Shift (RECOMP_TOUCH_DRAG_SPLIT): where
+    // and since when its finger rests, and Shift once the rest was long enough.
+    // Shift outlives the drop by kTouchClickHoldFrames, as a click's release
+    // does, so the frame that sees the button go up still sees Shift.
+    bool hover_drag_ = false; // a hover left drag of the interface (no edge snap)
+    double split_x_ = 0, split_y_ = 0;
+    uint64_t split_t0_ = 0;
+    bool split_shift_ = false;
+    bool split_up_pending_ = false;
+    uint64_t split_up_due_ = 0, split_up_deadline_ = 0;
+    uint32_t split_up_presents_ = 0;
+    void split_rest(double x, double y, uint64_t now, std::vector<TouchAction> *out);
+    void split_tick(uint64_t now, std::vector<TouchAction> *out);
+    void split_drop(uint64_t now);
+    void split_release(std::vector<TouchAction> *out);
     bool release_ready(uint64_t now) const;
     void place(std::vector<TouchAction> *out, double x, double y, bool snap = true);
     // chain: a tap soon after the last left click and near it lands exactly on

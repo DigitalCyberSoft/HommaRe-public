@@ -979,7 +979,119 @@ static void test_double_tap_lands_on_the_first_point() {
     CHECK(own);
 }
 
+// A hover drag of the interface (a stack, an artifact) is not snapped onto the
+// window's edges: near the bottom the dragged stack stays under the finger
+// instead of jumping onto the last row.
+static void test_hover_ui_drag_is_not_snapped_to_an_edge() {
+    TouchMapper m;
+    m.set_hover(true);
+    m.set_bounds(1000, 800);
+    m.set_edge_insets(0, 0, 0, 21);
+    m.set_context(0);
+    std::vector<TouchAction> out;
+    m.finger_down({1, 500, 700}, 0, &out);
+    m.finger_motion({1, 500, 740}, 50 * MS, &out);
+    out.clear();
+    m.finger_motion({1, 500, 785}, 100 * MS, &out); // inside 16 + 21 of the bottom
+    CHECK(out.size() == 1 && out[0].kind == TouchAction::Motion && out[0].y == 785);
+    out.clear();
+    m.finger_up({1, 500, 790}, 150 * MS, &out);
+    bool released_there = false;
+    for (const TouchAction &a : out)
+        released_there |= a.kind == TouchAction::Button && !a.down && a.y == 790;
+    CHECK(released_there);
+}
+
+static bool has_key(const std::vector<TouchAction> &out, int scancode, bool down) {
+    for (const TouchAction &a : out)
+        if (a.kind == TouchAction::Key && a.scancode == scancode && a.down == down)
+            return true;
+    return false;
+}
+
+// A stack dragged and held still holds Shift, which outlives the drop by the
+// frames that see the button go up: the game reads Shift at the drop and
+// opens its split window.
+static void test_hover_resting_stack_drag_holds_shift_through_the_drop() {
+    TouchMapper m;
+    m.set_hover(true);
+    m.set_context(256); // RECOMP_TOUCH_DRAG_SPLIT
+    std::vector<TouchAction> out;
+    m.finger_down({1, 100, 100}, 0, &out);
+    m.finger_motion({1, 160, 100}, 50 * MS, &out);
+    double x = 0, y = 0, p = 0;
+    m.tick(50 * MS + kTouchSplitShowNs - 1, &out);
+    CHECK(!m.split_ring(50 * MS + kTouchSplitShowNs - 1, &x, &y, &p)); // a passing pause
+    CHECK(m.split_ring(50 * MS + kTouchSplitShowNs + 100 * MS, &x, &y, &p) && x == 160 && p > 0 &&
+          p < 1);
+    out.clear();
+    m.tick(50 * MS + kTouchSplitHoldNs - 1, &out);
+    CHECK(!has_key(out, SDL_SCANCODE_LSHIFT, true));
+    m.finger_motion({1, 165, 103}, 300 * MS, &out); // a tremor keeps the rest
+    m.tick(50 * MS + kTouchSplitHoldNs, &out);
+    CHECK(has_key(out, SDL_SCANCODE_LSHIFT, true));
+    CHECK(m.split_ring(50 * MS + kTouchSplitHoldNs + 10 * MS, &x, &y, &p) && p == 1);
+    m.frames_presented(20);
+    out.clear();
+    m.finger_up({1, 165, 103}, 1000 * MS, &out);
+    CHECK(has_button(out) && !has_key(out, SDL_SCANCODE_LSHIFT, false));
+    out.clear();
+    m.tick(1000 * MS + kTouchClickHoldNs, &out);
+    CHECK(out.empty()); // no frame has seen the drop yet
+    m.frames_presented(22);
+    m.tick(1000 * MS + kTouchClickHoldNs, &out);
+    CHECK(out.size() == 1 && has_key(out, SDL_SCANCODE_LSHIFT, false));
+}
+
+// Moving on after Shift went down lets it go: the drag is a plain move again
+// until the finger rests anew.
+static void test_hover_split_shift_goes_when_the_finger_moves_on() {
+    TouchMapper m;
+    m.set_hover(true);
+    m.set_context(256);
+    std::vector<TouchAction> out;
+    m.finger_down({1, 100, 100}, 0, &out);
+    m.finger_motion({1, 160, 100}, 50 * MS, &out);
+    m.tick(50 * MS + kTouchSplitHoldNs, &out);
+    CHECK(has_key(out, SDL_SCANCODE_LSHIFT, true));
+    out.clear();
+    m.finger_motion({1, 260, 100}, 50 * MS + kTouchSplitHoldNs + 50 * MS, &out);
+    CHECK(has_key(out, SDL_SCANCODE_LSHIFT, false));
+    out.clear();
+    m.finger_up({1, 260, 100}, 50 * MS + kTouchSplitHoldNs + 100 * MS, &out);
+    m.tick(2000 * MS, &out);
+    CHECK(!has_key(out, SDL_SCANCODE_LSHIFT, false)); // nothing left to release
+}
+
+// Only a drag the game says splits: an artifact's (no flag) never holds Shift,
+// and a second finger that ends a drag lets Shift go with the button.
+static void test_hover_split_needs_the_game_and_ends_with_the_drag() {
+    TouchMapper m;
+    m.set_hover(true);
+    m.set_context(0);
+    std::vector<TouchAction> out;
+    m.finger_down({1, 100, 100}, 0, &out);
+    m.finger_motion({1, 160, 100}, 50 * MS, &out);
+    m.tick(2000 * MS, &out);
+    CHECK(!has_key(out, SDL_SCANCODE_LSHIFT, true));
+    m.finger_up({1, 160, 100}, 2100 * MS, &out);
+    m.tick(3000 * MS, &out);
+    out.clear();
+    m.set_context(256);
+    m.finger_down({2, 100, 100}, 4000 * MS, &out);
+    m.finger_motion({2, 160, 100}, 4050 * MS, &out);
+    m.tick(4050 * MS + kTouchSplitHoldNs, &out);
+    CHECK(has_key(out, SDL_SCANCODE_LSHIFT, true));
+    out.clear();
+    m.finger_down({3, 400, 400}, 4050 * MS + kTouchSplitHoldNs + 50 * MS, &out);
+    CHECK(has_button(out) && has_key(out, SDL_SCANCODE_LSHIFT, false));
+}
+
 int main() {
+    test_hover_ui_drag_is_not_snapped_to_an_edge();
+    test_hover_resting_stack_drag_holds_shift_through_the_drop();
+    test_hover_split_shift_goes_when_the_finger_moves_on();
+    test_hover_split_needs_the_game_and_ends_with_the_drag();
     test_double_tap_lands_on_the_first_point();
     test_hover_drag_waits_for_the_game_to_see_the_finger();
     test_hover_state_follows_the_finger();

@@ -948,6 +948,102 @@ void platform_ui_camera_buttons(SDL_Window *window, bool visible, bool phone, vo
                      }];
 }
 
+// ------------------------------------------------------------ split ring --
+// A gold ring around a finger that rests while dragging a stack: it fills as
+// the rest counts down to a split, then holds full (Shift is down) with a
+// divide sign. Drawn over the game; it takes no touches.
+@interface RecompSplitRing : UIView
+@property(nonatomic) BOOL held;
+- (void)setProgress:(double)progress;
+@end
+
+@implementation RecompSplitRing {
+    CAShapeLayer *track_, *fill_;
+    UIImageView *sign_;
+}
+- (instancetype)init {
+    const CGFloat d = 96;
+    self = [super initWithFrame:CGRectMake(0, 0, d, d)];
+    self.userInteractionEnabled = NO;
+    UIBezierPath *circle = [UIBezierPath bezierPathWithArcCenter:CGPointMake(d / 2, d / 2)
+                                                          radius:d / 2 - 6
+                                                      startAngle:-M_PI_2
+                                                        endAngle:3 * M_PI_2
+                                                       clockwise:YES];
+    track_ = [CAShapeLayer layer];
+    track_.path = circle.CGPath;
+    track_.fillColor = UIColor.clearColor.CGColor;
+    track_.strokeColor = [UIColor colorWithRed:0.08 green:0.06 blue:0.04 alpha:0.45].CGColor;
+    track_.lineWidth = 7;
+    [self.layer addSublayer:track_];
+    fill_ = [CAShapeLayer layer];
+    fill_.path = circle.CGPath;
+    fill_.fillColor = UIColor.clearColor.CGColor;
+    fill_.strokeColor = [UIColor colorWithRed:0.98 green:0.84 blue:0.45 alpha:0.95].CGColor;
+    fill_.lineWidth = 5;
+    fill_.lineCap = kCALineCapRound;
+    fill_.strokeEnd = 0;
+    [self.layer addSublayer:fill_];
+    UIImageSymbolConfiguration *weight =
+        [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIImageSymbolWeightBold];
+    sign_ = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"divide.circle.fill"
+                                                       withConfiguration:weight]];
+    sign_.tintColor = [UIColor colorWithRed:0.98 green:0.84 blue:0.45 alpha:1];
+    sign_.backgroundColor = [UIColor colorWithRed:0.08 green:0.06 blue:0.04 alpha:0.8];
+    sign_.layer.cornerRadius = 11;
+    sign_.frame = CGRectMake(d - 24, 2, 22, 22);
+    sign_.contentMode = UIViewContentModeCenter;
+    sign_.alpha = 0;
+    [self addSubview:sign_];
+    return self;
+}
+- (void)setProgress:(double)progress {
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    fill_.strokeEnd = progress;
+    [CATransaction commit];
+    const BOOL held = progress >= 1;
+    if (held == _held)
+        return;
+    _held = held;
+    sign_.alpha = held ? 1 : 0;
+    if (held) {
+        self.transform = CGAffineTransformMakeScale(1.12, 1.12);
+        [UIView animateWithDuration:0.18
+                         animations:^{
+                           self.transform = CGAffineTransformIdentity;
+                         }];
+    }
+}
+@end
+
+void platform_ui_split_ring(SDL_Window *window, bool visible, double x, double y, double progress) {
+    static RecompSplitRing *ring = nil;
+    if (!visible) {
+        if (ring && !ring.hidden) {
+            ring.hidden = YES;
+            [ring setProgress:0];
+        }
+        return;
+    }
+    if (!ring) {
+        UIWindow *uiwindow = (__bridge UIWindow *)SDL_GetPointerProperty(
+            SDL_GetWindowProperties(window), SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
+        UIView *root = uiwindow.rootViewController.view;
+        if (!root)
+            return;
+        ring = [[RecompSplitRing alloc] init];
+        [root addSubview:ring];
+    }
+    [ring.superview bringSubviewToFront:ring];
+    ring.hidden = NO;
+    ring.center = CGPointMake(x, y);
+    const BOOL was_held = ring.held;
+    [ring setProgress:progress];
+    if (ring.held && !was_held)
+        platform_ui_haptic_tap();
+}
+
 #if defined(RECOMP_NATIVE_SCREENS)
 // The game's SwiftUI screens (native-screens/ in the game repository, built
 // into the RecompScreens module): NativeScreens.swift's C entry points.

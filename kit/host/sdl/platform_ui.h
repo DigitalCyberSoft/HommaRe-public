@@ -104,6 +104,13 @@ bool platform_ui_phone_interface();
 // take their touches themselves. Desktop and Android: nothing.
 void platform_ui_camera_buttons(SDL_Window *window, bool visible, bool phone, void (*press)(int step));
 
+// The ring that counts down a resting drag to a split (TouchMapper::split_ring):
+// centred at (x, y) in window points, `progress` 0 to 1 (1: held, a light tap
+// tick once). `visible` false hides it. Call it every turn: it only acts on a
+// change. iOS: a gold ring around the finger, which takes no touches. Desktop
+// and Android: nothing.
+void platform_ui_split_ring(SDL_Window *window, bool visible, double x, double y, double progress);
+
 // A screen of the game drawn natively over it (runtime/native_seam.h,
 // recomp_screen_state): `state` is the screen's new JSON document, or null
 // when no native screen shows; a command from the view goes to `command`.

@@ -1194,6 +1194,35 @@ void push_touch_actions(const std::vector<TouchAction> &actions) {
         push_touch_action_now(a);
 }
 
+// The modifiers the touch path holds itself (a resting drag's Shift, a pad
+// button bound to one). A pushed key event carries no modifier state of its
+// own, and handle_key takes a modifier's state from the event's mod alone, so
+// every key the touch path pushes carries these along with the keyboard's.
+SDL_Keymod g_touch_mods = SDL_KMOD_NONE;
+
+SDL_Keymod touch_modifier_bit(SDL_Scancode sc) {
+    switch (sc) {
+    case SDL_SCANCODE_LSHIFT:
+        return SDL_KMOD_LSHIFT;
+    case SDL_SCANCODE_RSHIFT:
+        return SDL_KMOD_RSHIFT;
+    case SDL_SCANCODE_LCTRL:
+        return SDL_KMOD_LCTRL;
+    case SDL_SCANCODE_RCTRL:
+        return SDL_KMOD_RCTRL;
+    case SDL_SCANCODE_LALT:
+        return SDL_KMOD_LALT;
+    case SDL_SCANCODE_RALT:
+        return SDL_KMOD_RALT;
+    case SDL_SCANCODE_LGUI:
+        return SDL_KMOD_LGUI;
+    case SDL_SCANCODE_RGUI:
+        return SDL_KMOD_RGUI;
+    default:
+        return SDL_KMOD_NONE;
+    }
+}
+
 void push_touch_action_now(const TouchAction &a) {
     const SDL_WindowID ours = g_window ? SDL_GetWindowID(g_window) : 0;
     {
@@ -1230,13 +1259,18 @@ void push_touch_action_now(const TouchAction &a) {
             e.button.x = (float)a.x;
             e.button.y = (float)a.y;
             break;
-        case TouchAction::Key:
+        case TouchAction::Key: {
+            const SDL_Keymod bit = touch_modifier_bit((SDL_Scancode)a.scancode);
+            g_touch_mods =
+                a.down ? SDL_Keymod(g_touch_mods | bit) : SDL_Keymod(g_touch_mods & ~bit);
             e.type = a.down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
             e.key.windowID = ours;
             e.key.scancode = (SDL_Scancode)a.scancode;
             e.key.key = SDL_GetKeyFromScancode((SDL_Scancode)a.scancode, SDL_KMOD_NONE, false);
+            e.key.mod = SDL_Keymod(SDL_GetModState() | g_touch_mods);
             e.key.down = a.down;
             break;
+        }
         case TouchAction::Camera: {
             // In order with the clicks around it, mapped as a placement is.
             PendingInput p;
@@ -2277,9 +2311,16 @@ void after_events() {
         g_touch.frames_presented(host_present_count());
         const int context = recomp_touch_context();
         g_touch.set_context(context);
-        g_touch.tick(SDL_GetTicksNS(), &actions);
+        const uint64_t now = SDL_GetTicksNS();
+        g_touch.tick(now, &actions);
         push_touch_actions(actions);
         sync_touch_hover();
+        {
+            // A stack dragged and held still: the ring counting down to a split.
+            double rx = 0, ry = 0, progress = 0;
+            const bool ring = g_touch.split_ring(now, &rx, &ry, &progress);
+            platform_ui_split_ring(g_window, ring, rx, ry, progress);
+        }
         // The system keyboard: four fingers toggle it, and it comes up by
         // itself while the cursor rests on one of the game's text fields
         // (RECOMP_TOUCH_TEXT), going once it leaves. The field's line is the

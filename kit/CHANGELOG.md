@@ -1,5 +1,20 @@
 # Changelog
 
+## Touch: a stack dragged and held still splits
+
+- Hover gestures: a finger that rests ~0.7 s during a drag the game marks
+  `RECOMP_TOUCH_DRAG_SPLIT` (256 in `recomp_touch_context`) holds Shift until the
+  drop, and a little past it, so the game's own "Shift + drop" (a split window)
+  sees it. Moving the finger 40 points on lets Shift go. `TouchMapper::split_ring`
+  reports the count-down; iOS draws it as a ring around the finger
+  (`platform_ui_split_ring`), with a tick once Shift is down.
+- A hover drag of the interface is no longer snapped onto the window's edges: a
+  dragged item near the bottom edge stayed glued to the last row instead of
+  following the finger.
+- Key events the touch path pushes carry the modifiers it holds. They carried
+  none, and the host takes a modifier's state from an event's `mod`, so a
+  touch-held Shift (or a pad button bound to one) never reached the game.
+
 ## Sockets on every platform
 
 - `runtime/winsock.cpp` runs on the platform layer's sockets: `platform/os.h`
