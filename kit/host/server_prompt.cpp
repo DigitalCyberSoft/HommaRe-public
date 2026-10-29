@@ -20,10 +20,24 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 
 namespace {
 
 using namespace gdi_canvas;
+
+// On a phone or a tablet the system keyboard covers half the screen, the
+// prompt's explanation and buttons included, and the preselected server
+// usually needs no typing: there it comes up once the field is tapped. A
+// desktop keeps text input on while the prompt is open (it draws nothing,
+// and the typed text arrives only through it).
+#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || defined(__ANDROID__)
+const bool kKeyboardOnTap = true;
+#else
+const bool kKeyboardOnTap = false;
+#endif
 
 // The settings menu's palette (mods/settings_menu_draw.cpp), so the two pages
 // read as one interface.
@@ -70,7 +84,8 @@ struct State {
     std::string default_server;    // canonical; offered while the list is empty
     bool suggested = false;        // the list is that default alone
     bool open = false;
-    bool busy = false; // a chosen server is being tried
+    bool typing = false; // the field was tapped: the keyboard is wanted (kKeyboardOnTap)
+    bool busy = false;   // a chosen server is being tried
     int answer = 0;    // 1 chosen and not yet polled, -1 cancelled
     std::string chosen;
     std::string field;
@@ -335,7 +350,7 @@ const CurlServerChooser kChooser = {chooser_begin, chooser_poll, chooser_end, ch
 
 bool wants_text() {
     std::lock_guard lock(g.mu);
-    return g.open && !g.busy;
+    return g.open && !g.busy && (g.typing || !kKeyboardOnTap);
 }
 const HostPagePrompt kPage = {server_prompt::is_open, server_prompt::render,  server_prompt::key,
                               server_prompt::text,    server_prompt::pointer, wants_text,
@@ -438,6 +453,7 @@ bool begin(const char *error) {
         g.field = g.list.empty() ? "" : g.list[0];
         g.caret = g.field.size();
         g.hover_kind = g.hover_index = -1;
+        g.typing = false;
         fprintf(stderr, "[host] ubi-gs: asking for a server (%zu used before%s%s%s)\n", used,
                 g.list.empty() ? "" : ", preselected ", g.list.empty() ? "" : g.list[0].c_str(),
                 used == 0 && !g.list.empty() ? ", the default" : "");
@@ -620,12 +636,15 @@ void pointer(float u, float v, int button, int down, int wheel) {
         cancel_locked();
         break;
     case HIT_ROW:
-        if (!g.busy)
+        if (!g.busy) {
             select_row(found->index);
+            g.typing = false; // a server from the list needs no keyboard
+        }
         break;
     case HIT_FIELD:
         if (!g.busy) {
             g.caret = g.field.size();
+            g.typing = true;
             changed();
         }
         break;
