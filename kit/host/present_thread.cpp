@@ -319,6 +319,57 @@ struct Service : std::enable_shared_from_this<Service> {
     // The tabbed settings menu's last page and the generation it shows (mutex held).
     std::shared_ptr<Composite> menu_page;
     uint64_t menu_generation = 0;
+    // A host prompt's page on repeated frames (prompt_repeat_page), and its
+    // generation: the worker's alone.
+    std::shared_ptr<Composite> prompt_page;
+    uint64_t prompt_generation = 0;
+    // A host prompt (page_overlay.h) open while the guest presents nothing -
+    // the ubi-gs server question, asked from inside a call the game's main
+    // thread makes - rides on the repeated frame instead of a sealed one: that
+    // repeat is composed again with the prompt as its settings page, so it is
+    // drawn, scaled and hit-tested exactly as the menu is. True when the
+    // repeat has to be composed again: with the prompt, or once more without
+    // it after it closed (the last composition still shows it). False
+    // otherwise, and the repeat reuses its composition as before.
+    bool prompt_on_screen = false;
+    bool prompt_repeat_page(const std::shared_ptr<Frame> &f, int w, int h) {
+        if (!host_page_prompt_open()) {
+            if (!prompt_on_screen)
+                return false;
+            prompt_on_screen = false;
+            prompt_page.reset();
+            f->settings_page.reset();
+            f->input.settings_page = gpu::Texture{};
+            return true;
+        }
+        if (w > 3840 || h > 2160) { // as attach_menu_page: beyond 4K the compositor scales up
+            const double k = std::min(3840.0 / w, 2160.0 / h);
+            w = std::max(1, int(w * k)), h = std::max(1, int(h * k));
+        }
+        uint64_t generation =
+            prompt_page && prompt_page->w == w && prompt_page->h == h ? prompt_generation : 0;
+        const uint8_t *pixels = nullptr;
+        const int drawn = host_page_prompt_render(w, h, &generation, &pixels);
+        if (drawn == 0)
+            return false;
+        if (drawn == 2 && pixels) {
+            // A new texture each time: the last one may still be in flight.
+            auto texture = composite(w, h, gpu::Format::RGBA8);
+            if (!texture)
+                return false;
+            device->upload(texture->texture, {0, 0, w, h}, pixels, w * 4);
+            prompt_page = texture;
+            prompt_generation = generation;
+        }
+        if (!prompt_page)
+            return false;
+        f->settings_page = prompt_page;
+        f->input.settings_page = prompt_page->texture;
+        f->input.settings_page_w = prompt_page->w;
+        f->input.settings_page_h = prompt_page->h;
+        prompt_on_screen = true;
+        return true;
+    }
     ~Service() {
         if (timings)
             fclose(timings);
@@ -996,8 +1047,11 @@ struct Service : std::enable_shared_from_this<Service> {
             const gpu::TextureDesc drawable_desc =
                 drawable ? device->describe(drawable) : gpu::TextureDesc{};
             const gpu::Format out_format = offscreen ? gpu::Format::RGBA8 : drawable_desc.format;
-            bool reuse_composition = f->repeat && cached && cached->w == w && cached->h == h &&
-                                     cached->format == out_format;
+            // A sealed frame brings its own page, the prompt's included (attach_menu_page).
+            const bool prompt_page =
+                f->repeat ? prompt_repeat_page(f, w, h) : (prompt_on_screen = false);
+            bool reuse_composition = f->repeat && !prompt_page && cached && cached->w == w &&
+                                     cached->h == h && cached->format == out_format;
             std::shared_ptr<Composite> out =
                 reuse_composition ? cached : composite(w, h, out_format);
             gpu::CommandBuffer cb = device->begin();

@@ -30,6 +30,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <algorithm>
+#include <dlfcn.h>
 #include <filesystem>
 #include <objc/runtime.h>
 #include <thread>
@@ -950,22 +951,48 @@ void platform_ui_camera_buttons(SDL_Window *window, bool visible, bool phone, vo
 #if defined(RECOMP_NATIVE_SCREENS)
 // The game's SwiftUI screens (native-screens/ in the game repository, built
 // into the RecompScreens module): NativeScreens.swift's C entry points.
+using ScreensShow = void (*)(void *, const char *, void (*)(const char *));
+using ScreensHide = void (*)(void);
+#if defined(RECOMP_GAME_MODULE)
+// A game module (an expansion in the multi-game app) carries no copy of the
+// module: the app's own serves it. Two copies in one process register the
+// same Objective-C classes twice (the runtime warns, and one copy then works
+// with the other's objects: a crash in Hammers of Fate's ubi-gs login). The
+// screens read the game's paks themselves (RECOMP_GAME_ROOT), never the host.
+static ScreensShow screens_show() {
+    static ScreensShow f = (ScreensShow)dlsym(RTLD_MAIN_ONLY, "recomp_native_screens_show");
+    return f;
+}
+static ScreensHide screens_hide() {
+    static ScreensHide f = (ScreensHide)dlsym(RTLD_MAIN_ONLY, "recomp_native_screens_hide");
+    return f;
+}
+#else
 extern "C" void recomp_native_screens_show(void *root_view, const char *state,
                                            void (*command)(const char *));
 extern "C" void recomp_native_screens_hide(void);
+static ScreensShow screens_show() {
+    return recomp_native_screens_show;
+}
+static ScreensHide screens_hide() {
+    return recomp_native_screens_hide;
+}
+#endif
 #endif
 
 void platform_ui_native_screen(SDL_Window *window, const char *state, void (*command)(const char *)) {
 #if defined(RECOMP_NATIVE_SCREENS)
     if (!state) {
-        recomp_native_screens_hide();
+        if (ScreensHide hide = screens_hide())
+            hide();
         return;
     }
     UIWindow *uiwindow = (__bridge UIWindow *)SDL_GetPointerProperty(
         SDL_GetWindowProperties(window), SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
     UIView *root = uiwindow.rootViewController.view;
-    if (root)
-        recomp_native_screens_show((__bridge void *)root, state, command);
+    ScreensShow show = screens_show();
+    if (root && show)
+        show((__bridge void *)root, state, command);
 #else
     (void)window;
     (void)state;

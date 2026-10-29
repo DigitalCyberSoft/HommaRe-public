@@ -11,6 +11,7 @@
 // copies the advanced cursors, totals, adler and data_type back. The guest's
 // zalloc/zfree are never called: the host stream allocates its own state.
 // zlib1.dll is the cdecl build (zlibwapi.dll is the WINAPI one).
+#include "curl_http.h"
 #include "guest.h"
 #include "imports.h"
 #include "memory.h"
@@ -342,38 +343,6 @@ void z_zlibVersion(X86 *c) {
     set_eax(c, version);
 }
 
-// ------------------------------------------------------------- libcurl --
-// Offline: initialisation succeeds, a handle is never created, a transfer
-// always fails to connect.
-enum : uint32_t { CURLE_OK = 0, CURLE_FAILED_INIT = 2, CURLE_COULDNT_CONNECT = 7 };
-
-void curl_ok(X86 *c) {
-    set_eax(c, CURLE_OK);
-}
-void curl_no_handle(X86 *c) {
-    log_once("curl_easy_init", "libcurl: no network in this build; curl_easy_init returns NULL");
-    set_eax(c, 0);
-}
-void curl_failed_init(X86 *c) {
-    set_eax(c, CURLE_FAILED_INIT);
-}
-void curl_couldnt_connect(X86 *c) {
-    set_eax(c, CURLE_COULDNT_CONNECT);
-}
-void curl_none(X86 *c) {
-    set_eax(c, 0);
-}
-void curl_strerror(X86 *c) {
-    static uint32_t text = 0;
-    if (!text) {
-        const char *msg = "Network access is not available";
-        text = heap_alloc((uint32_t)strlen(msg) + 1, true);
-        if (text)
-            gm_put_str(text, msg, (uint32_t)strlen(msg) + 1);
-    }
-    set_eax(c, text);
-}
-
 // -------------------------------------------------------------- dbghelp --
 // The crash reporter's symbol engine: never initialised, so it falls back to
 // printing raw addresses (or nothing).
@@ -495,15 +464,16 @@ const ImportShim shims[] = {
     {"zlib1.dll", "crc32", ARGC_CDECL, z_crc32},
     {"zlib1.dll", "zlibVersion", ARGC_CDECL, z_zlibVersion},
 
-    {"libcurl.dll", "curl_global_init", ARGC_CDECL, curl_ok},
-    {"libcurl.dll", "curl_global_cleanup", ARGC_CDECL, curl_none},
-    {"libcurl.dll", "curl_easy_init", ARGC_CDECL, curl_no_handle},
-    {"libcurl.dll", "curl_easy_setopt", ARGC_CDECL, curl_failed_init},
-    {"libcurl.dll", "curl_easy_perform", ARGC_CDECL, curl_couldnt_connect},
-    {"libcurl.dll", "curl_easy_cleanup", ARGC_CDECL, curl_none},
-    {"libcurl.dll", "curl_easy_strerror", ARGC_CDECL, curl_strerror},
-    {"libcurl.dll", "curl_slist_append", ARGC_CDECL, curl_none},
-    {"libcurl.dll", "curl_slist_free_all", ARGC_CDECL, curl_none},
+    // libcurl's stand-in is curl_http.cpp: a GS server list, and nothing else.
+    {"libcurl.dll", "curl_global_init", ARGC_CDECL, curl_http_global_init},
+    {"libcurl.dll", "curl_global_cleanup", ARGC_CDECL, curl_http_global_cleanup},
+    {"libcurl.dll", "curl_easy_init", ARGC_CDECL, curl_http_easy_init},
+    {"libcurl.dll", "curl_easy_setopt", ARGC_CDECL, curl_http_easy_setopt},
+    {"libcurl.dll", "curl_easy_perform", ARGC_CDECL, curl_http_easy_perform},
+    {"libcurl.dll", "curl_easy_cleanup", ARGC_CDECL, curl_http_easy_cleanup},
+    {"libcurl.dll", "curl_easy_strerror", ARGC_CDECL, curl_http_easy_strerror},
+    {"libcurl.dll", "curl_slist_append", ARGC_CDECL, curl_http_slist_append},
+    {"libcurl.dll", "curl_slist_free_all", ARGC_CDECL, curl_http_slist_free_all},
 
     // Called nowhere directly in the one game that imports it; cdecl keeps
     // the stack balanced whatever its real argument count.
