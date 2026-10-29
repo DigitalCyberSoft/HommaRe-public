@@ -59,13 +59,11 @@ jobs:
           python kit/tools/test.py --game-dir "$PWD" --preset linux-stub --compile-only
           cmake --build build/cmake/linux-stub --target pop_headless
           ccache -s
+      # Ubuntu's mesa-vulkan-drivers names lavapipe's manifest lvp_icd.json.
       - name: Lavapipe, as the Vulkan loader sees it
         env:
-          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
-          VK_LOADER_DEBUG: error,warn,driver
-        run: |
-          ls -l /usr/share/vulkan/icd.d
-          vulkaninfo --summary
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.json
+        run: vulkaninfo --summary
       # compositor_tests and host_tests are left out here: they check the
       # kit's integer scaling of menus, movies and the letterbox, which a game
       # with game.toml [settings] scaling = "smooth" (HommaRe) does not use, a
@@ -73,7 +71,7 @@ jobs:
       - name: The suites that need no game; the GPU ones on lavapipe
         env:
           SDL_VIDEODRIVER: offscreen
-          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.json
         run: ctest --test-dir build/cmake/linux-stub -L "nogame|game|gpu" -E "^(compositor_tests|host_tests)$" --output-on-failure
       - name: The kit's suites, against the kit's own stub game
         run: |
@@ -82,7 +80,7 @@ jobs:
       - name: The kit's suites run; the GPU ones on lavapipe
         env:
           SDL_VIDEODRIVER: offscreen
-          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.json
         run: ctest --test-dir kit/build/cmake/linux-stub -L "nogame|game|gpu" --output-on-failure
       - name: GPU skinning's GLSL compiles
         run: python tools/check_gpu_skin.py --glsl
@@ -237,6 +235,8 @@ jobs:
           path: build/windows-stub
       - name: The suites that need no game and no GPU
         shell: bash
+        env:
+          MSYS_NO_PATHCONV: "1" # --root is the Linux checkout's path, not one of Git Bash's
         run: python tools/run_cross_tests.py build/windows-stub/tests.json --root "$(cat build/windows-stub/root.txt)" --labels "nogame|game"
 
   windows:
@@ -260,7 +260,7 @@ jobs:
             "-DPOP_BUILD_ROOT=$ws/build" "-DPython3_EXECUTABLE=$ws/.ci/Scripts/python.exe" `
             -DRECOMP_FFMPEG_MAKE=C:/msys64/usr/bin/make.exe
       - name: The app, every test binary, the headless hosts, and native/ compiled
-        run: cmake --build build/cmake/windows-stub --target recomp_app check_binaries pop_headless
+        run: cmake --build build/cmake/windows-stub --target recomp_app check_binaries pop_headless -- -k 0
       - name: The suites that need no game and no GPU
         run: ctest --test-dir build/cmake/windows-stub -L "nogame|game" --output-on-failure
 
