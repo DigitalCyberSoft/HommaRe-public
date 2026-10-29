@@ -248,6 +248,10 @@ touch_ui_mods = ["Widescreen", "TouchUI"]
 [web]
 ui_mods = ["Widescreen"]
 
+# And on Windows.
+[windows]
+ui_mods = ["Widescreen"]
+
 [launcher]
 title = "Heroes of Might and Magic V"
 install_names = ["Heroes of Might and Magic V", "Heroes V", "HoMM5"]

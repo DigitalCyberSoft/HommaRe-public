@@ -4,6 +4,7 @@
     tools/check_bundle.py build/HommaRe.app [--game ~/Heroes\\ V/game --game ~/Heroes\\ V/game-toe]
     tools/check_bundle.py build/android/app/build/outputs/apk/debug/app-x86_64-debug.apk
     tools/check_bundle.py build/web-site
+    tools/check_bundle.py build/windows/package/HommaRe
 
 The app is to be distributable: the player's own GOG copy brings the game,
 the launcher installs it, and the interface mods are made on the device from
@@ -16,7 +17,8 @@ build's .data) and fails on:
 
 - the game's own kinds of files (archives .pak/.h5u/.h5m/.h5c/.h5s, the UI's
   .xdb, textures .dds/.tga, videos .bik/.wmv, the executables and DLLs, ...),
-  a game/ or profile-seed/ folder, any zip (a mod is one);
+  a game/ or profile-seed/ folder, any zip (a mod is one); the Windows app's
+  own executable and DLLs (own_binary) excepted;
 - a picture that is not one of the repository's own files or the icon made
   from its icon.png (the launcher shows the game's textures from the install
   on the device, never from the app);
@@ -73,6 +75,18 @@ def packed_files(path, data):
     meta, _ = json.JSONDecoder().raw_decode(text, call.start(1))
     for f in meta["files"]:
         yield f["filename"].lstrip("/"), data[f["start"]:f["end"]]
+
+
+def own_binary(rel, app_name):
+    """A Windows app's own executable or DLL: <app>.exe, SDL3.dll and FFmpeg's
+    beside it, the innoextract.exe its launcher runs, and the games' modules
+    (modules/libgame.<id>.dll). Anything else of those kinds is the game's."""
+    if "!" in rel:
+        return False
+    if "/" not in rel:
+        return rel in (app_name + ".exe", "SDL3.dll", "innoextract.exe") or \
+            re.fullmatch(r"av(codec|format|util)-\d+\.dll", rel) is not None
+    return re.fullmatch(r"modules/libgame\.[A-Za-z0-9_.-]+\.dll", rel) is not None
 
 
 def walk(app):
@@ -219,7 +233,7 @@ def main():
             problems.append("%s: in a game/ folder" % rel)
         if "profile-seed" in parts:
             problems.append("%s: in profile-seed/" % rel)
-        if suffix in GAME_SUFFIXES and not name == "innoextract":
+        if suffix in GAME_SUFFIXES and not name == "innoextract" and not own_binary(rel, app.name):
             problems.append("%s: a %s file, the game's kind" % (rel, suffix))
         if "!" not in rel and data[:4] == b"PK\x03\x04":
             problems.append("%s: a zip (a mod or a pak is one)" % rel)

@@ -1,16 +1,16 @@
 {
   "title": "HommaRe",
   "tagline": {
-    "en": "Native port for macOS, iOS, Linux and Android",
-    "ru": "Нативный порт для macOS, iOS, Linux и Android",
-    "cs": "Nativní port pro macOS, iOS, Linux a Android",
-    "de": "Nativer Port für macOS, iOS, Linux und Android",
-    "es": "Port nativo para macOS, iOS, Linux y Android",
-    "fr": "Portage natif pour macOS, iOS, Linux et Android",
-    "it": "Port nativo per macOS, iOS, Linux e Android",
-    "hu": "Natív port macOS-re, iOS-re, Linuxra és Androidra",
-    "pl": "Natywny port na macOS, iOS, Linuksa i Androida",
-    "zh-Hans": "适用于 macOS、iOS、Linux 和 Android 的原生移植版"
+    "en": "Native port for macOS, iOS, Linux, Android and Windows",
+    "ru": "Нативный порт для macOS, iOS, Linux, Android и Windows",
+    "cs": "Nativní port pro macOS, iOS, Linux, Android a Windows",
+    "de": "Nativer Port für macOS, iOS, Linux, Android und Windows",
+    "es": "Port nativo para macOS, iOS, Linux, Android y Windows",
+    "fr": "Portage natif pour macOS, iOS, Linux, Android et Windows",
+    "it": "Port nativo per macOS, iOS, Linux, Android e Windows",
+    "hu": "Natív port macOS-re, iOS-re, Linuxra, Androidra és Windowsra",
+    "pl": "Natywny port na macOS, iOS, Linuksa, Androida i Windowsa",
+    "zh-Hans": "适用于 macOS、iOS、Linux、Android 和 Windows 的原生移植版"
   },
   "legal": {
     "en": "An unofficial fan port, not affiliated with Ubisoft. No game files are included: play your own GOG copy.",
@@ -24,7 +24,8 @@
     "pl": "Nieoficjalny port fanowski, niezwiązany z Ubisoftem. Pliki gry nie są dołączone — graj na własnej kopii z GOG.",
     "zh-Hans": "非官方的玩家移植版，与 Ubisoft 无关。不含任何游戏文件：请使用你自己的 GOG 版本。"
   },
-  "installNames": ["Heroes of Might and Magic V", "Heroes V", "HoMM5", "Heroes 5", "Tribes of the East"],
+  "installNames": ["Heroes of Might and Magic V", "Heroes of Might & Magic V", "Heroes V", "HoMM5", "Heroes 5",
+                   "Tribes of the East"],
   "exclude": ["__redist", "commonappdata", "tmp", "Editor", "Editor Documentation", "FanDocuments", "*.pdf", "*.part"],
   "installers": [
     {

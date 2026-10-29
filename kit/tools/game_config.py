@@ -253,9 +253,9 @@ def load(game_dir):
             isinstance(k, str) and isinstance(v, str) and k and ".." not in k.split("/")
             for k, v in files.items()):
         raise ValueError('%s: [ios] profile_files maps profile paths to source files' % source)
-    # [macos], [linux] and [android] profile_files: the same for the desktop
-    # apps and Android (no phone/ files there).
-    for section in ("macos", "linux", "android"):
+    # [macos], [linux], [windows] and [android] profile_files: the same for the
+    # desktop apps and Android (no phone/ files there).
+    for section in ("macos", "linux", "windows", "android"):
         desktop_files = cfg.setdefault(section, {}).setdefault("profile_files", {})
         if not isinstance(desktop_files, dict) or not all(
                 isinstance(k, str) and isinstance(v, str) and k and ".." not in k.split("/")
@@ -264,13 +264,14 @@ def load(game_dir):
     # ui_mods: the game's interface mods made on the player's device from its
     # own install (host/ui_mods.cpp), by name: the game directory's
     # ui-mods/<name>.recipe goes into the app. Per platform, [ios], [macos],
-    # [linux], [android] and [web]. One Android app runs on a Chromebook
-    # (keyboard and touchpad, a window) and on a phone or tablet: [android]
-    # ui_mods are the desktop-class device's, touch_ui_mods a touch device's
-    # (the host picks by the device it runs on; host/sdl/main.cpp,
+    # [linux], [windows], [android] and [web]. One Android app runs on a
+    # Chromebook (keyboard and touchpad, a window) and on a phone or tablet:
+    # [android] ui_mods are the desktop-class device's, touch_ui_mods a touch
+    # device's (the host picks by the device it runs on; host/sdl/main.cpp,
     # tools/build.py).
     for section, key in (("ios", "ui_mods"), ("macos", "ui_mods"), ("linux", "ui_mods"),
-                         ("android", "ui_mods"), ("android", "touch_ui_mods"), ("web", "ui_mods")):
+                         ("windows", "ui_mods"), ("android", "ui_mods"),
+                         ("android", "touch_ui_mods"), ("web", "ui_mods")):
         mods = cfg.setdefault(section, {}).setdefault(key, [])
         if not isinstance(mods, list) or not all(
                 isinstance(m, str) and m and "/" not in m and m not in (".", "..") for m in mods):

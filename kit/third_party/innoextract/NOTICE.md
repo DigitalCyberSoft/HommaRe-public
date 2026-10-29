@@ -7,7 +7,9 @@ has innoextract built in as a static library (`build-ios.sh`, `lib/`); the
 Android app carries innoextract's own command line as
 `lib/<abi>/libinnoextract.so` (`build-android.sh`), the one place Android lets
 an app run a program from, and runs it as the Linux launcher runs the
-system's. None of
+system's; the Windows app runs `innoextract.exe` beside its executable,
+innoextract's own 1.9 Windows build, unchanged (the licenses its archive
+carries are in `resources/innoextract-license/`). None of
 this code is the kit's own except `lib/` (the library's build files and C entry
 point, MIT like the kit), and none of the rest is covered by the kit's MIT
 license. Each part keeps the license below.
@@ -15,6 +17,7 @@ license. Each part keeps the license below.
 | Part | Version | License | How it is in the app |
 |---|---|---|---|
 | innoextract | 1.9 + 3 upstream patches (+ 1 own patch on iOS, 1 on Android) | zlib | macOS: the helper executable; iOS: compiled into the app; Android: the program in the APK |
+| innoextract for Windows (with the Boost, liblzma, zlib, bzip2 and libstdc++ runtime it links statically) | 1.9, the upstream release build | zlib; its archive's `license/` | Windows: `innoextract.exe` beside the app |
 | Boost (Iostreams, Filesystem, Date_Time, Program_Options and the Boost libraries they build on) | 1.89.0 release archive, built by `build.sh` | Boost Software License 1.0 | macOS: linked statically into the helper |
 | Boost (Filesystem and Iostreams sources, header-only parts) | 1.89.0 release archive | Boost Software License 1.0 | iOS: compiled into the app |
 | Boost (Filesystem, Iostreams and Program_Options sources, header-only parts) | 1.89.0 release archive | Boost Software License 1.0 | Android: compiled into the program |
@@ -68,6 +71,10 @@ license. Each part keeps the license below.
   library, Boost.Program_Options and bzip2 compiled in, for Android 10 (API
   29). Under the zlib license's clause 2 this is an altered version of
   innoextract.
+- Windows: https://constexpr.org/innoextract/files/innoextract-1.9/innoextract-1.9-windows.zip
+  (SHA-256 `6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec993065`),
+  fetched by the kit's Windows CMake (`host/CMakeLists.txt`); only
+  `innoextract.exe` and `license/*.txt` go into the app.
 
 The installer's contents are the player's own: the app ships no game files, and
 the install manifests under the game repository's `launcher-manifests/` hold
