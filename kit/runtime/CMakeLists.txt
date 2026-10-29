@@ -17,7 +17,9 @@ else()
 endif()
 # The pages the host draws over the game, in the kit's Open Sans.
 list(APPEND POP_RUNTIME_SOURCES gdi32_canvas.cpp)
-find_package(ZLIB REQUIRED)
+if(NOT TARGET ZLIB::ZLIB) # the web's is Emscripten's port (cmake/Dependencies.cmake)
+  find_package(ZLIB REQUIRED)
+endif()
 
 # The faces the runtime's GDI draws Windows' own UI fonts with
 # (third_party/fonts/opensans/README.md), embedded as byte arrays.

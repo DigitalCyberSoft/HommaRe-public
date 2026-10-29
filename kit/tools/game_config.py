@@ -264,13 +264,14 @@ def load(game_dir):
     # ui_mods: the game's interface mods made on the player's device from its
     # own install (host/ui_mods.cpp), by name: the game directory's
     # ui-mods/<name>.recipe goes into the app. Per platform, [ios], [macos],
-    # [linux] and [android]. One Android app runs on a Chromebook (keyboard
-    # and touchpad, a window) and on a phone or tablet: [android] ui_mods are
-    # the desktop-class device's, touch_ui_mods a touch device's (the host
-    # picks by the device it runs on; host/sdl/main.cpp, tools/build.py).
+    # [linux], [android] and [web]. One Android app runs on a Chromebook
+    # (keyboard and touchpad, a window) and on a phone or tablet: [android]
+    # ui_mods are the desktop-class device's, touch_ui_mods a touch device's
+    # (the host picks by the device it runs on; host/sdl/main.cpp,
+    # tools/build.py).
     for section, key in (("ios", "ui_mods"), ("macos", "ui_mods"), ("linux", "ui_mods"),
-                         ("android", "ui_mods"), ("android", "touch_ui_mods")):
-        mods = cfg[section].setdefault(key, [])
+                         ("android", "ui_mods"), ("android", "touch_ui_mods"), ("web", "ui_mods")):
+        mods = cfg.setdefault(section, {}).setdefault(key, [])
         if not isinstance(mods, list) or not all(
                 isinstance(m, str) and m and "/" not in m and m not in (".", "..") for m in mods):
             raise ValueError('%s: [%s] %s must be a list of recipe names' % (source, section, key))
