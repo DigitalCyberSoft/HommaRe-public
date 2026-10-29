@@ -91,8 +91,6 @@ jobs:
           path: .ccache
           key: ccache-linux-${{ github.run_id }}-${{ github.run_attempt }}
 
-  # macOS 26 for Xcode 26: the iOS host uses the iOS 26 SDK's API
-  # (platform_ui_ios.mm), which Xcode 16 does not have.
   macos:
     name: macOS Apple silicon
     runs-on: macos-26
@@ -136,7 +134,10 @@ jobs:
 
   ios:
     name: iOS ${{ matrix.target }}, unsigned
-    runs-on: macos-26
+    # Xcode 27 (GitHub's xcode-27 image, a preview): platform_ui_ios.mm uses
+    # UIViewReservedRegion and UIVerticalBarBehaviorDisabled, which the iOS
+    # SDK of Xcode 26.6 (macos-26's newest) does not have.
+    runs-on: xcode-27
     timeout-minutes: 90
     strategy:
       fail-fast: false
