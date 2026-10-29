@@ -428,7 +428,8 @@ PeerList &net_peers() {
 // the sender's address), so one copy would hear its own messages and the
 // other none. For the ports game.toml [net] movable_udp_ports lists (or
 // RECOMP_NET_MOVABLE_UDP_PORTS, commas; empty for none), a bind that finds
-// the port taken moves to port + k * MOVED_PORT_STRIDE instead: peers answer
+// the port taken moves instead to the first port + k * MOVED_PORT_STRIDE
+// (k = 1 to MOVED_PORT_SPAN) that it may have: peers answer
 // the port a datagram came from, and a broadcast to a movable port also goes
 // to the moved ports at this machine's own address. The stride keeps a
 // game's neighbouring ports out of each other's way.
@@ -661,8 +662,19 @@ void winsock_bind(X86 *c) {
                 set_eax(c, 0);
                 return;
             }
-            if (os_net_error() != OS_NET_ADDRINUSE)
+            // Taken. Windows answers WSAEACCES instead when another account
+            // holds the port (the DNS client service keeps a few random ones
+            // in the dynamic range), or when it is in a range the system
+            // excludes (netsh int ipv4 show excludedportrange protocol=udp).
+            // Either way the next one may do.
+            const OsNetError e = os_net_error();
+            if (e != OS_NET_ADDRINUSE && e != OS_NET_ACCES) {
+                const uint32_t w = last_wsa_error();
+                log_msg(1,
+                        "WSOCK32: UDP port %u is in use, and %u cannot be bound instead: %u (%s)",
+                        swap16(port), to, w, wsa_error_name(w));
                 break;
+            }
         }
         os_sock_bind(k->os, addr, port); // report the port the guest asked for
     }

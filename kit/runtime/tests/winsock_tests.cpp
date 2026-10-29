@@ -91,6 +91,39 @@ static uint32_t bound_udp(X86 *c, uint32_t ip, uint16_t *port) {
     return s;
 }
 
+static uint16_t swap16(uint16_t v) {
+    return (uint16_t)(v >> 8 | v << 8);
+}
+
+// Whether a UDP socket of the host's binds 0.0.0.0:port now.
+static bool udp_port_free(uint32_t port) {
+    OsSocket s = os_sock_open(OS_SOCK_DGRAM);
+    const bool ok =
+        s != OS_SOCKET_INVALID && port <= 65535 && os_sock_bind(s, 0, swap16((uint16_t)port)) == 0;
+    if (s != OS_SOCKET_INVALID)
+        os_sock_close(s);
+    return ok;
+}
+
+// A port the system hands out whose port + 100 and port + 200 are free as
+// well, for the move off a movable port. On Windows other programs hold
+// ports all over that range (a bind there is WSAEACCES when the program is
+// another account's, a service's), and the system may exclude whole ranges.
+static uint16_t port_with_room() {
+    for (int tries = 0; tries < 100; ++tries) {
+        OsSocket s = os_sock_open(OS_SOCK_DGRAM);
+        uint16_t port = 0;
+        if (s != OS_SOCKET_INVALID && os_sock_bind(s, 0, 0) == 0)
+            os_sock_name(s, nullptr, &port);
+        if (s != OS_SOCKET_INVALID)
+            os_sock_close(s);
+        port = swap16(port);
+        if (port && udp_port_free(port) && udp_port_free(port + 100u) && udp_port_free(port + 200u))
+            return port;
+    }
+    return 0;
+}
+
 static void test_startup(X86 *c) {
     uint32_t data = block(400);
     check(call(c, "WSAStartup", {0x0101, data}) == 0 && rd16(data) == 0x0101,
@@ -218,6 +251,60 @@ static void test_udp(X86 *c) {
     check(call(c, "closesocket", {a}) == 0 && call(c, "closesocket", {b}) == 0, "closesocket");
     check(call(c, "closesocket", {a}) == SOCKET_ERROR && last_error(c) == 10038,
           "a closed socket is WSAENOTSOCK");
+}
+
+// A UDP port in 49152-65535 whose bind is WSAEACCES (OS_NET_ACCES) and whose
+// port - 100 and port + 100 are free, or 0. On Windows that is a port another
+// account's program holds (a service's), or one of the system's excluded
+// ranges; elsewhere there is usually none up there.
+static uint32_t refused_port() {
+    for (uint32_t q = 49152 + 100; q + 100 <= 65535; ++q) {
+        OsSocket s = os_sock_open(OS_SOCK_DGRAM);
+        if (s == OS_SOCKET_INVALID)
+            return 0;
+        const bool refused =
+            os_sock_bind(s, 0, swap16((uint16_t)q)) != 0 && os_net_error() == OS_NET_ACCES;
+        os_sock_close(s);
+        if (refused && udp_port_free(q - 100) && udp_port_free(q + 100))
+            return q;
+    }
+    return 0;
+}
+
+// A move off a movable port skips a port it may not have as it skips a taken
+// one. A service may let go of its port meanwhile, and then the move lands
+// there: that try says nothing, and another is made.
+static void test_refused_port(X86 *c) {
+    for (int tries = 0; tries < 5; ++tries) {
+        const uint32_t refused = refused_port();
+        if (!refused) {
+            printf("  [skip] no refused UDP port beside two free ones here\n");
+            return;
+        }
+        const uint16_t port = (uint16_t)(refused - 100);
+        OsSocket first = os_sock_open(OS_SOCK_DGRAM); // the first copy of the game
+        const bool taken = first != OS_SOCKET_INVALID && os_sock_bind(first, 0, swap16(port)) == 0;
+        char list[16];
+        snprintf(list, sizeof list, "%u", port);
+        os_setenv("RECOMP_NET_MOVABLE_UDP_PORTS", list);
+        uint32_t second = call(c, "socket", {2, 2, 0});
+        const bool bound = call(c, "bind", {second, sockaddr_at(0, port), 16}) == 0;
+        uint32_t sa = sockaddr_at(0, 0), len = block(4);
+        wr32(len, 16);
+        call(c, "getsockname", {second, sa, len});
+        const uint16_t moved = sockaddr_port(sa);
+        call(c, "closesocket", {second});
+        os_unsetenv("RECOMP_NET_MOVABLE_UDP_PORTS");
+        if (first != OS_SOCKET_INVALID)
+            os_sock_close(first);
+        if (taken && bound && moved == refused)
+            continue; // let go of meanwhile
+        check(taken, "the first copy has %u", port);
+        check(bound && moved == refused + 100,
+              "the second copy moves from %u past the refused %u to %u", port, refused, moved);
+        return;
+    }
+    printf("  [skip] the refused ports here were let go of before each move\n");
 }
 
 static void test_tcp(X86 *c) {
@@ -407,12 +494,10 @@ static void test_broadcast(X86 *c) {
         call(c, "setsockopt", {s, 0xffff, 0x20, one, 4});
         call(c, "ioctlsocket", {s, 0x8004667eu, one});
     }
-    uint16_t port = 0;
+    const uint16_t port = port_with_room();
     uint32_t any = sockaddr_at(0, 0), len = block(4);
-    check(call(c, "bind", {a, any, 16}) == 0, "bind 0.0.0.0");
-    wr32(len, 16);
-    call(c, "getsockname", {a, any, len});
-    port = sockaddr_port(any);
+    check(port != 0 && call(c, "bind", {a, sockaddr_at(0, port), 16}) == 0, "bind 0.0.0.0:%u",
+          port);
     check(call(c, "bind", {b, sockaddr_at(0, port), 16}) == 0,
           "a second SO_REUSEADDR socket binds the same port %u", port);
 
@@ -452,7 +537,8 @@ static void test_broadcast(X86 *c) {
     uint32_t moved = call(c, "socket", {2, 2, 0});
     call(c, "ioctlsocket", {moved, 0x8004667eu, one});
     uint32_t taken = call(c, "socket", {2, 2, 0});
-    call(c, "bind", {taken, sockaddr_at(0, port + 100), 16}); // whoever has port + 100
+    check(call(c, "bind", {taken, sockaddr_at(0, port + 100), 16}) == 0, "another program has %u",
+          port + 100);
     check(call(c, "bind", {moved, sockaddr_at(0, port), 16}) == 0, "the movable port moves");
     wr32(len, 16);
     call(c, "getsockname", {moved, any, len});
@@ -464,8 +550,8 @@ static void test_broadcast(X86 *c) {
         while (call(c, "recvfrom", {moved, buf, 64, 0, 0, 0}) == 8)
             got_moved = true;
     }
-    check(got_moved && moved_port > port && (moved_port - port) % 100 == 0,
-          "a broadcast to %u reaches the copy moved to %u", port, moved_port);
+    check(got_moved && moved_port == port + 200, "a broadcast to %u reaches the copy moved to %u",
+          port, moved_port);
     os_unsetenv("RECOMP_NET_MOVABLE_UDP_PORTS");
     for (uint32_t s : {a, b, sender, moved, taken})
         call(c, "closesocket", {s});
@@ -485,6 +571,8 @@ int main() {
     test_startup(&c);
     printf("winsock udp\n");
     test_udp(&c);
+    printf("winsock refused port\n");
+    test_refused_port(&c);
     printf("winsock tcp\n");
     test_tcp(&c);
     printf("winsock last error per thread\n");
