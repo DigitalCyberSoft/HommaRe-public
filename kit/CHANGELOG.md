@@ -1,5 +1,33 @@
 # Changelog
 
+## Sockets on every platform
+
+- `runtime/winsock.cpp` runs on the platform layer's sockets: `platform/os.h`
+  gains `os_sock_*`/`os_net_*` (non-blocking IPv4 sockets, poll, host name,
+  resolution and the interface list) on POSIX and Winsock 2, so WinSock builds
+  for Windows, Linux and Android as well as Apple systems. The Bonjour relay
+  stays Apple's.
+- WinSock's answers where POSIX differs: a failed connect shows in `select`'s
+  exceptfds and `SO_ERROR`, not writefds; a blocking stream `send` queues all of
+  it; a broadcast without `SO_BROADCAST` is `WSAEACCES`; `select` with no
+  sockets, and `getsockname` on an unbound socket, are `WSAEINVAL`; a short
+  `SIO_GET_INTERFACE_LIST` buffer is `WSAEFAULT`. Host names resolve on a host
+  thread, and an interface scan happens once a second, not per datagram.
+- A limited broadcast goes out through every interface (virtual LAN adapters
+  included); `RECOMP_NET_PEERS` adds unicast copies for networks without
+  broadcast.
+- `[net] movable_udp_ports`: a second copy on one machine moves off the game's
+  taken UDP ports (+100) instead of sharing them, since a shared port delivers
+  a unicast datagram to one of its sockets only.
+- Failed socket calls go to the log; `RECOMP_TRACE_SOCKETS=1` also shows each
+  datagram's first bytes.
+
+## Linux
+
+- The kit builds and runs on Linux (x86-64): Vulkan for Direct3D 9, GPU skinning
+  included, the native launcher, and several games in one app.
+- The launcher's tagline can differ per platform (`launcher-games.json` `taglines`).
+
 ## Renaming an app
 
 - `[game] previous_app_names` and `previous_bundle_ids` name what an app was called

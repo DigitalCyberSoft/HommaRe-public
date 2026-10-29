@@ -11,6 +11,9 @@ if(APPLE)
   target_link_libraries(recomp_platform PUBLIC "-framework AudioToolbox" "-framework CoreAudio"
                         "-framework CoreFoundation")
 endif()
+if(WIN32)
+  target_link_libraries(recomp_platform PUBLIC ws2_32)
+endif()
 if(ANDROID)
   # Bionic provides pthread functions in libc, without a separate libpthread.
   target_link_libraries(recomp_platform PUBLIC dl log)

@@ -21,9 +21,10 @@ owns. Compile the runtime with `-I<repo root>` so `guest.h` can find it.
 | `intrinsics.h` | the intrinsic contract generated code uses for `_setjmp`/`_longjmp` |
 | `kernel32.cpp` | heap, files, modules, TLS, sync objects, time, strings and locale |
 | `user32.cpp` | window classes and windows, the message queue, paint/DC/input stubs |
-| `misc.cpp` | GDI32, ADVAPI32 registry, SHELL32, ole32, IMM32, WSOCK32, WINMM (clock, mmio, MIDI out) |
+| `misc.cpp` | GDI32, ADVAPI32 registry, SHELL32, ole32, IMM32, WSOCK32 startup, WINMM (clock, mmio, MIDI out) |
+| `winsock.cpp` | WSOCK32 and WS2_32's `WSAIoctl` on the host's sockets, for a game that plays over a network (see **Sockets**) |
 | `win32.h` | what the host app and the DirectX shims call into |
-| `tests/` | `runtime_tests.cpp` plus the test-only `recomp_call` |
+| `tests/` | `runtime_tests.cpp`, `winsock_tests.cpp` (loopback, no game) plus the test-only `recomp_call` |
 
 ## Address space
 
@@ -221,6 +222,79 @@ paths resolve against the guest current directory, which starts at
 | `RECOMP_CREATETHREAD=skip` | record `CreateThread` without running the thread body |
 | `RECOMP_CREATETHREAD=sync` | run a thread body to completion inside `CreateThread` (pre-scheduler behaviour, for bisection) |
 | `RECOMP_IMPORT_STATS=1` | at exit, classify every import as called / not reached / logging-only |
+| `RECOMP_SOCKETS=0/1` | WinSock on the host's sockets, or the offline stand-ins, whatever game.toml `[game] sockets` says |
+| `RECOMP_TRACE_SOCKETS=1` | log every socket call: binds, connects, each datagram's size, peer and first bytes |
+| `RECOMP_NET_PEERS` | addresses or host names (comma or space separated) that get a unicast copy of every broadcast datagram |
+| `RECOMP_NET_MOVABLE_UDP_PORTS` | UDP ports (comma separated) a second copy moves off when taken, instead of game.toml's `[net] movable_udp_ports`; empty for none (see **Sockets**) |
+| `RECOMP_LAN_RELAY=0` | no Bonjour relay for broadcasts on Apple systems (see **Sockets**) |
+
+## Sockets
+
+`winsock.cpp` implements WSOCK32 (Winsock 1.1) and WS2_32's `WSAIoctl` on the
+platform layer's IPv4 sockets (`os_sock_*` in `platform/os.h`: BSD sockets on
+Apple systems, Linux and Android, Winsock 2 on Windows) for a game whose
+game.toml sets `[game] sockets = true`; without it every socket call fails as
+`legacy_dlls.cpp`'s offline stand-ins do. Host sockets are always
+non-blocking; a guest socket starts blocking, as on Windows, until `FIONBIO`.
+A blocking `recv`, `recvfrom`, `send`, `accept`, `connect` or a `select` with a
+timeout never waits in the host: it polls with a zero timeout and sleeps a
+2 ms slice on the scheduler in between, so every other guest thread keeps
+running. A socket another thread closes ends such a wait with `WSAEINTR`. A
+host name other than the game's own or a dotted quad resolves on a host thread
+while the caller sleeps the same way.
+
+Where POSIX and WinSock differ the guest gets WinSock's answer: a started
+connect is `WSAEWOULDBLOCK`; a failed one appears in `select`'s exceptfds and
+`SO_ERROR`, never in writefds; a blocking stream `send` returns once all of it
+is queued; a datagram larger than the buffer is `WSAEMSGSIZE` (data copied, and
+dropped unless `MSG_PEEK`); a broadcast without `SO_BROADCAST` is `WSAEACCES`;
+`select` with no sockets is `WSAEINVAL`, not a sleep; `getsockname` on an
+unbound socket is `WSAEINVAL`. `gethostname` is the game's id, and
+`gethostbyname` of it lists every interface's address, loopback last.
+
+Broadcasts. Heroes V's LAN screen looks for games with a datagram to
+255.255.255.255 and another to the directed broadcast it derives from its own
+address by address class (10.255.255.255 for a 10.x.y.z address, whatever the
+real netmask). A datagram to 255.255.255.255 goes to the directed broadcast of
+every interface that broadcasts, and to the far end of every point-to-point
+link that has one: a limited broadcast leaves by one interface only, and a
+virtual LAN adapter (ZeroTier, Hamachi, a tap VPN) is rarely that one. Every
+broadcast also goes as a unicast copy to each host in `RECOMP_NET_PEERS`, for
+routed networks (WireGuard, Tailscale) that carry no broadcast at all; their
+tun interfaces, which report their own address as the far end, are skipped.
+
+On Apple systems a Bonjour relay stands in for broadcasts iOS refuses (an app
+needs Apple's `com.apple.developer.networking.multicast` entitlement to send or
+receive them): every copy of the app announces itself as `_hommare._udp`,
+named after the game, and every broadcast also goes as a unicast copy to each
+copy it has found, at the same port. A broadcast the system refuses is reported
+sent, since the relay delivered it. `RECOMP_LAN_RELAY=0` turns the relay off.
+macOS 15 and iOS ask the player for Local Network access before the first LAN
+packet, with the `NSLocalNetworkUsageDescription` text in `host/Info.plist.in`
+and `Info-ios.plist.in`, which also lists the relay's service in
+`NSBonjourServices`; refused, every LAN send fails.
+
+Two copies of a game on one machine. Heroes V binds its LAN port (UDP 8889)
+and its game port (8888) without `SO_REUSEADDR`, so on Windows the second copy's
+`bind` fails with `WSAEADDRINUSE`: its LAN screen then lists nothing, and
+creating a game says one of that name exists (the game's own reactions to
+Windows' error). Sharing the port instead (`SO_REUSEADDR`, `SO_REUSEPORT`) is
+no answer: both copies hear broadcasts and list each other's games, but a
+unicast datagram to a shared port reaches only one of the sockets sharing it
+(BSD: the last bound; Linux: one picked by the sender's address and port), so
+a copy that joins sends its request to itself and times out. For the ports a
+game lists in game.toml `[net] movable_udp_ports` (or
+`RECOMP_NET_MOVABLE_UDP_PORTS`), a bind that finds the port taken moves to port
++ 100, + 200, ... + 400 instead, with a line in the log, and `getsockname`
+reports where it went. Peers answer the port a datagram came from, and a
+broadcast to a movable port also goes to the moved ports at this machine's own
+address, so the copies hear each other. A socket the guest set `SO_REUSEADDR`
+on shares its port as asked; every other bind, TCP included, fails as on
+Windows.
+
+Every failed socket call (other than `WSAEWOULDBLOCK`, a non-blocking socket's
+"not yet") is logged with its WSA error: the first three of each kind, then
+every thousandth. `RECOMP_TRACE_SOCKETS=1` logs every call.
 
 ## Tests
 

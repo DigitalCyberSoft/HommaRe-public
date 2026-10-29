@@ -885,6 +885,7 @@ static void test_script_parsing() {
     CHECK_EQ(steps[11].threshold, 840.0);
     CHECK(steps[11].at_least);
     // This host test binary has no mod runtime/game view linked or loaded.
+#if defined(RECOMP_GLOBAL_SIMULATION_TURN_ADDR) && defined(RECOMP_GLOBAL_COMMAND_FRAME_ADDR)
     const uint32_t saved_turn = rd32(RECOMP_GLOBAL_SIMULATION_TURN_ADDR);
     const uint32_t saved_command = rd32(RECOMP_GLOBAL_COMMAND_FRAME_ADDR);
     wr32(RECOMP_GLOBAL_SIMULATION_TURN_ADDR, 820);
@@ -904,6 +905,11 @@ static void test_script_parsing() {
     CHECK_EQ(host_script_counter_metric("turn", rd32), 860.0);
     wr32(RECOMP_GLOBAL_SIMULATION_TURN_ADDR, saved_turn);
     wr32(RECOMP_GLOBAL_COMMAND_FRAME_ADDR, saved_command);
+#else
+    // A game without the two counters measures neither.
+    CHECK_EQ(host_script_counter_metric("turn", rd32), -1.0);
+    CHECK_EQ(host_script_counter_metric("command_frame", rd32), -1.0);
+#endif
 
     // Five malformed forms for each of the five verbs. The categories the
     // brief names are missing operand, non-integer, unknown enum, extra token

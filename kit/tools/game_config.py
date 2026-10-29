@@ -200,6 +200,16 @@ def load(game_dir):
         raise ValueError("%s: [media] cd_tracks must be a list of strings" % source)
     cfg.setdefault("hooks", {})
     cfg.setdefault("bundle", {}).setdefault("exclude", [])
+    # [net] movable_udp_ports: UDP ports the game binds exclusively that a
+    # second copy on the same machine moves off instead of failing to bind
+    # (runtime/winsock.cpp). Empty: every bind fails as it would on Windows.
+    net = cfg.setdefault("net", {})
+    net.setdefault("movable_udp_ports", [])
+    if not isinstance(net["movable_udp_ports"], list) or any(
+            not isinstance(p, int) or isinstance(p, bool) or not 0 < p < 65536
+            for p in net["movable_udp_ports"]):
+        raise ValueError("%s: [net] movable_udp_ports must be a list of ports, not %r"
+                         % (source, net["movable_udp_ports"]))
     touch = cfg.setdefault("touch", {})
     touch.setdefault("keypad", "auto")
     if touch["keypad"] not in ("auto", "hidden"):

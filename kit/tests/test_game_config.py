@@ -35,6 +35,22 @@ class LoadTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "cd_tracks"):
                     game_config.load(game)
 
+    def test_net_movable_udp_ports_render_and_reject_non_ports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp)
+            stub = (ROOT / "games/stub/game.toml").read_text()
+            (game / "globals.toml").write_text("")
+            (game / "game.toml").write_text(stub)
+            self.assertIn('#define RECOMP_NET_MOVABLE_UDP_PORTS ""',
+                          gen_game_config.render_header(game_config.load(game)))
+            (game / "game.toml").write_text(stub + '\n[net]\nmovable_udp_ports = [8888, 8889]\n')
+            self.assertIn('#define RECOMP_NET_MOVABLE_UDP_PORTS "8888,8889,"',
+                          gen_game_config.render_header(game_config.load(game)))
+            for bad in ('[0]', '[70000]', '["8888"]', '8888'):
+                (game / "game.toml").write_text(stub + '\n[net]\nmovable_udp_ports = ' + bad + '\n')
+                with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "movable_udp_ports"):
+                    game_config.load(game)
+
     def test_macos_profile_files_render_and_reject_escapes(self):
         with tempfile.TemporaryDirectory() as tmp:
             game = Path(tmp)

@@ -182,6 +182,9 @@ Swapchain VulkanDevice::create_swapchain(void *native_surface, int width, int he
     VkBool32 supported = VK_FALSE;
     vkGetPhysicalDeviceSurfaceSupportKHR(physical_, queue_family_, c->surface, &supported);
     if (!supported || !build_swapchain(*this, *c, width, height)) {
+        fprintf(stderr, "gpu/vulkan: %s\n",
+                supported ? "no swapchain on the window's surface"
+                          : "the device cannot present to the window's surface");
         vkDestroySurfaceKHR(instance_, c->surface, nullptr);
         return {};
     }

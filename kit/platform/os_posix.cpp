@@ -2,13 +2,22 @@
 // third_party/ that may include a POSIX or Mach header besides os_win32.cpp.
 #include "os.h"
 
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <poll.h>
 #include <pthread.h>
 #include <signal.h>
 #include <spawn.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1110,6 +1119,417 @@ void os_sleep_us(uint64_t us) {
     ts.tv_sec = (time_t)(us / 1000000ull);
     ts.tv_nsec = (long)((us % 1000000ull) * 1000ull);
     nanosleep(&ts, nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// Sockets. A descriptor is the OsSocket; O_NONBLOCK is set at creation.
+// ---------------------------------------------------------------------------
+static thread_local OsNetError t_net_error = OS_NET_OK;
+
+static OsNetError net_error_of(int e) {
+    switch (e) {
+    case 0:
+        return OS_NET_OK;
+    case EAGAIN:
+#if EWOULDBLOCK != EAGAIN
+    case EWOULDBLOCK:
+#endif
+        return OS_NET_WOULDBLOCK;
+    case EINPROGRESS:
+        return OS_NET_INPROGRESS;
+    case EALREADY:
+        return OS_NET_ALREADY;
+    case EISCONN:
+        return OS_NET_ISCONN;
+    case ENOTCONN:
+    case EDESTADDRREQ:
+        return OS_NET_NOTCONN;
+    case EADDRINUSE:
+        return OS_NET_ADDRINUSE;
+    case EADDRNOTAVAIL:
+        return OS_NET_ADDRNOTAVAIL;
+    case EACCES:
+    case EPERM:
+        return OS_NET_ACCES;
+    case ECONNREFUSED:
+        return OS_NET_CONNREFUSED;
+    case ECONNRESET:
+    case EPIPE:
+        return OS_NET_CONNRESET;
+    case ECONNABORTED:
+        return OS_NET_CONNABORTED;
+    case ENETUNREACH:
+        return OS_NET_NETUNREACH;
+    case EHOSTUNREACH:
+        return OS_NET_HOSTUNREACH;
+    case ENETDOWN:
+        return OS_NET_NETDOWN;
+    case ETIMEDOUT:
+        return OS_NET_TIMEDOUT;
+    case EMSGSIZE:
+        return OS_NET_MSGSIZE;
+    case ENOBUFS:
+    case ENOMEM:
+        return OS_NET_NOBUFS;
+    case ESHUTDOWN:
+        return OS_NET_SHUTDOWN;
+    case EINVAL:
+    case EAFNOSUPPORT:
+    case EFAULT:
+        return OS_NET_INVAL;
+    case ENOTSOCK:
+    case EBADF:
+        return OS_NET_NOTSOCK;
+    case EMFILE:
+    case ENFILE:
+        return OS_NET_MFILE;
+    case ENOPROTOOPT:
+        return OS_NET_NOPROTOOPT;
+    default:
+        return OS_NET_OTHER;
+    }
+}
+static int net_fail(void) {
+    t_net_error = net_error_of(errno);
+    return -1;
+}
+static sockaddr_in net_sockaddr(uint32_t addr, uint16_t port) {
+    sockaddr_in sa;
+    memset(&sa, 0, sizeof sa);
+#ifdef SIN6_LEN // BSD's sign that sockaddrs carry their length (Darwin)
+    sa.sin_len = sizeof sa;
+#endif
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = addr;
+    sa.sin_port = port;
+    return sa;
+}
+static void net_split(const sockaddr_in &sa, uint32_t *addr, uint16_t *port) {
+    if (addr)
+        *addr = sa.sin_addr.s_addr;
+    if (port)
+        *port = sa.sin_port;
+}
+// Sending on a stream the peer closed raises SIGPIPE, which would end the
+// process; MSG_NOSIGNAL on Linux, SO_NOSIGPIPE per socket on Darwin.
+#ifdef MSG_NOSIGNAL
+static const int NET_SEND_FLAGS = MSG_NOSIGNAL;
+#else
+static const int NET_SEND_FLAGS = 0;
+#endif
+static int net_msg_flags(int flags) {
+    return ((flags & OS_MSG_PEEK) ? MSG_PEEK : 0) | ((flags & OS_MSG_OOB) ? MSG_OOB : 0);
+}
+
+OsNetError os_net_error(void) {
+    return t_net_error;
+}
+int os_net_startup(void) {
+    return 0;
+}
+OsSocket os_sock_open(int type) {
+    int fd = socket(AF_INET, type == OS_SOCK_STREAM ? SOCK_STREAM : SOCK_DGRAM, 0);
+    if (fd < 0)
+        return net_fail();
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) != 0) {
+        net_fail();
+        close(fd);
+        return OS_SOCKET_INVALID;
+    }
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#endif
+    return fd;
+}
+int os_sock_close(OsSocket s) {
+    return close((int)s) == 0 ? 0 : net_fail();
+}
+int os_sock_bind(OsSocket s, uint32_t addr, uint16_t port) {
+    sockaddr_in sa = net_sockaddr(addr, port);
+    return bind((int)s, (sockaddr *)&sa, sizeof sa) == 0 ? 0 : net_fail();
+}
+int os_sock_listen(OsSocket s, int backlog) {
+    return listen((int)s, backlog) == 0 ? 0 : net_fail();
+}
+OsSocket os_sock_accept(OsSocket s, uint32_t *addr, uint16_t *port) {
+    sockaddr_in sa;
+    socklen_t len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    int fd = accept((int)s, (sockaddr *)&sa, &len);
+    if (fd < 0)
+        return net_fail();
+    // The accepted socket inherits nothing from its listener on Linux.
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#endif
+    net_split(sa, addr, port);
+    return fd;
+}
+int os_sock_connect(OsSocket s, uint32_t addr, uint16_t port) {
+    sockaddr_in sa = net_sockaddr(addr, port);
+    return connect((int)s, (sockaddr *)&sa, sizeof sa) == 0 ? 0 : net_fail();
+}
+int64_t os_sock_send(OsSocket s, const void *buf, size_t n, int flags) {
+    ssize_t r = send((int)s, buf, n, net_msg_flags(flags) | NET_SEND_FLAGS);
+    return r >= 0 ? (int64_t)r : net_fail();
+}
+int64_t os_sock_sendto(OsSocket s, const void *buf, size_t n, int flags, uint32_t addr,
+                       uint16_t port) {
+    sockaddr_in sa = net_sockaddr(addr, port);
+    ssize_t r =
+        sendto((int)s, buf, n, net_msg_flags(flags) | NET_SEND_FLAGS, (sockaddr *)&sa, sizeof sa);
+    return r >= 0 ? (int64_t)r : net_fail();
+}
+int64_t os_sock_recv(OsSocket s, void *buf, size_t n, int flags) {
+    ssize_t r = recv((int)s, buf, n, net_msg_flags(flags));
+    return r >= 0 ? (int64_t)r : net_fail();
+}
+// recvmsg rather than recvfrom: msg_flags reports a datagram that did not fit
+// (MSG_TRUNC) on Linux and Darwin alike, with or without MSG_PEEK.
+int64_t os_sock_recvfrom(OsSocket s, void *buf, size_t n, int flags, uint32_t *addr, uint16_t *port,
+                         int *truncated) {
+    sockaddr_in sa;
+    memset(&sa, 0, sizeof sa);
+    iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = n;
+    msghdr msg;
+    memset(&msg, 0, sizeof msg);
+    msg.msg_name = &sa;
+    msg.msg_namelen = sizeof sa;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    ssize_t r = recvmsg((int)s, &msg, net_msg_flags(flags));
+    if (r < 0)
+        return net_fail();
+    if (truncated)
+        *truncated = (msg.msg_flags & MSG_TRUNC) ? 1 : 0;
+    net_split(sa, addr, port);
+    return (int64_t)r;
+}
+int os_sock_shutdown(OsSocket s, int how) {
+    int h = how == 0 ? SHUT_RD : how == 1 ? SHUT_WR : SHUT_RDWR;
+    return shutdown((int)s, h) == 0 ? 0 : net_fail();
+}
+int os_sock_set_option(OsSocket s, OsSockOption option, int value) {
+    int fd = (int)s, v = value ? 1 : 0, r = 0;
+    switch (option) {
+    case OS_SO_REUSEADDR:
+        r = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof v);
+#if defined(__APPLE__) && defined(SO_REUSEPORT)
+        // BSD shares a unicast UDP port only with SO_REUSEPORT as well; Linux
+        // already does with SO_REUSEADDR, where REUSEPORT would load-balance.
+        {
+            int type = 0;
+            socklen_t len = sizeof type;
+            if (r == 0 && getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len) == 0 &&
+                type == SOCK_DGRAM)
+                r = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &v, sizeof v);
+        }
+#endif
+        break;
+    case OS_SO_BROADCAST:
+        r = setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &v, sizeof v);
+        break;
+    case OS_SO_KEEPALIVE:
+        r = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &v, sizeof v);
+        break;
+    case OS_SO_DONTROUTE:
+        r = setsockopt(fd, SOL_SOCKET, SO_DONTROUTE, &v, sizeof v);
+        break;
+    case OS_SO_OOBINLINE:
+        r = setsockopt(fd, SOL_SOCKET, SO_OOBINLINE, &v, sizeof v);
+        break;
+    case OS_SO_SNDBUF:
+        r = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &value, sizeof value);
+        break;
+    case OS_SO_RCVBUF:
+        r = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &value, sizeof value);
+        break;
+    case OS_SO_LINGER: {
+        linger l;
+        l.l_onoff = value >= 0;
+        l.l_linger = value >= 0 ? value : 0;
+        r = setsockopt(fd, SOL_SOCKET, SO_LINGER, &l, sizeof l);
+        break;
+    }
+    case OS_TCP_NODELAY:
+        r = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof v);
+        break;
+    case OS_IP_TTL:
+        r = setsockopt(fd, IPPROTO_IP, IP_TTL, &value, sizeof value);
+        break;
+    default:
+        t_net_error = OS_NET_NOPROTOOPT;
+        return -1;
+    }
+    return r == 0 ? 0 : net_fail();
+}
+int os_sock_get_option(OsSocket s, OsSockOption option, int *value) {
+    int fd = (int)s, v = 0, level = SOL_SOCKET, name = 0;
+    switch (option) {
+    case OS_SO_REUSEADDR:
+        name = SO_REUSEADDR;
+        break;
+    case OS_SO_BROADCAST:
+        name = SO_BROADCAST;
+        break;
+    case OS_SO_KEEPALIVE:
+        name = SO_KEEPALIVE;
+        break;
+    case OS_SO_DONTROUTE:
+        name = SO_DONTROUTE;
+        break;
+    case OS_SO_OOBINLINE:
+        name = SO_OOBINLINE;
+        break;
+    case OS_SO_SNDBUF:
+        name = SO_SNDBUF;
+        break;
+    case OS_SO_RCVBUF:
+        name = SO_RCVBUF;
+        break;
+    case OS_SO_LINGER: {
+        linger l;
+        socklen_t len = sizeof l;
+        if (getsockopt(fd, SOL_SOCKET, SO_LINGER, &l, &len) != 0)
+            return net_fail();
+        *value = l.l_onoff ? l.l_linger : -1;
+        return 0;
+    }
+    case OS_SO_ERROR: {
+        socklen_t len = sizeof v;
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &v, &len) != 0)
+            return net_fail();
+        *value = (int)net_error_of(v);
+        return 0;
+    }
+    case OS_TCP_NODELAY:
+        level = IPPROTO_TCP;
+        name = TCP_NODELAY;
+        break;
+    case OS_IP_TTL:
+        level = IPPROTO_IP;
+        name = IP_TTL;
+        break;
+    default:
+        t_net_error = OS_NET_NOPROTOOPT;
+        return -1;
+    }
+    socklen_t len = sizeof v;
+    if (getsockopt(fd, level, name, &v, &len) != 0)
+        return net_fail();
+    *value = v;
+    return 0;
+}
+int os_sock_name(OsSocket s, uint32_t *addr, uint16_t *port) {
+    sockaddr_in sa;
+    socklen_t len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    if (getsockname((int)s, (sockaddr *)&sa, &len) != 0)
+        return net_fail();
+    net_split(sa, addr, port);
+    return 0;
+}
+int os_sock_peer(OsSocket s, uint32_t *addr, uint16_t *port) {
+    sockaddr_in sa;
+    socklen_t len = sizeof sa;
+    memset(&sa, 0, sizeof sa);
+    if (getpeername((int)s, (sockaddr *)&sa, &len) != 0)
+        return net_fail();
+    net_split(sa, addr, port);
+    return 0;
+}
+int os_sock_pending(OsSocket s, uint32_t *bytes) {
+    int n = 0;
+    if (ioctl((int)s, FIONREAD, &n) != 0)
+        return net_fail();
+    *bytes = n > 0 ? (uint32_t)n : 0;
+    return 0;
+}
+int os_sock_poll(OsSockPoll *set, size_t count, int timeout_ms) {
+    pollfd stack[64];
+    pollfd *fds = count <= 64 ? stack : (pollfd *)malloc(count * sizeof(pollfd));
+    if (!fds) {
+        t_net_error = OS_NET_NOBUFS;
+        return -1;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        fds[i].fd = (int)set[i].sock;
+        fds[i].events = (short)(((set[i].events & OS_POLL_IN) ? POLLIN : 0) |
+                                ((set[i].events & OS_POLL_OUT) ? POLLOUT : 0) |
+                                ((set[i].events & OS_POLL_PRI) ? POLLPRI : 0));
+        fds[i].revents = 0;
+    }
+    int r;
+    do
+        r = poll(fds, (nfds_t)count, timeout_ms);
+    while (r < 0 && errno == EINTR);
+    if (r < 0)
+        net_fail();
+    for (size_t i = 0; r >= 0 && i < count; ++i) {
+        const short e = fds[i].revents;
+        set[i].revents = ((e & POLLIN) ? OS_POLL_IN : 0) | ((e & POLLOUT) ? OS_POLL_OUT : 0) |
+                         ((e & POLLPRI) ? OS_POLL_PRI : 0) |
+                         ((e & (POLLERR | POLLNVAL)) ? OS_POLL_ERR : 0) |
+                         ((e & POLLHUP) ? OS_POLL_HUP : 0);
+    }
+    if (fds != stack)
+        free(fds);
+    return r;
+}
+int os_net_hostname(char *buf, size_t cap) {
+    if (!buf || cap == 0 || gethostname(buf, cap) != 0)
+        return -1;
+    buf[cap - 1] = 0;
+    return 0;
+}
+int os_net_resolve(const char *name, uint32_t *addrs, int max) {
+    addrinfo hints;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM; // one entry per address, not one per protocol
+    addrinfo *list = nullptr;
+    if (!name || getaddrinfo(name, nullptr, &hints, &list) != 0)
+        return -1;
+    int n = 0;
+    for (addrinfo *a = list; a && n < max; a = a->ai_next)
+        if (a->ai_family == AF_INET && a->ai_addr)
+            addrs[n++] = ((sockaddr_in *)a->ai_addr)->sin_addr.s_addr;
+    freeaddrinfo(list);
+    return n;
+}
+int os_net_interfaces(OsNetInterface *out, int max) {
+    ifaddrs *list = nullptr;
+    if (getifaddrs(&list) != 0)
+        return net_fail();
+    int n = 0;
+    for (ifaddrs *a = list; a && n < max; a = a->ifa_next) {
+        if (!a->ifa_addr || a->ifa_addr->sa_family != AF_INET)
+            continue;
+        OsNetInterface &i = out[n++];
+        memset(&i, 0, sizeof i);
+        snprintf(i.name, sizeof i.name, "%s", a->ifa_name ? a->ifa_name : "");
+        i.addr = ((sockaddr_in *)a->ifa_addr)->sin_addr.s_addr;
+        if (a->ifa_netmask)
+            i.netmask = ((sockaddr_in *)a->ifa_netmask)->sin_addr.s_addr;
+        const unsigned f = a->ifa_flags;
+        i.flags = ((f & IFF_UP) ? OS_IF_UP : 0) | ((f & IFF_BROADCAST) ? OS_IF_BROADCAST : 0) |
+                  ((f & IFF_LOOPBACK) ? OS_IF_LOOPBACK : 0) |
+                  ((f & IFF_POINTOPOINT) ? OS_IF_POINTTOPOINT : 0) |
+                  ((f & IFF_MULTICAST) ? OS_IF_MULTICAST : 0);
+        // ifa_dstaddr and ifa_broadaddr share storage on Linux; the flags say which.
+        if ((f & (IFF_BROADCAST | IFF_POINTOPOINT)) && a->ifa_dstaddr &&
+            a->ifa_dstaddr->sa_family == AF_INET)
+            i.broadcast = ((sockaddr_in *)a->ifa_dstaddr)->sin_addr.s_addr;
+    }
+    freeifaddrs(list);
+    return n;
 }
 
 int os_strcasecmp(const char *a, const char *b) {
