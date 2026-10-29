@@ -100,6 +100,8 @@ if(ANDROID AND POP_TRANSLATE STREQUAL "STUB")
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/android-stub/${ANDROID_ABI})
 elseif(ANDROID)
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/android-native/${ANDROID_ABI})
+elseif(IOS AND POP_TRANSLATE STREQUAL "STUB" AND CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+  set(POP_BUILD_DIR ${POP_BUILD_ROOT}/ios-sim-stub)
 elseif(IOS AND POP_TRANSLATE STREQUAL "STUB")
   set(POP_BUILD_DIR ${POP_BUILD_ROOT}/ios-stub)
 # Cross builds (the web, Windows from macOS or Linux) keep theirs apart from
