@@ -280,6 +280,7 @@ void test_names() {
           !finder::is_patch_name("patch_game.bin"));
 }
 
+#ifndef _WIN32
 // Installers the Android launcher links to the descriptors a picker granted
 // (launcher/linux/android_files.cpp): each link stands for the document
 // under its own name, so the slices are found beside the installer and
@@ -302,6 +303,7 @@ void test_descriptor_links() {
     close(exe);
     close(bin);
 }
+#endif // symbolic links are a privilege on Windows, and it has no /proc
 
 void test_find() {
     const std::string dir = fresh("find");
@@ -689,7 +691,9 @@ int main(int argc, char **argv) {
     } tests[] = {
         {"installer names", test_names},
         {"finding installers", test_find},
+#ifndef _WIN32
         {"installers linked to descriptors", test_descriptor_links},
+#endif
         {"listing and inflate", test_listing_and_inflate},
         {"install marker", test_marker},
         {"install, repair, resume", test_install},
