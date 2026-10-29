@@ -458,6 +458,9 @@ void Device_GetDeviceState(X86 *c) {
         wr32(out + DIMS_OFF_lX, (uint32_t)d->last_x);
         wr32(out + DIMS_OFF_lY, (uint32_t)d->last_y);
         wr32(out + DIMS_OFF_lZ, (uint32_t)d->last_z);
+        static const bool trace_wheel = recomp_env("TRACE_WHEEL") != nullptr;
+        if (trace_wheel && d->last_z)
+            fprintf(stderr, "[wheel] dinput GetDeviceState lZ %+d\n", d->last_z);
     }
     uint32_t nbuttons = size >= DIMOUSESTATE2_SIZE ? 8u : 4u;
     for (uint32_t b = 0; b < nbuttons && DIMS_OFF_rgbButtons + b < size; ++b)
@@ -535,6 +538,9 @@ void Device_GetDeviceData(X86 *c) {
             wr32(a + DIDOD_OFF_dwData, data);
             wr32(a + DIDOD_OFF_dwTimeStamp, now);
             wr32(a + DIDOD_OFF_dwSequence, ++d->sequence);
+            static const bool trace_wheel = recomp_env("TRACE_WHEEL") != nullptr;
+            if (trace_wheel && ofs == DIMOFS_Z)
+                fprintf(stderr, "[wheel] dinput GetDeviceData z %+d\n", (int32_t)data);
             static const bool trace = recomp_env("TRACE_POINTER") != nullptr;
             if (trace && ofs >= DIMS_OFF_rgbButtons)
                 fprintf(stderr, "[dinput-button] ofs %u data %08x seq %u\n", ofs, data,

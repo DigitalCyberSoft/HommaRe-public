@@ -523,6 +523,14 @@ void homm5_camera_update(X86 *c) {
             const float lo = rdf32(op + OP_SOFT), hi = rdf32(op + OP_SOFT + 4);
             const float z = hi > lo ? (s.dist - lo) / (hi - lo) : 0.0f;
             g_map_zoom = z < 0 ? 0.0f : z > 1 ? 1.0f : z;
+            static int trace_wheel = -1;
+            static float told_dist = -1.0f;
+            if (trace_wheel < 0)
+                trace_wheel = getenv("RECOMP_TRACE_WHEEL") != NULL;
+            if (trace_wheel && fabsf(s.dist - told_dist) > 0.01f) {
+                told_dist = s.dist;
+                fprintf(stderr, "[wheel] map camera wants dist %.2f (limits %.2f..%.2f)\n", s.dist, lo, hi);
+            }
         }
         apply_steps(op);
         apply_gesture(op, cam, 0);

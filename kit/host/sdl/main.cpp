@@ -1581,9 +1581,15 @@ void handle_event(const SDL_Event &event) {
                 left += steps;
                 steps = std::trunc(left + (left > 0 ? 1e-6 : -1e-6));
                 left -= steps;
-                if (steps == 0)
-                    break;
             }
+            static const bool trace_wheel = recomp_env("TRACE_WHEEL") != nullptr;
+            if (trace_wheel)
+                fprintf(stderr, "[wheel %.3f] sdl y %+.4f (mouse %u%s) -> %+d notch(es)\n",
+                        double(os_monotonic_ns()) / 1e9, event.wheel.y, (unsigned)event.wheel.which,
+                        event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? ", flipped" : "",
+                        (int)steps);
+            if (steps == 0)
+                break;
             e.dz = (int32_t)lround(steps * 120.0);
             // WM_MOUSEWHEEL carries the position of the wheel event itself.
             view_point_to_drawable(event.wheel.mouse_x, event.wheel.mouse_y, &e.x, &e.y,
