@@ -276,8 +276,11 @@ static void test_tcp(X86 *c) {
         r2 = call(c, "send", {server, msg, 6, 0});
         os_sleep_us(2000);
     }
-    check(r2 == SOCKET_ERROR && last_error(c) == 10054,
-          "a send to a closed stream is WSAECONNRESET, without SIGPIPE");
+    // Windows itself may call it WSAECONNABORTED once the peer's reset came in.
+    const uint32_t send_error = r2 == SOCKET_ERROR ? last_error(c) : 0;
+    check(send_error == 10054 || send_error == 10053,
+          "a send to a closed stream is WSAECONNRESET or WSAECONNABORTED (%u), without SIGPIPE",
+          send_error);
     call(c, "closesocket", {server});
 
     // A connect nobody answers: exceptfds and SO_ERROR, not writefds.
@@ -293,6 +296,9 @@ static void test_tcp(X86 *c) {
     wr32(wset + 4, refused);
     wr32(eset, 1);
     wr32(eset + 4, refused);
+    // Windows answers a refused connect after its SYN retries, about two
+    // seconds even on the loopback; POSIX at once.
+    wr32(tv, 10);
     check(call(c, "select", {0, 0, wset, eset, tv}) == 1 && rd32(wset) == 0 && rd32(eset) == 1,
           "a refused connect shows in exceptfds only");
     wr32(errlen, 4);
