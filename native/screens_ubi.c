@@ -47,33 +47,101 @@
 
 #if defined(NS_UBI_VT_LOGIN)
 
+/* Fields an expansion moves (its addresses.h defines what differs). */
 /* CMPRegisterScreen */
-#define UL_LOGIN 0x1a8      /* IEditLine */
-#define UL_PASSWORD 0x1ac   /* IEditLine */
-#define UL_LOGGING 0x1b0    /* CUbiLoginListener while logging in */
-#define UL_WAIT 0x1b4       /* CWaitBox (its +0xf8) while busy */
-#define UL_INIT 0x1b8       /* CUbiInitListener while initialising */
-#define UL_FORM 0x1bc       /* the mp_register window */
+#ifndef NS_UBI_UL_LOGIN
+#define NS_UBI_UL_LOGIN 0x1a8    /* IEditLine */
+#endif
+#ifndef NS_UBI_UL_PASSWORD
+#define NS_UBI_UL_PASSWORD 0x1ac /* IEditLine */
+#endif
+#ifndef NS_UBI_UL_LOGGING
+#define NS_UBI_UL_LOGGING 0x1b0  /* CUbiLoginListener while logging in */
+#endif
+#ifndef NS_UBI_UL_WAIT
+#define NS_UBI_UL_WAIT 0x1b4     /* CWaitBox (its +0xf8) while busy */
+#endif
+#ifndef NS_UBI_UL_INIT
+#define NS_UBI_UL_INIT 0x1b8     /* CUbiInitListener while initialising */
+#endif
+#ifndef NS_UBI_UL_FORM
+#define NS_UBI_UL_FORM 0x1bc     /* the mp_register window */
+#endif
 /* CSimpleEditBox */
-#define UB_CALLBACK 0x17c
-#define UB_EDIT 0x180
+#ifndef NS_UBI_UB_CALLBACK
+#define NS_UBI_UB_CALLBACK 0x17c
+#endif
+#ifndef NS_UBI_UB_EDIT
+#define NS_UBI_UB_EDIT 0x180
+#endif
 /* CMPChangeChannelScreen */
-#define UC_LIST 0x194       /* IListControl */
-#define UC_JOIN 0x1c0       /* ButtonJoin IButton */
-#define UC_WAIT 0x1c4       /* CWaitBox while joining */
+#ifndef NS_UBI_UC_LIST
+#define NS_UBI_UC_LIST 0x194     /* IListControl */
+#endif
+#ifndef NS_UBI_UC_JOIN
+#define NS_UBI_UC_JOIN 0x1c0     /* ButtonJoin IButton */
+#endif
+#ifndef NS_UBI_UC_WAIT
+#define NS_UBI_UC_WAIT 0x1c4     /* CWaitBox while joining */
+#endif
 /* CChannelData */
-#define CH_NAME 0x0c        /* wstr */
-#define CH_MODE 0x18        /* wstr, the game's own words */
-#define CH_PLAYERS 0x24
-/* an IEditLine's text (wstr), an IListControl's rows, SelectByData, GetData */
-#define EDIT_TEXT 0x3c
-#define LIST_ROWS 0x20
-#define LIST_SELECTED 0x24
-#define LIST_SELECT 0x28
-#define ITEM_DATA 0x04
+#ifndef NS_UBI_CH_NAME
+#define NS_UBI_CH_NAME 0x0c      /* wstr */
+#endif
+#ifndef NS_UBI_CH_MODE
+#define NS_UBI_CH_MODE 0x18      /* wstr, the game's own words */
+#endif
+#ifndef NS_UBI_CH_PLAYERS
+#define NS_UBI_CH_PLAYERS 0x24
+#endif
 /* a stored CWaitBox pointer is the box's +0xf8; its notify (Cancel) at +0x108 */
-#define WAIT_BOX_FROM 0xf8
-#define WAIT_BOX_NOTIFY 0x108
+#ifndef NS_UBI_WAIT_BOX_FROM
+#define NS_UBI_WAIT_BOX_FROM 0xf8
+#endif
+#ifndef NS_UBI_WAIT_BOX_NOTIFY
+#define NS_UBI_WAIT_BOX_NOTIFY 0x108
+#endif
+#define UL_LOGIN NS_UBI_UL_LOGIN
+#define UL_PASSWORD NS_UBI_UL_PASSWORD
+#define UL_LOGGING NS_UBI_UL_LOGGING
+#define UL_WAIT NS_UBI_UL_WAIT
+#define UL_INIT NS_UBI_UL_INIT
+#define UL_FORM NS_UBI_UL_FORM
+#define UB_CALLBACK NS_UBI_UB_CALLBACK
+#define UB_EDIT NS_UBI_UB_EDIT
+#define UC_LIST NS_UBI_UC_LIST
+#define UC_JOIN NS_UBI_UC_JOIN
+#define UC_WAIT NS_UBI_UC_WAIT
+#define CH_NAME NS_UBI_CH_NAME
+#define CH_MODE NS_UBI_CH_MODE
+#define CH_PLAYERS NS_UBI_CH_PLAYERS
+#define WAIT_BOX_FROM NS_UBI_WAIT_BOX_FROM
+#define WAIT_BOX_NOTIFY NS_UBI_WAIT_BOX_NOTIFY
+/* an IEditLine's text (wstr), an IListControl's rows, GetSelected, SelectByData, GetData */
+#ifndef NS_UBI_EDIT_TEXT
+#define NS_UBI_EDIT_TEXT 0x3c
+#endif
+#ifndef NS_UBI_LIST_ROWS
+#define NS_UBI_LIST_ROWS 0x20
+#endif
+#ifndef NS_UBI_LIST_SELECTED
+#define NS_UBI_LIST_SELECTED 0x24
+#endif
+#ifndef NS_UBI_LIST_SELECT
+#define NS_UBI_LIST_SELECT 0x28
+#endif
+#ifndef NS_UBI_ITEM_DATA
+#define NS_UBI_ITEM_DATA 0x04
+#endif
+#define EDIT_TEXT NS_UBI_EDIT_TEXT
+#define LIST_ROWS NS_UBI_LIST_ROWS
+#define LIST_SELECTED NS_UBI_LIST_SELECTED
+#define LIST_SELECT NS_UBI_LIST_SELECT
+#define ITEM_DATA NS_UBI_ITEM_DATA
+#ifndef NS_UBI_VT_EDIT_BOX /* an expansion: the edit box its menu already names */
+#define NS_UBI_VT_EDIT_BOX NS_VT_EDIT_BOX
+#define NS_UBI_SUB_EDIT_BOX NS_SUB_EDIT_BOX
+#endif
 
 enum { F_LOGIN, F_PASSWORD };
 

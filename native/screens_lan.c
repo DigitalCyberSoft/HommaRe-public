@@ -138,6 +138,19 @@
 #ifndef NS_LAN_GI_SPEED
 #define NS_LAN_GI_SPEED 0x10c
 #endif
+/* What a game may lack (Hammers of Fate): the running / full games filters
+ * (their reactions and the games view's bytes), the combat speed of a duel. */
+#ifndef NS_LAN_HAS_FILTERS
+#define NS_LAN_HAS_FILTERS 1
+#endif
+#ifndef NS_LAN_HAS_SPEED
+#define NS_LAN_HAS_SPEED 1
+#endif
+/* An expansion draws the lobbies natively in ubi.com mode only (its LAN
+ * screens stay the game's): the lobby claims when it has a MenuProfile. */
+#ifndef NS_LAN_UBI_ONLY
+#define NS_LAN_UBI_ONLY 0
+#endif
 #ifndef NS_LAN_GI_MAP
 #define NS_LAN_GI_MAP 0xcc
 #endif
@@ -338,7 +351,7 @@ static void lobby_command(Scratch *s, uint32_t screen, const char *cmd) {
                 ns_react(s, reactions, lobby_reaction(), name);
         if (strcmp(name, "back") == 0)
             ns_react(s, reactions, lobby_reaction(), "disconnect");
-    } else if (strcmp(verb, "filter") == 0 && ns_ptr(gv)) {
+    } else if (NS_LAN_HAS_FILTERS && strcmp(verb, "filter") == 0 && ns_ptr(gv)) {
         const int id = ns_cmd_int(cmd, "id", -1);
         if (id == 0)
             ns_react(s, reactions, lobby_reaction(), rd8(gv + NS_LAN_GV_RUNNING) ? "hide_running" : "show_running");
@@ -379,8 +392,10 @@ static void lobby_document(Json *j, Scratch *s, uint32_t screen) {
         j_str(j, ns_tr("Имя", "Name"));
         j_lit(j, ",");
         j_str(j, ns_tr("Арена", "Arena"));
-        j_lit(j, ",");
-        j_str(j, ns_tr("Скорость", "Speed"));
+        if (NS_LAN_HAS_SPEED) {
+            j_lit(j, ",");
+            j_str(j, ns_tr("Скорость", "Speed"));
+        }
     } else {
         j_str(j, ns_tr("Имя", "Name"));
         j_lit(j, ",");
@@ -406,15 +421,21 @@ static void lobby_document(Json *j, Scratch *s, uint32_t screen) {
             ns_text_of(s, NS_LAN_TEXT, info + NS_LAN_GI_ARENA, text, sizeof text);
             j_lit(j, ",");
             j_str(j, text);
+#if NS_LAN_HAS_SPEED
             const uint32_t speed = rd32(info + NS_LAN_GI_SPEED);
             text[0] = 0;
             if (speed < 4)
                 ns_text_of(s, NS_LAN_SPEED_NAME, speed, text, sizeof text);
             j_lit(j, ",");
             j_str(j, text);
+#endif
         } else {
-            snprintf(text, sizeof text, "%u/%u", ns_call(s, NS_LAN_PLAYERS_NOW, info, 0, NULL, 0),
-                     rd32(info + NS_LAN_GI_MAX));
+#ifdef NS_LAN_GI_PLAYERS /* no "players in" function: the field the game's list reads */
+            const uint32_t now = rd32(info + NS_LAN_GI_PLAYERS);
+#else
+            const uint32_t now = ns_call(s, NS_LAN_PLAYERS_NOW, info, 0, NULL, 0);
+#endif
+            snprintf(text, sizeof text, "%u/%u", now, rd32(info + NS_LAN_GI_MAX));
             j_lit(j, ",");
             j_str(j, text);
             ns_text_of(s, NS_LAN_MAP_NAME, info + NS_LAN_GI_MAP, text, sizeof text);
@@ -427,7 +448,9 @@ static void lobby_document(Json *j, Scratch *s, uint32_t screen) {
         j_printf(j, "],\"started\":%s,\"locked\":%s}", rd8(info + NS_LAN_GI_OPEN) ? "false" : "true",
                  rd8(info + NS_LAN_GI_LOCKED) ? "true" : "false");
     }
-    j_printf(j, "],\"selected\":%d,\"filters\":[{\"id\":0,", selected);
+    j_printf(j, "],\"selected\":%d,\"filters\":[", selected);
+#if NS_LAN_HAS_FILTERS
+    j_lit(j, "{\"id\":0,");
     j_kv_str(j, "label", ns_tr("Запущенные игры", "Running games"));
     j_printf(j, ",\"on\":%s}", ns_ptr(gv) && rd8(gv + NS_LAN_GV_RUNNING) ? "true" : "false");
     if (g_duel) {
@@ -435,6 +458,7 @@ static void lobby_document(Json *j, Scratch *s, uint32_t screen) {
         j_kv_str(j, "label", ns_tr("Заполненные игры", "Full games"));
         j_printf(j, ",\"on\":%s}", ns_ptr(gv) && rd8(gv + NS_LAN_GV_OBSERVABLE) ? "true" : "false");
     }
+#endif
     j_lit(j, "],");
     j_kv_str(j, "players_title", ns_tr("Игроки", "Players"));
     j_lit(j, ",\"players\":[");
@@ -512,13 +536,27 @@ static void duel_lobby_document(Json *j, Scratch *s, uint32_t screen) {
     lobby_document(j, s, screen);
 }
 
+#if NS_LAN_UBI_ONLY
+/* MenuProfile is found only in the ubi.com Menu panel; in LAN mode it is 0. */
+static int lobby_claims(uint32_t screen) {
+    return ns_ptr(rd32(screen + NS_LAN_L_PROFILE));
+}
+#define LOBBY_CLAIMS lobby_claims
+#else
+#define LOBBY_CLAIMS NULL
+#endif
+
 const NsScreen ns_lan_lobby = {.id = "lan_lobby", .vtable = NS_LAN_VT_LOBBY, .sub = NS_LAN_SUB_LOBBY,
-                               .command = std_lobby_command, .document = std_lobby_document};
+                               .claims = LOBBY_CLAIMS, .command = std_lobby_command, .document = std_lobby_document};
 const NsScreen ns_lan_duel_lobby = {.id = "lan_duel_lobby", .vtable = NS_LAN_VT_DUEL_LOBBY,
-                                    .sub = NS_LAN_SUB_DUEL_LOBBY, .command = duel_lobby_command,
-                                    .document = duel_lobby_document};
+                                    .sub = NS_LAN_SUB_DUEL_LOBBY, .claims = LOBBY_CLAIMS,
+                                    .command = duel_lobby_command, .document = duel_lobby_document};
 
 /* ------------------------------------------------- the name / password -- */
+
+/* An expansion's (ubi.com only) keeps the game's box: in ubi.com mode it only
+ * asks a locked game's password, and its LAN screens are the game's. */
+#if !NS_LAN_UBI_ONLY
 
 static int box_claims(uint32_t box) {
     const uint32_t cb = rd32(box + NS_LAN_BOX_CB);
@@ -564,7 +602,17 @@ static void box_document(Json *j, Scratch *s, uint32_t box) {
 const NsScreen ns_lan_name = {.id = "lan_name", .vtable = NS_VT_EDIT_BOX_LAN, .sub = NS_SUB_EDIT_BOX_LAN,
                               .claims = box_claims, .command = box_command, .document = box_document};
 
+#else
+
+const NsScreen ns_lan_name = {.id = "lan_name"};
+
+#endif
+
 /* ------------------------------------------------ the duel's new game -- */
+
+/* Not mapped in every game (an expansion may name the lobbies alone). */
+#if defined(NS_LAN_VT_DUEL_CREATE)
+
 
 enum { F_NAME, F_LOCKED, F_PASSWORD, F_TRIPLE, F_SPEED };
 
@@ -657,6 +705,12 @@ static void dcreate_document(Json *j, Scratch *s, uint32_t screen) {
 const NsScreen ns_lan_duel_create = {.id = "lan_duel_create", .vtable = NS_LAN_VT_DUEL_CREATE,
                                      .sub = NS_LAN_SUB_DUEL_CREATE, .command = dcreate_command,
                                      .document = dcreate_document};
+
+#else
+
+const NsScreen ns_lan_duel_create = {.id = "lan_duel_create"};
+
+#endif
 
 #else
 
