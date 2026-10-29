@@ -515,7 +515,10 @@ CASES = [
          [(0x0, "FLD double ptr [ESP + 0x4]"), (0x4, "FPTAN"),
           (0x6, "FSTP double ptr [ESP + 0xc]"), (0xa, "FSTP double ptr [ESP + 0x14]"),
           (0xe, "RET")],
-         "DD 44 24 04  D9 F2  DD 5C 24 0C  DD 5C 24 14  C3", fptan_setup, check=check_fptan),
+         "DD 44 24 04  D9 F2  DD 5C 24 0C  DD 5C 24 14  C3", fptan_setup,
+         # The tangent is the bundled libm's (third_party/musl-libm), within
+         # an ulp of the x87's, not bit for bit: check_fptan compares it.
+         ignore=((ESP_INIT + 0x14, 8),), check=check_fptan),
     Case("FSAVE writes the 108-byte state and reinitialises; FRSTOR brings it back", 0x0D01C000,
          [(0x0, "FLD1"), (0x2, "FLD double ptr [ESP + 0x4]"), (0x6, "FSAVE [ECX + 0x8]"),
           (0xa, "FLD1"), (0xc, "FSTP double ptr [ESP + 0xc]"),
@@ -935,10 +938,21 @@ def built():
                  "    if (target == 0x%08xu) { c->eip = target; return; }\n"
                  "    recomp_call(c, target);\n}\n" % MAGIC_RET)
     lib = os.path.join(work, "libinsns" + (".dylib" if platform.system() == "Darwin" else ".so"))
+    # The bundled libm the transcendentals call (third_party/musl-libm), its
+    # names prefixed as runtime/CMakeLists.txt builds it.
+    libm_dir = os.path.join(ROOT, "third_party", "musl-libm")
+    objs = []
+    for name in sorted(os.listdir(libm_dir)):
+        if name.endswith(".c"):
+            obj = os.path.join(work, "libm_" + name[:-2] + ".o")
+            subprocess.check_call([clang, "-O1", "-std=c11", "-w", "-fPIC", "-ffp-contract=off",
+                                   "-include", os.path.join(libm_dir, "recomp_libm_names.h"),
+                                   "-c", os.path.join(libm_dir, name), "-o", obj])
+            objs.append(obj)
     subprocess.check_call([clang, "-O1", "-g", "-std=c11", "-Wall", "-Wextra", "-Wno-unused",
-                           "-fPIC", "-shared", "-I", os.path.join(ROOT, "runtime"),
+                           "-fPIC", "-shared", "-ffp-contract=off", "-I", os.path.join(ROOT, "runtime"),
                            os.path.join(HERE, "harness.c"), os.path.join(work, "synth.c"),
-                           os.path.join(work, "table.c"), "-o", lib])
+                           os.path.join(work, "table.c")] + objs + ["-o", lib])
     return Native(lib), errors
 
 

@@ -576,23 +576,43 @@ void u_frexp(X86 *c) {
     ret_f64(c, m);
 }
 
+// The transcendental functions are the bundled libm's (recomp_libm_*, x86.h),
+// not the host's: glibc, Apple's libm, the UCRT, bionic and emscripten's musl
+// each round them their own way in the last bit, and network peers must
+// compute the same. A NaN result is the one Microsoft's CRT gives on x86: a
+// NaN argument back (quieted), else the "indefinite" -nan(ind); the host's
+// arithmetic would make its own default NaN, whose sign differs between x86
+// (set) and arm64 or wasm (clear).
+double guest_nan(double r, double x, double y) {
+    if (r == r)
+        return r;
+    uint64_t b = 0xfff8000000000000ull;
+    if (x != x)
+        memcpy(&b, &x, 8);
+    else if (y != y)
+        memcpy(&b, &y, 8);
+    b |= 1ull << 51;
+    memcpy(&r, &b, 8);
+    return r;
+}
+
 // _CIxxx: the operand(s) on the x87 stack, popped, the result pushed. For
 // two operands the compiler loads the first argument first, so it is ST(1).
 void ci1(X86 *c, double (*fn)(double)) {
     double x = ST(c, 0);
     fdrop(c);
-    fpush(c, fn(x));
+    fpush(c, guest_nan(fn(x), x, 0.0));
 }
 void ci2(X86 *c, double (*fn)(double, double)) {
     double y = ST(c, 0), x = ST(c, 1);
     fdrop(c);
     fdrop(c);
-    fpush(c, fn(x, y));
+    fpush(c, guest_nan(fn(x, y), x, y));
 }
-void u_CIacos(X86 *c) { ci1(c, ::acos); }
-void u_CIatan(X86 *c) { ci1(c, ::atan); }
-void u_CIatan2(X86 *c) { ci2(c, ::atan2); }
-void u_CIpow(X86 *c) { ci2(c, ::pow); }
+void u_CIacos(X86 *c) { ci1(c, recomp_libm_acos); }
+void u_CIatan(X86 *c) { ci1(c, recomp_libm_atan); }
+void u_CIatan2(X86 *c) { ci2(c, recomp_libm_atan2); }
+void u_CIpow(X86 *c) { ci2(c, recomp_libm_pow); }
 // _ftol: ST(0), popped, truncated toward zero into EDX:EAX; out of range (and
 // NaN) gives the integer indefinite 0x8000000000000000, as FISTP does.
 void u_ftol(X86 *c) {
@@ -605,24 +625,26 @@ void u_ftol(X86 *c) {
 void u_CIfmod(X86 *c) { ci2(c, ::fmod); }
 
 // _libm_sse2_xxx_precise: the argument in XMM0 (the second in XMM1), the
-// result in XMM0. Same IEEE double operations as the host's libm.
+// result in XMM0. The bundled libm, as above.
 void sse1(X86 *c, double (*fn)(double)) {
-    xmm_set_f64(c, 0, fn(xmm_f64(c, 0)));
+    const double x = xmm_f64(c, 0);
+    xmm_set_f64(c, 0, guest_nan(fn(x), x, 0.0));
 }
 void sse2(X86 *c, double (*fn)(double, double)) {
-    xmm_set_f64(c, 0, fn(xmm_f64(c, 0), xmm_f64(c, 1)));
+    const double x = xmm_f64(c, 0), y = xmm_f64(c, 1);
+    xmm_set_f64(c, 0, guest_nan(fn(x, y), x, y));
 }
-void u_sse_sin(X86 *c) { sse1(c, ::sin); }
-void u_sse_cos(X86 *c) { sse1(c, ::cos); }
-void u_sse_tan(X86 *c) { sse1(c, ::tan); }
-void u_sse_asin(X86 *c) { sse1(c, ::asin); }
-void u_sse_acos(X86 *c) { sse1(c, ::acos); }
-void u_sse_atan(X86 *c) { sse1(c, ::atan); }
-void u_sse_exp(X86 *c) { sse1(c, ::exp); }
-void u_sse_log(X86 *c) { sse1(c, ::log); }
-void u_sse_log10(X86 *c) { sse1(c, ::log10); }
+void u_sse_sin(X86 *c) { sse1(c, recomp_libm_sin); }
+void u_sse_cos(X86 *c) { sse1(c, recomp_libm_cos); }
+void u_sse_tan(X86 *c) { sse1(c, recomp_libm_tan); }
+void u_sse_asin(X86 *c) { sse1(c, recomp_libm_asin); }
+void u_sse_acos(X86 *c) { sse1(c, recomp_libm_acos); }
+void u_sse_atan(X86 *c) { sse1(c, recomp_libm_atan); }
+void u_sse_exp(X86 *c) { sse1(c, recomp_libm_exp); }
+void u_sse_log(X86 *c) { sse1(c, recomp_libm_log); }
+void u_sse_log10(X86 *c) { sse1(c, recomp_libm_log10); }
 void u_sse_sqrt(X86 *c) { xmm_set_f64(c, 0, recomp_sse_sqrt(xmm_f64(c, 0))); }
-void u_sse_pow(X86 *c) { sse2(c, ::pow); }
+void u_sse_pow(X86 *c) { sse2(c, recomp_libm_pow); }
 
 // ---------------------------------------------------------------- time --
 // The guest's struct tm: nine ints, in the C order.

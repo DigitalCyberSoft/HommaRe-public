@@ -27,6 +27,26 @@
 extern "C" {
 #endif
 
+/* The guest's transcendental functions - FSIN, FCOS, FPTAN, FPATAN, FYL2X,
+ * FYL2XP1, F2XM1 and the CRT's math imports - from one implementation on every
+ * host (third_party/musl-libm/recomp_libm.h, which declares the same): each
+ * host C library rounds these its own way in the last bit, and peers in a
+ * network game must compute the same. */
+double recomp_libm_sin(double x);
+double recomp_libm_cos(double x);
+double recomp_libm_tan(double x);
+double recomp_libm_asin(double x);
+double recomp_libm_acos(double x);
+double recomp_libm_atan(double x);
+double recomp_libm_atan2(double y, double x);
+double recomp_libm_exp(double x);
+double recomp_libm_log(double x);
+double recomp_libm_log10(double x);
+double recomp_libm_log2(double x);
+double recomp_libm_log1p(double x);
+double recomp_libm_expm1(double x);
+double recomp_libm_pow(double x, double y);
+
 /* The hot guest-memory and x87 helpers below are large enough that the
  * compiler stops inlining them on its own, which costs a call per guest
  * memory access, so these insist. */
