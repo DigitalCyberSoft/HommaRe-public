@@ -7,8 +7,10 @@ name: Builds
 # game.toml (its launcher, native screens and settings) with no game code,
 # and native/ compiled but not linked (recomp_native_check). pop_smoke, the
 # kit's Populous smoke host, is left out: it reads globals Heroes V does not
-# have. Nothing of the game is built, run or uploaded; the one artifact is
-# the Windows test binaries, made here from the kit and the stub.
+# have. The kit's own suites also run against the kit's own stub game
+# (kit/games/stub), whose settings they were written for. Nothing of the game
+# is built, run or uploaded; the one artifact is the Windows test binaries,
+# made here from the kit and the stub.
 
 on:
   push:
@@ -38,7 +40,7 @@ jobs:
           sudo apt-get update -qq
           # SDL3's documented Linux build dependencies (README-linux), as
           # kit/.github has them; clang 20 for native/'s #embed.
-          sudo apt-get install -y -qq ccache glslc mesa-vulkan-drivers build-essential pkg-config \
+          sudo apt-get install -y -qq ccache glslc mesa-vulkan-drivers vulkan-tools build-essential pkg-config \
             libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
             libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
             libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
@@ -48,7 +50,7 @@ jobs:
           echo /usr/lib/llvm-20/bin >> "$GITHUB_PATH"
       - uses: ./.github/actions/kit-setup
         with:
-          ffmpeg-trees: build/cmake/linux-stub
+          ffmpeg-trees: build/cmake/linux-stub kit/build/cmake/linux-stub
           ccache: linux
       - name: The app, against the stub translation
         run: python kit/tools/build.py --game-dir "$PWD" --stub --target app
@@ -57,11 +59,31 @@ jobs:
           python kit/tools/test.py --game-dir "$PWD" --preset linux-stub --compile-only
           cmake --build build/cmake/linux-stub --target pop_headless
           ccache -s
+      - name: Lavapipe, as the Vulkan loader sees it
+        env:
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          VK_LOADER_DEBUG: error,warn,driver
+        run: |
+          ls -l /usr/share/vulkan/icd.d
+          vulkaninfo --summary
+      # compositor_tests and host_tests are left out here: they check the
+      # kit's integer scaling of menus, movies and the letterbox, which a game
+      # with game.toml [settings] scaling = "smooth" (HommaRe) does not use, a
+      # compile-time choice. They run against the kit's own stub game below.
       - name: The suites that need no game; the GPU ones on lavapipe
         env:
           SDL_VIDEODRIVER: offscreen
           VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
-        run: ctest --test-dir build/cmake/linux-stub -L "nogame|game|gpu" --output-on-failure
+        run: ctest --test-dir build/cmake/linux-stub -L "nogame|game|gpu" -E "^(compositor_tests|host_tests)$" --output-on-failure
+      - name: The kit's suites, against the kit's own stub game
+        run: |
+          (cd kit && python tools/test.py --preset linux-stub --compile-only)
+          ccache -s
+      - name: The kit's suites run; the GPU ones on lavapipe
+        env:
+          SDL_VIDEODRIVER: offscreen
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: ctest --test-dir kit/build/cmake/linux-stub -L "nogame|game|gpu" --output-on-failure
       - name: GPU skinning's GLSL compiles
         run: python tools/check_gpu_skin.py --glsl
       - name: Keep the compiler cache
@@ -85,7 +107,7 @@ jobs:
           xcodebuild -version
       - uses: ./.github/actions/kit-setup
         with:
-          ffmpeg-trees: build/cmake/macos-stub
+          ffmpeg-trees: build/cmake/macos-stub kit/build/cmake/macos-stub
           ccache: macos
       - name: The app, against the stub translation
         run: python kit/tools/build.py --game-dir "$PWD" --stub --target app
@@ -94,8 +116,17 @@ jobs:
           python kit/tools/test.py --game-dir "$PWD" --preset macos-stub --compile-only
           cmake --build build/cmake/macos-stub --target pop_headless
           ccache -s
+      # compositor_tests and host_tests: the kit's integer scaling, which
+      # HommaRe's smooth scaling leaves out (as on Linux); they run against the
+      # kit's own stub game below.
       - name: The suites that need no game; the GPU ones on Metal
-        run: ctest --test-dir build/cmake/macos-stub -L "nogame|game|gpu" --output-on-failure
+        run: ctest --test-dir build/cmake/macos-stub -L "nogame|game|gpu" -E "^(compositor_tests|host_tests)$" --output-on-failure
+      - name: The kit's suites, against the kit's own stub game
+        run: |
+          (cd kit && python tools/test.py --preset macos-stub --compile-only)
+          ccache -s
+      - name: The kit's suites run; the GPU ones on Metal
+        run: ctest --test-dir kit/build/cmake/macos-stub -L "nogame|game|gpu" --output-on-failure
       - name: GPU skinning's Metal Shading Language compiles, for macOS and iOS
         run: python tools/check_gpu_skin.py --msl
       - name: Keep the compiler cache
