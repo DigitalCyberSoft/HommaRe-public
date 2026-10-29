@@ -318,10 +318,10 @@ moves to ports 8988 and 8989.
 **What is ubi-gs in the Multi Player menu?** Ubisoft closed the game's online service
 (Ubi.com) in 2015. [ubi-gs](https://github.com/michal-kapala/ubi-gs) is a community
 re-implementation of it that someone has to run; every player uses the same server.
-Clicking *ubi-gs* asks for that server's address (`host` or `host:port`) and remembers the ones that
-answered, in `ubi-gs-servers.txt` in the profile folder; until one has, it suggests the
-community server `ubigs.wayofharm.com`. The game gets the server list
-from it; the lobby itself does not work yet.
+Clicking *ubi-gs* asks for that server's address (`host` or `host:port`) and remembers the
+ones that answered, in `ubi-gs-servers.txt` in the profile folder; until one has, it
+suggests the community server `ubigs.wayofharm.com`. The game gets the server list from
+it, logs in and joins the lobby's channels; creating a game there doesn't work yet.
 
 ## What's next
 
