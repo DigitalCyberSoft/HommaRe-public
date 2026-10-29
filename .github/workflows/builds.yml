@@ -71,9 +71,11 @@ jobs:
           path: .ccache
           key: ccache-linux-${{ github.run_id }}-${{ github.run_attempt }}
 
+  # macOS 26 for Xcode 26: the iOS host uses the iOS 26 SDK's API
+  # (platform_ui_ios.mm), which Xcode 16 does not have.
   macos:
     name: macOS Apple silicon
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7.0.1
@@ -105,7 +107,7 @@ jobs:
 
   ios:
     name: iOS ${{ matrix.target }}, unsigned
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -117,6 +119,7 @@ jobs:
             tree: build/cmake/ios-sim-stub
     steps:
       - uses: actions/checkout@v7.0.1
+      - run: xcodebuild -version
       - uses: ./.github/actions/kit-setup
         with:
           ffmpeg-trees: ${{ matrix.tree }}
