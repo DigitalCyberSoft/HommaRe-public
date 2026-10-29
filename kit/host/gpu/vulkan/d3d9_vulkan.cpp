@@ -1081,6 +1081,9 @@ class VkRenderer final : public D9Backend {
         query_ = 0;
         queries_[id].ended = true;
     }
+    bool events() const override {
+        return true;
+    }
     uint64_t event_mark() override {
         return cur_ ? cur_->serial : serial_;
     }
