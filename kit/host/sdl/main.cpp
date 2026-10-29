@@ -1263,6 +1263,8 @@ void push_touch_action_now(const TouchAction &a) {
             e.wheel.y = (float)a.wheel;
             // handle_event() flips a FLIPPED wheel's sign; NORMAL passes a.wheel through as-is.
             e.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+            // Not a mouse's wheel: handle_event() passes its fractions through.
+            e.wheel.which = SDL_TOUCH_MOUSEID;
             break;
         }
         SDL_PushEvent(&e);
@@ -1581,8 +1583,30 @@ void handle_event(const SDL_Event &event) {
         if (event.wheel.windowID == ours) {
             PendingInput e;
             e.kind = PendingInput::WHEEL;
-            const double steps =
+            double steps =
                 event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
+            // A high-resolution wheel (libinput's on Linux, some mice on
+            // Windows) reports a notch as several fractions of one, which a
+            // game written for whole notches (WHEEL_DELTA, 120) handles badly.
+            // The fractions add up here and only whole notches go on, to
+            // WM_MOUSEWHEEL and DirectInput's lZ alike; turning back drops
+            // what was left the other way.
+            if (event.wheel.which != SDL_TOUCH_MOUSEID) {
+                static double left = 0;
+                if ((left > 0 && steps < 0) || (left < 0 && steps > 0))
+                    left = 0;
+                left += steps;
+                steps = std::trunc(left + (left > 0 ? 1e-6 : -1e-6));
+                left -= steps;
+            }
+            static const bool trace_wheel = recomp_env("TRACE_WHEEL") != nullptr;
+            if (trace_wheel)
+                fprintf(stderr, "[wheel %.3f] sdl y %+.4f (mouse %u%s) -> %+d notch(es)\n",
+                        double(os_monotonic_ns()) / 1e9, event.wheel.y, (unsigned)event.wheel.which,
+                        event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? ", flipped" : "",
+                        (int)steps);
+            if (steps == 0)
+                break;
             e.dz = (int32_t)lround(steps * 120.0);
             // WM_MOUSEWHEEL carries the position of the wheel event itself.
             view_point_to_drawable(event.wheel.mouse_x, event.wheel.mouse_y, &e.x, &e.y,
@@ -2888,12 +2912,46 @@ static void apply_game_root(const std::string &exe, const std::string &chosen_ro
 }
 
 #if defined(__APPLE__) && TARGET_OS_IPHONE
+// game.toml [ios] cfg_seeds: a config file the install lacks, copied from the
+// one it is made from, so that its cfg_defaults below have a file to go in.
+static void apply_cfg_seeds(const std::string &root) {
+    const std::string records = RECOMP_IOS_CFG_SEEDS;
+    size_t at = 0;
+    while (at < records.size()) {
+        size_t end = records.find(';', at);
+        const std::string rec = records.substr(at, end - at);
+        at = end == std::string::npos ? records.size() : end + 1;
+        const size_t bar = rec.find('|');
+        if (bar == std::string::npos)
+            continue;
+        const std::string path = root + "/" + rec.substr(0, bar), from = root + "/" + rec.substr(bar + 1);
+        FILE *f = fopen(path.c_str(), "rb");
+        if (f) {
+            fclose(f);
+            continue;
+        }
+        FILE *in = fopen(from.c_str(), "rb");
+        if (!in)
+            continue;
+        FILE *out = fopen(path.c_str(), "wb");
+        if (out) {
+            char buf[4096];
+            for (size_t n; (n = fread(buf, 1, sizeof buf, in)) > 0;)
+                fwrite(buf, 1, n, out);
+            fclose(out);
+            fprintf(stderr, "[ios] %s: made from %s\n", rec.substr(0, bar).c_str(), rec.substr(bar + 1).c_str());
+        }
+        fclose(in);
+    }
+}
+
 // game.toml [ios] cfg_defaults: a touch device's own starting settings, set in
 // the game's config files ("setvar key = value") of the imported copy before
 // the game reads them. Only those lines change, and only when they differ.
 static void apply_cfg_defaults(const std::string &exe) {
     const char *root_env = recomp_env("GAME_ROOT");
     std::string root = root_env && *root_env ? root_env : exe.substr(0, exe.find_last_of('/'));
+    apply_cfg_seeds(root);
     const std::string records = RECOMP_IOS_CFG_DEFAULTS;
     size_t at = 0;
     while (at < records.size()) {

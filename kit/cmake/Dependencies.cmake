@@ -184,12 +184,26 @@ if(RECOMP_VIDEO)
       --nm=${RECOMP_FFMPEG_TOOLCHAIN_BIN}/llvm-nm
       --strip=${RECOMP_FFMPEG_TOOLCHAIN_BIN}/llvm-strip
       --windres=${CMAKE_RC_COMPILER})
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CROSSCOMPILING)
+    # Linux for another processor (cmake/toolchains/linux-aarch64.cmake): the
+    # same clang and lld for the toolchain's target, against its sysroot.
+    # FFmpeg's own NEON code stays in. GNU strip may not know the target.
+    list(APPEND RECOMP_FFMPEG_CONFIGURE
+      --enable-cross-compile --target-os=linux --arch=${CMAKE_SYSTEM_PROCESSOR}
+      --cc=${CMAKE_C_COMPILER} --sysroot=${CMAKE_SYSROOT}
+      --ar=${CMAKE_AR} --ranlib=${CMAKE_RANLIB} --nm=${CMAKE_NM} --disable-stripping
+      --extra-cflags=--target=${CMAKE_C_COMPILER_TARGET}
+      "--extra-ldflags=--target=${CMAKE_C_COMPILER_TARGET} -fuse-ld=lld")
   else()
     if(RECOMP_FFMPEG_MSVC)
       # cl.exe and link.exe from the Visual Studio developer environment;
       # FFmpeg's compat/windows/mslink finds the right link.exe when MSYS2's
       # coreutils link comes first on PATH.
       list(APPEND RECOMP_FFMPEG_CONFIGURE --toolchain=msvc --target-os=win64 --arch=x86_64)
+      # The AC-3 decoder's object carries E-AC-3's code too; gcc and clang
+      # drop it with CONFIG_EAC3_DECODER off, cl links it and wants E-AC-3's
+      # tables (eac3_data.o, ff_eac3_*), which only that decoder builds.
+      list(APPEND RECOMP_FFMPEG_CONFIGURE --enable-decoder=eac3)
     else()
       list(APPEND RECOMP_FFMPEG_CONFIGURE --cc=${CMAKE_C_COMPILER})
       if(WIN32)

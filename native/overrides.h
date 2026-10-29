@@ -174,3 +174,11 @@ void homm5_tap_click(X86 *c);
 #define FN_0074bf70 homm5_tap_click
 void homm5_tap_grid(X86 *c);
 #define FN_0080bac0 homm5_tap_grid
+
+/* 00419ae0: the GS SDK's login (name, password, version) and 00b31380:
+ * NUbi::CStateWaitLoginRouterResult::ProcessLoginRouterResult. native/
+ * gs_login.c sends a ubi-gs server a token, never the password. */
+void homm5_gs_login(X86 *c);
+#define FN_00419ae0 homm5_gs_login
+void homm5_gs_login_result(X86 *c);
+#define FN_00b31380 homm5_gs_login_result

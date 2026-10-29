@@ -4,6 +4,27 @@ What changed for players in each release of HommaRe. The builds are in
 [Releases](../../releases); the recompilation kit underneath keeps its own notes in
 [kit/CHANGELOG.md](kit/CHANGELOG.md).
 
+## 0.1-playable-344 (2026-10-29)
+
+- **Install from GOG.com.** *Install from GOG…* opens a GOG.com panel: sign in on GOG's
+  own page, and the app downloads the games you own straight onto the device, in English
+  or Russian, and checks every file. No installer files, no Files app, no copying
+  gigabytes to the phone. A stopped download resumes where it stopped, also after the app
+  was closed. Installer files still work: *Use installer files…* in the same panel.
+- **Hammers of Fate with the English game on iPhone and iPad:** full screen instead of
+  4:3, and *Options* works (the English release lacks the settings file the expansion
+  reads).
+- **Hammers of Fate, native menus:** *Options* in the main menu opens again instead of
+  leaving an empty screen.
+- **Online play through ubi-gs.** *Multi Player → Ubi.com* asks for a community server
+  standing in for Ubisoft's closed one (it suggests `ubigs.wayofharm.com`), logs in,
+  joins the lobby's channels, and creates and joins games there. On iPhone its login,
+  CD key, channels and lobby are native screens, in all three games. The server's
+  operator sees the CD key and password you type: any CD key works, so don't use your
+  real one.
+- **Linux:** the three games build, run and package on x86-64 Linux, with Vulkan and the
+  native launcher. Build it yourself for now.
+
 ## 0.1-playable-286 (2026-10-28)
 
 - **Local network games.** *Multiplayer → Local Network* works: copies of the game on

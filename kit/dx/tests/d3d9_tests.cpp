@@ -1,6 +1,9 @@
 // Small, synthetic effects exercise the real guest ABI and CTAB binding.
 // No game files, window, physical controller or sound device are involved.
+#ifndef _WIN32
 #include <sys/resource.h>
+#include <unistd.h>
+#endif
 #include "../dx.h"
 #include "../d3d9_ffp.h"
 #include "../d3d9_glsl.h"
@@ -492,6 +495,21 @@ static void test_state_getters_and_readback(uint32_t dev) {
     call_method(rt, 2);
 }
 
+// The process's peak resident memory, in bytes. Not measured on Windows,
+// whose <windows.h> cannot share a file with the kit's own Win32 types.
+static uint64_t peak_memory_bytes() {
+#ifdef _WIN32
+    return 0;
+#else
+    struct rusage r{};
+    getrusage(RUSAGE_SELF, &r);
+#ifdef __APPLE__
+    return (uint64_t)r.ru_maxrss; // bytes on macOS
+#else
+    return (uint64_t)r.ru_maxrss * 1024; // kilobytes on Linux
+#endif
+#endif
+}
 
 // Test155: the four draw calls refuse a primitive count above the MaxPrimitiveCount this device reports in its caps
 // (and indexed draws a vertex count above MaxVertexIndex + 1) with D3DERR_INVALIDCALL, before any size arithmetic,
@@ -502,8 +520,7 @@ static void test_draw_limits(uint32_t dev) {
     const uint32_t max_prims = rd32(sc(0x800) + 180), max_index = rd32(sc(0x800) + 184);
     CHECK(max_prims == 1048575 && max_index == 1048575);
     memset(gm_ptr(sc(0x1000)), 0, 0x1000); // degenerate vertices and indices
-    struct rusage before{}, after{};
-    getrusage(RUSAGE_SELF, &before);
+    const uint64_t before = peak_memory_bytes();
     for (uint32_t prim = 1; prim <= 6; ++prim) {
         for (uint32_t count : {max_prims + 1, 0x7fffffffu, 0x80000000u, 0x80000000u + 350u, 0xffffffffu}) {
             CHECK(call_method(dev, 83, {prim, count, sc(0x1000), 16}) == invalid);          // DrawPrimitiveUP
@@ -524,9 +541,8 @@ static void test_draw_limits(uint32_t dev) {
         CHECK(call_method(dev, 81, {1, 0, count}) == 0);
         CHECK(call_method(dev, 83, {1, count, 0x00100000u, 16}) == 0);
     }
-    getrusage(RUSAGE_SELF, &after);
-    // ru_maxrss: bytes on macOS, kilobytes on Linux; either way far below a runaway allocation
-    CHECK((uint64_t)(after.ru_maxrss - before.ru_maxrss) < (uint64_t)512 * 1024 * 1024);
+    // Far below a runaway allocation.
+    CHECK(peak_memory_bytes() - before < (uint64_t)512 * 1024 * 1024);
 }
 
 // Test155: with no depth-stencil surface set, GetDepthStencilSurface returns D3DERR_NOTFOUND and a null pointer
@@ -1202,7 +1218,97 @@ static void test_ffp_device(uint32_t dev) {
     call_method(rt, 2);
 }
 
-int main() {
+// The vertex buffer uploads the device made (host_d9_buffer_upload): the
+// buffer's GPU copy as the uploads left it, and how many there were.
+static std::vector<uint8_t> uploaded;
+static unsigned upload_count = 0;
+extern "C" void host_d9_buffer_upload(uint32_t, uint32_t total, uint32_t offset, const uint8_t *bytes,
+                                      uint32_t size) {
+    total &= ~HOST_D9_UPLOAD_INPLACE;
+    if (uploaded.size() < total)
+        uploaded.resize(total);
+    if (offset <= total && size <= total - offset)
+        memcpy(uploaded.data() + offset, bytes, size);
+    ++upload_count;
+}
+
+#ifndef _WIN32
+// `d3d9_tests pages`, with RECOMP_D3D9_WRITE_TRACK=protect: a lazy vertex
+// buffer (a whole-buffer lock of more than 64 KB) is tracked by write-protecting
+// its guest copy in host pages. ctest runs it with this machine's pages and,
+// through RECOMP_D3D9_HOST_PAGE, with 16 KiB (Apple silicon, Asahi Linux, some
+// ARM kernels) and 64 KiB ones: the copy starts on a host page, a store faults
+// once and opens its whole page, a draw uploads what the game wrote there and
+// nothing it did not.
+static void test_lazy_buffer_pages(uint32_t dev) {
+    uint32_t hp = (uint32_t)sysconf(_SC_PAGESIZE);
+    if (const char *v = getenv("RECOMP_D3D9_HOST_PAGE"))
+        hp = std::max(hp, (uint32_t)strtoul(v, nullptr, 0));
+    const uint32_t size = std::max(0x20000u, 4 * hp) + 1000;
+    CHECK(call_method(dev, 26, {size, 0x208, 0, 0, sc(0x3000), 0}) == 0); // CreateVertexBuffer, dynamic
+    const uint32_t vb = rd32(sc(0x3000));
+    CHECK(vb != 0);
+    if (!vb)
+        return;
+    CHECK(call_method(dev, 89, {0x004}) == 0);             // SetFVF: XYZRHW, 16-byte vertices
+    CHECK(call_method(dev, 100, {0, vb, 0, 16}) == 0);    // SetStreamSource
+    auto draw_at = [&](uint32_t offset) {                  // a triangle over these bytes
+        CHECK(call_method(dev, 81, {4, offset / 16, 1}) == 0);
+    };
+
+    // The first whole lock stages the guest copy on a host page; its unlock
+    // makes the buffer lazy and write-protects the copy.
+    CHECK(call_method(vb, 11, {0, 0, sc(0x3004), 0}) == 0);
+    const uint32_t guest = rd32(sc(0x3004));
+    CHECK(guest != 0 && guest % hp == 0);
+    for (uint32_t i = 0; i < size; ++i)
+        gm_ptr(guest)[i] = (uint8_t)(i * 7);
+    CHECK(call_method(vb, 12, {}) == 0);
+    draw_at(0);
+    draw_at(2 * hp);
+    CHECK(uploaded.size() == size && memcmp(uploaded.data(), gm_ptr(guest), size) == 0);
+
+    // A store into the third host page, as the game makes them: a plain store
+    // through the pointer Lock returned, which faults once and goes through.
+    const uint32_t at = 2 * hp + 100, far = 2 * hp + hp - 64;
+    CHECK(call_method(vb, 11, {0, 0, sc(0x3004), 0x1000}) == 0); // NOOVERWRITE, as Heroes V appends
+    CHECK(rd32(sc(0x3004)) == guest);
+    gm_ptr(guest)[at] = 0xa5;
+    gm_ptr(guest)[far] = 0x5a; // the same host page, now writable: no second fault
+    CHECK(call_method(vb, 12, {}) == 0);
+    unsigned before = upload_count;
+    draw_at(at);
+    CHECK(upload_count > before && uploaded[at] == 0xa5);
+    draw_at(far - 16);
+    CHECK(uploaded[far] == 0x5a);
+
+    // Pages nobody wrote stay as they were: protected, and not uploaded again.
+    before = upload_count;
+    draw_at(0);
+    draw_at(3 * hp);
+    CHECK(upload_count == before);
+    CHECK(memcmp(uploaded.data(), gm_ptr(guest), size) == 0);
+    CHECK(call_method(vb, 2) == 0);
+}
+#endif
+
+int main(int argc, char **argv) {
+#ifndef _WIN32
+    if (argc > 1 && !strcmp(argv[1], "pages")) {
+        mem_init();
+        imports_init();
+        dx_register_shims();
+        g_stack_top = STACK_TOP - 0x1000;
+        g_scratch = heap_alloc(0x4000, true, 16);
+        cpu_reset();
+        if (const uint32_t dev = g_scratch ? make_device() : 0)
+            test_lazy_buffer_pages(dev);
+        else
+            ++g_failures;
+        printf("d3d9 lazy buffer pages: %d checks, %d failures\n", g_checks, g_failures);
+        return g_failures ? 1 : 0;
+    }
+#endif
     test_volume_dds();
     mem_init();
     imports_init();

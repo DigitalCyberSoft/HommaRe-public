@@ -10,6 +10,8 @@ list(APPEND POP_RUNTIME_SOURCES legacy_dlls.cpp winsock.cpp)
 # libcurl.dll's one useful request, a GS game's server list, over plain HTTP
 # (curl_http.cpp); the sockets are POSIX's, and a Windows build fails it.
 list(APPEND POP_RUNTIME_SOURCES curl_http.cpp)
+# The password a GS game sends to that server: a token, never the password.
+list(APPEND POP_RUNTIME_SOURCES gs_login.cpp)
 if(WIN32)
   list(APPEND POP_RUNTIME_SOURCES http_get_none.cpp)
 else()
@@ -86,6 +88,15 @@ pop_optimize(curl_http_tests 1)
 pop_test_binary(curl_http_tests)
 add_test(NAME curl_http_tests COMMAND curl_http_tests WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(curl_http_tests PROPERTIES LABELS nogame TIMEOUT 120)
+
+# The login token a GS game sends a chosen server instead of the password.
+add_executable(gs_login_tests tests/gs_login_tests.cpp tests/stub_recomp_call.cpp)
+target_link_libraries(gs_login_tests PRIVATE recomp_platform recomp_runtime)
+target_compile_options(gs_login_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(gs_login_tests 2)
+pop_test_binary(gs_login_tests)
+add_test(NAME gs_login_tests COMMAND gs_login_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(gs_login_tests PROPERTIES LABELS nogame TIMEOUT 120)
 endif()
 
 # Linked by the hosts, the fixture and the mod tests, not by the unit tests.

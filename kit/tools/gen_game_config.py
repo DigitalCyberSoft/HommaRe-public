@@ -75,6 +75,9 @@ def render_header(cfg):
     lines.append("#define RECOMP_IOS_CFG_DEFAULTS %s" % c_string("".join(
         "%s|%s|%s;" % (f, k, v)
         for f, kv in sorted(cfg["ios"]["cfg_defaults"].items()) for k, v in sorted(kv.items()))))
+    # [ios] cfg_seeds as "file|source;" records.
+    lines.append("#define RECOMP_IOS_CFG_SEEDS %s" % c_string("".join(
+        "%s|%s;" % (f, s) for f, s in sorted(cfg["ios"]["cfg_seeds"].items()))))
     lines.append("#define RECOMP_TOUCH_PAN_GAIN %r" % float(cfg["touch"]["pan_gain"]))
     # [net] movable_udp_ports as "port," records.
     lines.append("#define RECOMP_NET_MOVABLE_UDP_PORTS %s" % c_string(
@@ -234,10 +237,11 @@ def render_cmake(cfg):
 
 
 def write_if_changed(path, text):
+    """UTF-8 whatever the locale: game.toml's strings are (Windows' would be cp1252)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.is_file() or path.read_text() != text:
-        path.write_text(text)
+    if not path.is_file() or path.read_text(encoding="utf-8") != text:
+        path.write_text(text, encoding="utf-8")
 
 
 def main():
