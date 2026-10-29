@@ -44,7 +44,8 @@ runs:
         check() { [ -f "$tarball" ] && [ "$(cmake -E sha256sum "$tarball" | cut -d' ' -f1)" = "$sum" ]; }
         mkdir -p .ffmpeg-source
         for attempt in 1 2 3 4 5; do
-          curl -fsSL --retry 3 --retry-all-errors -o "$tarball" https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz || true
+          curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 300 \
+            -o "$tarball" https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz || true
           check && break
           echo "FFmpeg download attempt $attempt failed" >&2
           sleep $((attempt * 15))
