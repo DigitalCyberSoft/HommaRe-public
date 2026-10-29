@@ -76,6 +76,9 @@ def render_header(cfg):
         "%s|%s|%s;" % (f, k, v)
         for f, kv in sorted(cfg["ios"]["cfg_defaults"].items()) for k, v in sorted(kv.items()))))
     lines.append("#define RECOMP_TOUCH_PAN_GAIN %r" % float(cfg["touch"]["pan_gain"]))
+    # [net] movable_udp_ports as "port," records.
+    lines.append("#define RECOMP_NET_MOVABLE_UDP_PORTS %s" % c_string(
+        "".join("%d," % p for p in cfg["net"]["movable_udp_ports"])))
     # [texts] as a pak path, "file;" records and "old|new;" records.
     texts = cfg["texts"]
     lines.append("#define RECOMP_TEXTS_PAK %s" % c_string(texts["pak"]))

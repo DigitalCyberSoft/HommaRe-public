@@ -463,13 +463,15 @@ void ws_inet_addr(X86 *c) {
 }
 
 // The host's sockets when the game plays over a network (winsock.h), else the
-// stand-in above.
+// stand-in above. A real call that fails goes to the log.
 #define REAL_OR(real, stub)                                                                        \
     [](X86 *c) {                                                                                   \
-        if (winsock_real())                                                                        \
+        if (winsock_real()) {                                                                      \
             real(c);                                                                               \
-        else                                                                                       \
+            winsock_log_failure(c, #real);                                                         \
+        } else {                                                                                   \
             stub(c);                                                                               \
+        }                                                                                          \
     }
 
 // Every WSOCK32 call by name and by its ordinal ("ordN", as the loader names it).
