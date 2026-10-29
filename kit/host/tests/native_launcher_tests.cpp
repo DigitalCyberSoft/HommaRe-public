@@ -173,8 +173,13 @@ void test_l10n() {
     CHECK(t("play") == "Play");
     CHECK(t("no such key") == "no such key");
     CHECK(file_of(3, 7) == "File 3 of 7");
-    // The Linux variant wins where there is one.
+    // The platform's variant wins where there is one: Windows', else the
+    // desktop's (Linux).
+#ifdef _WIN32
+    CHECK(t("noHelper").find("innoextract.exe is missing") != std::string::npos);
+#else
     CHECK(t("noHelper").find("dnf install innoextract") != std::string::npos);
+#endif
     CHECK(t("showInFinder") == "Open folder");
     CHECK(bytes(4076506937) == "4.08 GB");
     CHECK(bytes(1500000) == "1.5 MB");
