@@ -329,8 +329,19 @@ Clicking *ubi-gs* asks for that server's address (`host` or `host:port`) and rem
 ones that answered, in `ubi-gs-servers.txt` in the profile folder; until one has, it
 suggests the community server `ubigs.wayofharm.com`. The game gets the server list from
 it, logs in, joins the lobby's channels, and creates and joins games there. The server's
-operator sees the CD key and password you log in with: any CD key works, so don't type
-your real one or a password you use elsewhere.
+operator sees the CD key you log in with: any CD key works, so don't type your real one.
+
+**Which name and password do I use there?** Make up new ones for that server: not your
+Ubisoft (Ubi.com, Ubisoft Connect) login, since the servers are run by the community, and
+not a password you use elsewhere. The game's login protocol carries the password
+practically in the clear, so HommaRe sends a salted hash of it instead (scrypt, salted
+with the server and your name): neither the operator nor anyone watching the network sees
+the password itself, though a weak one can still be guessed from its hash. A server that
+sends a one-time challenge (`LoginNonce` in its `servers.ini`) gets that hash only the
+first time, then only answers to the challenge; `ubi-gs-logins.txt` in the profile folder
+remembers where you registered (no password in it). A server that knows nothing of this
+takes the hash for your password. Accounts made with the original game, which sends the
+password as typed, can't be used from HommaRe.
 
 ## What's next
 

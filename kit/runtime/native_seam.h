@@ -63,6 +63,17 @@ int recomp_writable_path(const char *guest_path, char *out, size_t out_len);
  * then the game directory. Zero when the path cannot be resolved. */
 int recomp_readable_path(const char *guest_path, char *out, size_t out_len);
 
+/* A Ubisoft Game Service title's login (runtime/gs_login.h). When its server
+ * list came from a community server the player chose, the password the game
+ * would send for account `name` is replaced: *out gets the token (or the
+ * challenge's registration or response) to send instead, and 1 comes back.
+ * 0, with nothing written, when no chosen server is in play: the password
+ * goes as the original game sends it. The password is never logged or kept.
+ * Takes tens of milliseconds (scrypt). Safe from any guest thread. */
+int recomp_gs_login_password(const char *name, const char *password, char *out, size_t out_len);
+/* The router's answer to that LOGIN: 1 accepted, 0 refused. */
+void recomp_gs_login_result(int accepted);
+
 /* Vertex fetch (Direct3D 9 on a backend that has it): the vertices of one
  * vertex buffer that the game leaves unwritten are supplied, by vertex number,
  * from four buffers the game fills, through shader source it hands over in

@@ -362,6 +362,12 @@ void fn_00557470(X86 *c);
 #define NS_GAME_VERSION "3.1"
 #define NS_PAK_DIRS "data" /* the paks it mounts, for the native views' pictures */
 
+/* The GS login (native/gs_login.c): the SDK's login entry, reached from
+ * ProcessLogin (00e0e0d0) through the thunk 00419530, and
+ * ProcessLoginRouterResult. */
+#define HOMM5_FN_GS_LOGIN fn_00419c20
+#define HOMM5_FN_GS_LOGIN_RESULT fn_00e0e500
+
 /* ---- ubi.com screens (native/screens_ubi.c): Tribes of the East 3.1 ----
  * research notes lan/ubi-screens-expansions.md. Inner offsets = base (no NS_UBI_UL_* etc. needed). */
 #define NS_UBI_VT_LOGIN         0x00f759b0  /* base 00fc2cb0; V RTTI CMPRegisterScreen IScreen */
