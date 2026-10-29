@@ -1,21 +1,19 @@
-if(MINGW)
+if(WIN32)
   # The manifest (windows/app.manifest) rides in the platform layer, so every
   # executable that links it gets UTF-8 as its code page, tests included.
   set(POP_OS_SOURCE os_win32.cpp windows/manifest.rc)
   set_source_files_properties(windows/manifest.rc PROPERTIES
     OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/windows/app.manifest)
-elseif(WIN32)
-  # An MSVC-ABI link embeds a manifest of its own (/MANIFEST:EMBED), which a
-  # second one from manifest.rc would duplicate: there app.manifest goes to
-  # each executable that links the platform layer as a source, merged into
-  # the linker's (below).
-  set(POP_OS_SOURCE os_win32.cpp)
 else()
   set(POP_OS_SOURCE os_posix.cpp)
 endif()
 add_library(recomp_platform OBJECT ${POP_OS_SOURCE} env.cpp)
 if(WIN32 AND NOT MINGW)
-  target_sources(recomp_platform INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/windows/app.manifest)
+  # CMake links an MSVC-ABI executable with /MANIFEST:EMBED, and the manifest
+  # the linker makes would be a second resource 1 beside manifest.rc's. A
+  # link item goes after that option on the command line, and the last
+  # /MANIFEST wins.
+  target_link_libraries(recomp_platform INTERFACE -Wl,/MANIFEST:NO)
 endif()
 target_include_directories(recomp_platform PUBLIC ${POP_ROOT})
 target_compile_options(recomp_platform PRIVATE ${POP_WARN_STRICT})
