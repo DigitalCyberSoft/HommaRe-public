@@ -1,6 +1,5 @@
 # Changelog
 
-<<<<<<< origin/main
 ## Sockets on every platform
 
 - `runtime/winsock.cpp` runs on the platform layer's sockets: `platform/os.h`
@@ -22,7 +21,7 @@
   a unicast datagram to one of its sockets only.
 - Failed socket calls go to the log; `RECOMP_TRACE_SOCKETS=1` also shows each
   datagram's first bytes.
-=======
+
 ## The web: a whole game in the browser
 
 - The web build builds again: zlib (`runtime/legacy_dlls.cpp`) is Emscripten's
@@ -56,7 +55,6 @@
 - `tools/web_smoke.mjs` drives a web site's game in Chrome over the DevTools
   protocol: import, start, keys, clicks and text at given seconds, the pages' and
   workers' consoles, screenshots, the module's instantiation time and the memory.
->>>>>>> web-r2
 
 ## Linux
 
