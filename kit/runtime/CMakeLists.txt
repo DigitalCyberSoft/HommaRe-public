@@ -95,6 +95,15 @@ add_test(NAME gdi_model_tests COMMAND gdi_tests model WORKING_DIRECTORY ${POP_RO
 set_tests_properties(gdi_model_tests PROPERTIES LABELS nogame)
 add_test(NAME gdi_draw_tests COMMAND gdi_tests draw WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(gdi_draw_tests PROPERTIES LABELS nogame)
+# WSOCK32 on loopback sockets. TIMEOUT because a blocking shim that never
+# yields or never times out is a hang, not a failure.
+add_executable(winsock_tests tests/winsock_tests.cpp tests/stub_recomp_call.cpp)
+target_link_libraries(winsock_tests PRIVATE recomp_platform recomp_runtime)
+target_compile_options(winsock_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(winsock_tests 1)
+pop_test_binary(winsock_tests)
+add_test(NAME winsock_tests COMMAND winsock_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(winsock_tests PROPERTIES LABELS nogame TIMEOUT 60)
 
 endif()
 

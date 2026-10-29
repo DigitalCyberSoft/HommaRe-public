@@ -204,6 +204,12 @@ void test_config() {
     CHECK(c.games[0].title.text() == "Альфа");
     CHECK(c.games[1].title.text() == "Beta"); // English stands in
     setenv("RECOMP_LAUNCHER_LANG", "en", 1);
+    CHECK(c.tagline.text() == "A test"); // no taglines: the common one
+    // Linux's own tagline wins over the common one.
+    CHECK(parse_config(R"({"tagline": "Everywhere", "taglines": {"macos": "Mac", "linux": "Linux"},
+                           "games": [{"id": "a", "exe": ["a.exe"]}]})",
+                       &c, &error));
+    CHECK(c.tagline.text() == "Linux");
     CHECK(!parse_config(R"({"games": []})", &c, &error));
     CHECK(!parse_config("{", &c, &error));
     Manifest m;

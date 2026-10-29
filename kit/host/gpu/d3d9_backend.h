@@ -77,7 +77,9 @@ class D9Backend {
     // Event queries: a mark for the point the command stream has reached, and
     // whether the GPU has finished everything before it, flushing what is
     // recorded so a mark the game waits on gets there. A backend without a
-    // GPU timeline has every mark done at once.
+    // GPU timeline (events() false) has every mark done at once, and the
+    // game's thread never waits on the render thread to learn it.
+    virtual bool events() const { return false; }
     virtual uint64_t event_mark() { return 0; }
     virtual bool event_done(uint64_t mark) {
         (void)mark;

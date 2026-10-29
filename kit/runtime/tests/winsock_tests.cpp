@@ -1,0 +1,441 @@
+// WSOCK32 on the host's loopback: the Winsock answers a game sees, on real
+// sockets, with no game image. Every check talks to 127.0.0.1 only, except the
+// broadcast fan-out, which needs an interface that broadcasts and says so when
+// the machine has none.
+#include "../imports.h"
+#include "../loader.h"
+#include "../memory.h"
+#include "../win32.h"
+#include "../../platform/os.h"
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+static int g_checks = 0, g_failures = 0;
+static bool check(bool ok, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+static bool check(bool ok, const char *fmt, ...) {
+    ++g_checks;
+    va_list ap;
+    va_start(ap, fmt);
+    char msg[512];
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    if (!ok)
+        ++g_failures;
+    printf("  [%s] %s\n", ok ? "ok" : "FAIL", msg);
+    return ok;
+}
+
+// Pushes the arguments and a return address, dispatches, and checks the shim
+// popped exactly what its declared argument count says.
+static uint32_t call(X86 *c, const char *name, const std::vector<uint32_t> &args) {
+    uint32_t tramp = imports_resolve("WSOCK32.dll", name);
+    if (!tramp)
+        tramp = imports_resolve("WS2_32.dll", name);
+    if (!tramp) {
+        check(false, "no trampoline for %s", name);
+        return 0;
+    }
+    const uint32_t before = c->r[R_ESP];
+    uint32_t esp = before;
+    for (size_t i = args.size(); i-- > 0;) {
+        esp -= 4;
+        wr32(esp, args[i]);
+    }
+    esp -= 4;
+    wr32(esp, 0);
+    c->r[R_ESP] = esp;
+    imports_dispatch(c, tramp);
+    if (c->r[R_ESP] != before)
+        check(false, "%s left ESP at %08x, expected %08x", name, c->r[R_ESP], before);
+    c->r[R_ESP] = before;
+    return c->r[R_EAX];
+}
+
+const uint32_t SOCKET_ERROR = 0xffffffffu;
+// A fresh guest block; the whole heap goes with mem_shutdown.
+static uint32_t block(uint32_t size) {
+    return heap_alloc(size, true);
+}
+static uint32_t last_error(X86 *c) {
+    return call(c, "WSAGetLastError", {});
+}
+// A guest sockaddr_in for addr:port (both in host order here, for reading ease).
+static uint32_t sockaddr_at(uint32_t ip_host, uint16_t port_host) {
+    uint32_t sa = block(16);
+    wr16(sa, 2);
+    wr8(sa + 2, (uint8_t)(port_host >> 8));
+    wr8(sa + 3, (uint8_t)port_host);
+    wr8(sa + 4, (uint8_t)(ip_host >> 24));
+    wr8(sa + 5, (uint8_t)(ip_host >> 16));
+    wr8(sa + 6, (uint8_t)(ip_host >> 8));
+    wr8(sa + 7, (uint8_t)ip_host);
+    return sa;
+}
+static uint16_t sockaddr_port(uint32_t sa) {
+    return (uint16_t)(rd8(sa + 2) << 8 | rd8(sa + 3));
+}
+static const uint32_t LOOPBACK = 0x7f000001u;
+
+static uint32_t bound_udp(X86 *c, uint32_t ip, uint16_t *port) {
+    uint32_t s = call(c, "socket", {2, 2, 0});
+    uint32_t sa = sockaddr_at(ip, *port);
+    check(call(c, "bind", {s, sa, 16}) == 0, "bind udp %u", *port);
+    uint32_t len = block(4);
+    wr32(len, 16);
+    check(call(c, "getsockname", {s, sa, len}) == 0 && rd32(len) == 16, "getsockname after bind");
+    *port = sockaddr_port(sa);
+    return s;
+}
+
+static void test_startup(X86 *c) {
+    uint32_t data = block(400);
+    check(call(c, "WSAStartup", {0x0101, data}) == 0 && rd16(data) == 0x0101,
+          "WSAStartup grants 1.1");
+    check(call(c, "WSACleanup", {}) == 0, "WSACleanup");
+    // Not a WinSock answer: an unknown protocol for the type.
+    check(call(c, "socket", {2, 2, 6}) == SOCKET_ERROR && last_error(c) == 10043,
+          "a UDP socket with IPPROTO_TCP is WSAEPROTONOSUPPORT");
+}
+
+static void test_udp(X86 *c) {
+    uint16_t pa = 0, pb = 0;
+    uint32_t a = bound_udp(c, LOOPBACK, &pa), b = bound_udp(c, LOOPBACK, &pb);
+    check(pa != 0 && pb != 0 && pa != pb, "two ephemeral ports %u, %u", pa, pb);
+    {
+        // A taken UDP port fails as on Windows, unless the game lists it as
+        // movable: then a second copy's bind lands 100 ports along.
+        uint32_t again = call(c, "socket", {2, 2, 0});
+        check(call(c, "bind", {again, sockaddr_at(LOOPBACK, pa), 16}) == SOCKET_ERROR &&
+                  last_error(c) == 10048,
+              "a taken UDP port is WSAEADDRINUSE");
+        call(c, "closesocket", {again});
+        char list[32];
+        snprintf(list, sizeof list, "1,%u", pa);
+        os_setenv("RECOMP_NET_MOVABLE_UDP_PORTS", list);
+        uint16_t moved = pa;
+        again = bound_udp(c, LOOPBACK, &moved);
+        check(moved != pa && (moved - pa) % 100 == 0 && moved <= pa + 400,
+              "a taken movable UDP port %u moves to %u, and getsockname says so", pa, moved);
+        call(c, "closesocket", {again});
+        os_unsetenv("RECOMP_NET_MOVABLE_UDP_PORTS");
+    }
+    uint32_t msg = block(256), to = sockaddr_at(LOOPBACK, pa);
+    memcpy(g_mem + msg, "hello over loopback", 20);
+    check(call(c, "sendto", {b, msg, 20, 0, to, 16}) == 20, "sendto 20 bytes");
+
+    // select sees it, then recvfrom takes it with the sender's address.
+    uint32_t set = block(4 + 64 * 4), tv = block(8);
+    wr32(set, 1);
+    wr32(set + 4, a);
+    wr32(tv, 1);
+    wr32(tv + 4, 0);
+    check(call(c, "select", {0, set, 0, 0, tv}) == 1 && rd32(set) == 1 && rd32(set + 4) == a,
+          "select reports the datagram");
+    check(call(c, "__WSAFDIsSet", {a, set}) == 1, "__WSAFDIsSet finds it");
+    uint32_t buf = block(256), from = block(16), fromlen = block(4);
+    wr32(fromlen, 16);
+    check(call(c, "recvfrom", {a, buf, 256, 0, from, fromlen}) == 20 &&
+              memcmp(g_mem + buf, "hello over loopback", 20) == 0,
+          "recvfrom returns the datagram");
+    check(sockaddr_port(from) == pb && rd32(from + 4) == 0x0100007fu,
+          "recvfrom reports 127.0.0.1:%u", sockaddr_port(from));
+
+    // A datagram larger than the buffer: WSAEMSGSIZE, peeked or not; a peek
+    // leaves it queued, a read drops the tail.
+    uint32_t onb = block(4);
+    wr32(onb, 1);
+    check(call(c, "ioctlsocket", {a, 0x8004667eu, onb}) == 0, "FIONBIO on");
+    check(call(c, "sendto", {b, msg, 100, 0, to, 16}) == 100, "sendto 100 bytes");
+    // Loopback delivery is immediate, but poll for it rather than trust that.
+    wr32(set, 1);
+    wr32(set + 4, a);
+    call(c, "select", {0, set, 0, 0, tv});
+    uint32_t pending = block(4);
+    check(call(c, "ioctlsocket", {a, 0x4004667fu, pending}) == 0 && rd32(pending) >= 100,
+          "FIONREAD sees %u bytes", rd32(pending));
+    check(call(c, "recvfrom", {a, buf, 10, 2 /* MSG_PEEK */, from, fromlen}) == SOCKET_ERROR &&
+              last_error(c) == 10040,
+          "a peek into a small buffer is WSAEMSGSIZE");
+    check(call(c, "recvfrom", {a, buf, 256, 2, 0, 0}) == 100, "the peeked datagram is still there");
+    check(call(c, "recvfrom", {a, buf, 10, 0, 0, 0}) == SOCKET_ERROR && last_error(c) == 10040,
+          "a short read is WSAEMSGSIZE");
+    check(call(c, "recvfrom", {a, buf, 256, 0, 0, 0}) == SOCKET_ERROR && last_error(c) == 10035,
+          "and drops the datagram: next read is WSAEWOULDBLOCK");
+
+    // A blocking read with SO_RCVTIMEO times out, after the time and not before.
+    wr32(onb, 0);
+    call(c, "ioctlsocket", {a, 0x8004667eu, onb});
+    uint32_t ms = block(4);
+    wr32(ms, 60);
+    check(call(c, "setsockopt", {a, 0xffff, 0x1006, ms, 4}) == 0, "SO_RCVTIMEO 60 ms");
+    const uint64_t t0 = os_monotonic_ns();
+    check(call(c, "recvfrom", {a, buf, 256, 0, 0, 0}) == SOCKET_ERROR && last_error(c) == 10060,
+          "a blocking read with nothing to read times out");
+    const double waited = (double)(os_monotonic_ns() - t0) / 1e6;
+    check(waited >= 55 && waited < 1000, "after %.0f ms", waited);
+
+    // A blocking read waits for a datagram another (host) thread sends later.
+    wr32(ms, 0);
+    call(c, "setsockopt", {a, 0xffff, 0x1006, ms, 4});
+    struct Late {
+        uint16_t port;
+    } late{pa};
+    OsThread *t = os_thread_create(
+        [](void *p) -> void * {
+            os_sleep_us(40000);
+            OsSocket s = os_sock_open(OS_SOCK_DGRAM);
+            const uint16_t port = ((Late *)p)->port;
+            os_sock_sendto(s, "late", 4, 0, 0x0100007fu, (uint16_t)(port >> 8 | port << 8));
+            os_sock_close(s);
+            return nullptr;
+        },
+        &late, 0);
+    const uint64_t t1 = os_monotonic_ns();
+    check(call(c, "recvfrom", {a, buf, 256, 0, 0, 0}) == 4 && memcmp(g_mem + buf, "late", 4) == 0,
+          "a blocking recvfrom returns what arrives later");
+    check((os_monotonic_ns() - t1) / 1000000u >= 30, "and waited for it");
+    os_thread_join(t);
+
+    // select with a timeout and nothing to report: 0, empty set.
+    wr32(set, 1);
+    wr32(set + 4, a);
+    wr32(tv, 0);
+    wr32(tv + 4, 30000);
+    check(call(c, "select", {0, set, 0, 0, tv}) == 0 && rd32(set) == 0,
+          "select times out with an empty set");
+    check(call(c, "select", {0, 0, 0, 0, tv}) == SOCKET_ERROR && last_error(c) == 10022,
+          "select with no sockets is WSAEINVAL, not a sleep");
+
+    // Without SO_BROADCAST a broadcast is refused, as on Windows.
+    uint32_t bc = sockaddr_at(0xffffffffu, pa);
+    check(call(c, "sendto", {b, msg, 4, 0, bc, 16}) == SOCKET_ERROR && last_error(c) == 10013,
+          "a broadcast without SO_BROADCAST is WSAEACCES");
+
+    check(call(c, "closesocket", {a}) == 0 && call(c, "closesocket", {b}) == 0, "closesocket");
+    check(call(c, "closesocket", {a}) == SOCKET_ERROR && last_error(c) == 10038,
+          "a closed socket is WSAENOTSOCK");
+}
+
+static void test_tcp(X86 *c) {
+    uint32_t listener = call(c, "socket", {2, 1, 0});
+    uint32_t sa = sockaddr_at(LOOPBACK, 0), len = block(4);
+    check(call(c, "bind", {listener, sa, 16}) == 0 && call(c, "listen", {listener, 4}) == 0,
+          "bind and listen");
+    wr32(len, 16);
+    call(c, "getsockname", {listener, sa, len});
+    const uint16_t port = sockaddr_port(sa);
+    uint32_t clash = call(c, "socket", {2, 1, 0});
+    check(call(c, "bind", {clash, sockaddr_at(LOOPBACK, port), 16}) == SOCKET_ERROR &&
+              last_error(c) == 10048,
+          "a taken TCP port stays WSAEADDRINUSE");
+    call(c, "closesocket", {clash});
+
+    uint32_t client = call(c, "socket", {2, 1, 0}), on = block(4);
+    wr32(on, 1);
+    call(c, "ioctlsocket", {client, 0x8004667eu, on});
+    uint32_t unbound = block(16);
+    wr32(len, 16);
+    check(call(c, "getsockname", {client, unbound, len}) == SOCKET_ERROR && last_error(c) == 10022,
+          "getsockname on an unbound socket is WSAEINVAL");
+    uint32_t to = sockaddr_at(LOOPBACK, port);
+    const uint32_t r = call(c, "connect", {client, to, 16});
+    check(r == 0 || last_error(c) == 10035, "a non-blocking connect is WSAEWOULDBLOCK");
+    uint32_t wset = block(4 + 64 * 4), tv = block(8);
+    wr32(wset, 1);
+    wr32(wset + 4, client);
+    wr32(tv, 2);
+    wr32(tv + 4, 0);
+    check(call(c, "select", {0, 0, wset, 0, tv}) == 1, "select: the connect completed");
+    uint32_t err = block(4), errlen = block(4);
+    wr32(errlen, 4);
+    check(call(c, "getsockopt", {client, 0xffff, 0x1007, err, errlen}) == 0 && rd32(err) == 0,
+          "SO_ERROR is 0");
+
+    uint32_t peer = block(16), peerlen = block(4);
+    wr32(peerlen, 16);
+    uint32_t server = call(c, "accept", {listener, peer, peerlen});
+    check(server != SOCKET_ERROR && rd32(peer + 4) == 0x0100007fu, "accept from 127.0.0.1");
+    uint32_t nodelay = block(4);
+    wr32(nodelay, 1);
+    check(call(c, "setsockopt", {server, 6, 1, nodelay, 4}) == 0, "TCP_NODELAY");
+
+    uint32_t msg = block(64), buf = block(64);
+    memcpy(g_mem + msg, "stream", 6);
+    check(call(c, "send", {client, msg, 6, 0}) == 6, "send");
+    check(call(c, "recv", {server, buf, 64, 0}) == 6 && memcmp(g_mem + buf, "stream", 6) == 0,
+          "a blocking recv gets it");
+    check(call(c, "closesocket", {client}) == 0, "the client closes");
+    check(call(c, "recv", {server, buf, 64, 0}) == 0, "recv reports the orderly close as 0");
+    // Sending on into the closed stream: the first send may still be queued,
+    // a later one fails, and no SIGPIPE ends the process.
+    uint32_t r2 = 0;
+    for (int i = 0; i < 20 && r2 != SOCKET_ERROR; ++i) {
+        r2 = call(c, "send", {server, msg, 6, 0});
+        os_sleep_us(2000);
+    }
+    check(r2 == SOCKET_ERROR && last_error(c) == 10054,
+          "a send to a closed stream is WSAECONNRESET, without SIGPIPE");
+    call(c, "closesocket", {server});
+
+    // A connect nobody answers: exceptfds and SO_ERROR, not writefds.
+    wr32(len, 16);
+    uint32_t closed_sa = sockaddr_at(LOOPBACK, 0);
+    call(c, "getsockname", {listener, closed_sa, len});
+    call(c, "closesocket", {listener});
+    uint32_t refused = call(c, "socket", {2, 1, 0});
+    call(c, "ioctlsocket", {refused, 0x8004667eu, on});
+    call(c, "connect", {refused, closed_sa, 16});
+    uint32_t eset = block(4 + 64 * 4);
+    wr32(wset, 1);
+    wr32(wset + 4, refused);
+    wr32(eset, 1);
+    wr32(eset + 4, refused);
+    check(call(c, "select", {0, 0, wset, eset, tv}) == 1 && rd32(wset) == 0 && rd32(eset) == 1,
+          "a refused connect shows in exceptfds only");
+    wr32(errlen, 4);
+    check(call(c, "getsockopt", {refused, 0xffff, 0x1007, err, errlen}) == 0 && rd32(err) == 10061,
+          "SO_ERROR is WSAECONNREFUSED (%u)", rd32(err));
+    call(c, "closesocket", {refused});
+}
+
+static void test_names(X86 *c) {
+    uint32_t name = block(256);
+    check(call(c, "gethostname", {name, 256}) == 0 && rd8(name) != 0, "gethostname: %s",
+          gm_str(name, 256).c_str());
+    uint32_t he = call(c, "gethostbyname", {name});
+    check(he != 0 && rd16(he + 8) == 2 && rd16(he + 10) == 4 && rd32(rd32(he + 12)) != 0,
+          "gethostbyname(own name) lists an address");
+    uint32_t text = block(32);
+    gm_put_str(text, "127.0.0.1", 32);
+    he = call(c, "gethostbyname", {text});
+    check(he && rd32(rd32(rd32(he + 12))) == 0x0100007fu, "gethostbyname of a dotted quad");
+    gm_put_str(text, "localhost", 32);
+    he = call(c, "gethostbyname", {text});
+    check(he && rd32(rd32(rd32(he + 12))) == 0x0100007fu, "gethostbyname(localhost)");
+    uint32_t addr = block(4);
+    wr32(addr, 0x0100007fu);
+    he = call(c, "gethostbyaddr", {addr, 4, 2});
+    check(he && gm_str(rd32(he), 256) == "127.0.0.1" && rd32(rd32(rd32(he + 12))) == 0x0100007fu,
+          "gethostbyaddr(127.0.0.1) names it by its address");
+    check(call(c, "inet_addr", {text}) == 0xffffffffu, "inet_addr(localhost) is INADDR_NONE");
+    check(gm_str(call(c, "inet_ntoa", {0x0100a8c0u}), 32) == "192.168.0.1", "inet_ntoa");
+
+    // SIO_GET_INTERFACE_LIST: 76-byte INTERFACE_INFO records, loopback among them.
+    uint32_t s = call(c, "socket", {2, 2, 0}), out = block(76 * 32), got = block(4);
+    check(call(c, "WSAIoctl", {s, 0x4004747fu, 0, 0, out, 76 * 32, got, 0, 0}) == 0 &&
+              rd32(got) % 76 == 0 && rd32(got) >= 76,
+          "SIO_GET_INTERFACE_LIST: %u interfaces", rd32(got) / 76);
+    bool loopback = false;
+    for (uint32_t i = 0; i < rd32(got) / 76; ++i) {
+        const uint32_t at = out + i * 76;
+        if ((rd32(at) & 4) && rd32(at + 8) == 0x0100007fu && rd32(at + 0x38) == 0x000000ffu)
+            loopback = true;
+    }
+    check(loopback, "the list has 127.0.0.1/8 flagged IFF_LOOPBACK");
+    check(call(c, "WSAIoctl", {s, 0x4004747fu, 0, 0, out, 10, got, 0, 0}) == SOCKET_ERROR &&
+              last_error(c) == 10014,
+          "a short buffer is WSAEFAULT");
+    call(c, "closesocket", {s});
+}
+
+// SO_REUSEADDR shares a UDP port, and a limited broadcast reaches it through
+// every broadcasting interface; RECOMP_NET_PEERS adds a unicast copy.
+static void test_broadcast(X86 *c) {
+    uint32_t one = block(4);
+    wr32(one, 1);
+    uint32_t a = call(c, "socket", {2, 2, 0}), b = call(c, "socket", {2, 2, 0});
+    for (uint32_t s : {a, b}) {
+        call(c, "setsockopt", {s, 0xffff, 4, one, 4});
+        call(c, "setsockopt", {s, 0xffff, 0x20, one, 4});
+        call(c, "ioctlsocket", {s, 0x8004667eu, one});
+    }
+    uint16_t port = 0;
+    uint32_t any = sockaddr_at(0, 0), len = block(4);
+    check(call(c, "bind", {a, any, 16}) == 0, "bind 0.0.0.0");
+    wr32(len, 16);
+    call(c, "getsockname", {a, any, len});
+    port = sockaddr_port(any);
+    check(call(c, "bind", {b, sockaddr_at(0, port), 16}) == 0,
+          "a second SO_REUSEADDR socket binds the same port %u", port);
+
+    uint32_t sender = call(c, "socket", {2, 2, 0});
+    call(c, "setsockopt", {sender, 0xffff, 0x20, one, 4});
+    uint32_t msg = block(16), buf = block(64), bc = sockaddr_at(0xffffffffu, port);
+    memcpy(g_mem + msg, "anyone?", 8);
+
+    OsNetInterface list[32];
+    const int n = os_net_interfaces(list, 32);
+    bool broadcasting = false;
+    for (int i = 0; i < n; ++i)
+        broadcasting |= (list[i].flags & OS_IF_UP) && !(list[i].flags & OS_IF_LOOPBACK) &&
+                        (list[i].flags & OS_IF_BROADCAST);
+    // The peer list is resolved off-thread; send until a copy arrives. A
+    // unicast copy reaches only one of the sockets sharing the port, so with
+    // no broadcasting interface one is all there can be.
+    bool got_a = false, got_b = false;
+    auto done = [&] { return broadcasting ? got_a && got_b : got_a || got_b; };
+    for (int tries = 0; tries < 100 && !done(); ++tries) {
+        call(c, "sendto", {sender, msg, 8, 0, bc, 16});
+        os_sleep_us(5000);
+        while (call(c, "recvfrom", {a, buf, 64, 0, 0, 0}) == 8)
+            got_a = true;
+        while (call(c, "recvfrom", {b, buf, 64, 0, 0, 0}) == 8)
+            got_b = true;
+    }
+    check(done(), "%s",
+          broadcasting ? "a broadcast reaches both sockets sharing the port"
+                       : "a broadcast reaches the port through RECOMP_NET_PEERS "
+                         "(no broadcasting interface here)");
+
+    // A second copy that moved off a movable port still hears broadcasts to it.
+    char ports[32];
+    snprintf(ports, sizeof ports, "%u", port);
+    os_setenv("RECOMP_NET_MOVABLE_UDP_PORTS", ports);
+    uint32_t moved = call(c, "socket", {2, 2, 0});
+    call(c, "ioctlsocket", {moved, 0x8004667eu, one});
+    uint32_t taken = call(c, "socket", {2, 2, 0});
+    call(c, "bind", {taken, sockaddr_at(0, port + 100), 16}); // whoever has port + 100
+    check(call(c, "bind", {moved, sockaddr_at(0, port), 16}) == 0, "the movable port moves");
+    wr32(len, 16);
+    call(c, "getsockname", {moved, any, len});
+    const uint16_t moved_port = sockaddr_port(any);
+    bool got_moved = false;
+    for (int tries = 0; tries < 50 && !got_moved; ++tries) {
+        call(c, "sendto", {sender, msg, 8, 0, bc, 16});
+        os_sleep_us(5000);
+        while (call(c, "recvfrom", {moved, buf, 64, 0, 0, 0}) == 8)
+            got_moved = true;
+    }
+    check(got_moved && moved_port > port && (moved_port - port) % 100 == 0,
+          "a broadcast to %u reaches the copy moved to %u", port, moved_port);
+    os_unsetenv("RECOMP_NET_MOVABLE_UDP_PORTS");
+    for (uint32_t s : {a, b, sender, moved, taken})
+        call(c, "closesocket", {s});
+}
+
+int main() {
+    // The host's sockets whatever the game's [game] sockets says.
+    os_setenv("RECOMP_SOCKETS", "1");
+    // Every broadcast also goes to these peers: loopback here, so the
+    // fan-out is testable on a machine without a broadcasting interface.
+    os_setenv("RECOMP_NET_PEERS", "127.0.0.1");
+    mem_init();
+    imports_init();
+    X86 c;
+    loader_init_context(&c);
+    printf("winsock startup\n");
+    test_startup(&c);
+    printf("winsock udp\n");
+    test_udp(&c);
+    printf("winsock tcp\n");
+    test_tcp(&c);
+    printf("winsock names\n");
+    test_names(&c);
+    printf("winsock broadcast\n");
+    test_broadcast(&c);
+    printf("%d checks, %d failures\n", g_checks, g_failures);
+    mem_shutdown();
+    return g_failures ? 1 : 0;
+}

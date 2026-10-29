@@ -29,6 +29,8 @@
     <string>public.app-category.games</string>
     <key>LSSupportsGameMode</key>
     <true/>
+    <!-- LAN games (runtime/winsock.cpp): macOS 15 asks once before the app may reach other devices nearby. -->
+    <key>NSLocalNetworkUsageDescription</key><string>Network games with other players on the same Wi-Fi.</string>
     <!-- What the app was called before a rename (game.toml previous_*): the launcher
          takes its remembered folders and choices from the former defaults. -->
     <key>RecompPreviousAppNames</key>
