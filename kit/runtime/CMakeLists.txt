@@ -124,6 +124,16 @@ pop_optimize(winsock_tests 1)
 pop_test_binary(winsock_tests)
 add_test(NAME winsock_tests COMMAND winsock_tests WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(winsock_tests PROPERTIES LABELS nogame TIMEOUT 60)
+# Floating point network play depends on: x86's answers for the conversions
+# and rounding, and no FMA contraction, the same on every host. Standalone
+# (x86.h only), so it also builds for a cross target by hand (see the file).
+add_executable(fp_determinism_tests tests/fp_determinism_tests.cpp)
+target_include_directories(fp_determinism_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(fp_determinism_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(fp_determinism_tests 2)
+pop_test_binary(fp_determinism_tests)
+add_test(NAME fp_determinism_tests COMMAND fp_determinism_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(fp_determinism_tests PROPERTIES LABELS nogame TIMEOUT 60)
 
 endif()
 
