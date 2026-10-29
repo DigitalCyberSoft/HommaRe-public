@@ -15,6 +15,24 @@ endif()
 if(WIN32)
   enable_language(RC) # the manifest, the app's icon and version (platform/windows/)
 endif()
+# An MSVC-ABI link embeds a manifest of its own, which in an executable is a
+# second resource 1 of type RT_MANIFEST beside manifest.rc's (the platform
+# layer gives that one, UTF-8 as the code page, to every image linking it).
+# CMake's rules for clang put /MANIFEST:EMBED after the objects, and Ninja's
+# response file takes the libraries there too, so no option of a target's
+# comes later: the rules themselves turn it off. vs_link_exe (cl, clang-cl)
+# reads /MANIFEST:NO wherever it is.
+if(WIN32 AND NOT MINGW)
+  if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    add_link_options(/MANIFEST:NO)
+  else()
+    foreach(lang C CXX)
+      foreach(rule LINK_EXECUTABLE CREATE_SHARED_LIBRARY CREATE_SHARED_MODULE)
+        string(REPLACE "/MANIFEST:EMBED" "/MANIFEST:NO" CMAKE_${lang}_${rule} "${CMAKE_${lang}_${rule}}")
+      endforeach()
+    endforeach()
+  endif()
+endif()
 # The SwiftUI launcher (host/launcher/apple/) on macOS and iOS, the same one
 # drawn by the host on Linux and Windows (host/launcher/linux/); the canvas
 # launcher everywhere else and with this off.

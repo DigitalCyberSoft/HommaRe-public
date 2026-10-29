@@ -8,13 +8,6 @@ else()
   set(POP_OS_SOURCE os_posix.cpp)
 endif()
 add_library(recomp_platform OBJECT ${POP_OS_SOURCE} env.cpp)
-if(WIN32 AND NOT MINGW)
-  # CMake links an MSVC-ABI executable with /MANIFEST:EMBED, and the manifest
-  # the linker makes would be a second resource 1 beside manifest.rc's. A
-  # link item goes after that option on the command line, and the last
-  # /MANIFEST wins.
-  target_link_libraries(recomp_platform INTERFACE -Wl,/MANIFEST:NO)
-endif()
 target_include_directories(recomp_platform PUBLIC ${POP_ROOT})
 target_compile_options(recomp_platform PRIVATE ${POP_WARN_STRICT})
 pop_optimize(recomp_platform 2)
