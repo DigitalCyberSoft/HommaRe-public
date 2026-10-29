@@ -67,10 +67,18 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
   add_compile_options(-fsigned-char)
 endif()
+if(WIN32)
+  # Windows' headers, MinGW's and Microsoft's, keep M_PI behind this; glibc's
+  # and Apple's declare it by default.
+  add_compile_definitions(_USE_MATH_DEFINES)
+endif()
 if(MINGW)
-  # MinGW's headers keep M_PI and localtime_r/gmtime_r behind these; glibc's
-  # and Apple's declare them by default.
-  add_compile_definitions(_USE_MATH_DEFINES _POSIX_THREAD_SAFE_FUNCTIONS=200112L)
+  # And MinGW's keep localtime_r/gmtime_r behind this.
+  add_compile_definitions(_POSIX_THREAD_SAFE_FUNCTIONS=200112L)
+elseif(WIN32)
+  # The Microsoft C runtime spells POSIX's fseeko and ftello _fseeki64 and
+  # _ftelli64.
+  add_compile_definitions(fseeko=_fseeki64 ftello=_ftelli64)
 endif()
 if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   # All static and object libraries feed the shared SDL application (Android)
