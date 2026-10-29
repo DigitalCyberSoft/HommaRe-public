@@ -209,6 +209,7 @@ class VulkanDevice final : public Device {
     Binding ring_alloc(Cmd &c, const void *bytes, uint64_t count); // mutex held
     VkCommandBuffer one_shot_begin();
     void one_shot_end_wait(VkCommandBuffer cb);
+    void end_completing(uint64_t id);        // with mutex_ held
     void wait_all_submitted();               // every fence so far; shutdown and swapchain teardown
     void wait_submitted_before(uint64_t id); // submissions older than `id`; bounded under load
     uint64_t submission_watermark();         // next_id_ now: everything submitted so far is older
@@ -288,6 +289,10 @@ class VulkanDevice final : public Device {
     std::vector<Grave> graves_;
     std::unordered_map<uint64_t, CommandStatus> retired_; // bounded: last 1024
     std::deque<uint64_t> retired_order_;
+    // Retired buffers whose on_complete callbacks are still running, unlocked
+    // (the reaper's, or a failed submit's): wait() returns only after them, as
+    // gpu.h's "blocks until complete" means.
+    std::vector<uint64_t> completing_;
     std::condition_variable reaper_cv_, retired_cv_;
     std::thread reaper_;
     bool stopping_ = false;

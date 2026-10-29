@@ -1,9 +1,9 @@
 // gpu_contract_tests.cpp - a backend against the gpu.h contract: bytes
 // round-trip, a clear and a draw land where expected, commands complete in
-// commit order, a completion handler may own what it frees, a compute kernel
-// reads what a texture holds, and a native surface makes a swapchain.
-// Compiled once per backend with POP_GPU_TEST_BACKEND naming it; the factory
-// override selects it.
+// commit order, wait() returns after their handlers, a completion handler may
+// own what it frees, a compute kernel reads what a texture holds, and a native
+// surface makes a swapchain. Compiled once per backend with
+// POP_GPU_TEST_BACKEND naming it; the factory override selects it.
 #include "../../../platform/os.h"
 #include "../gpu_factory.h"
 
@@ -142,6 +142,33 @@ static void test_commit_order() {
     CHECK(ordered);
 }
 
+// wait() returns after the buffer's completion handlers have run, not only its
+// work: the draw and commit-order checks above read what the handlers wrote
+// right after wait(). The Vulkan reaper marked a buffer retired and woke
+// wait() before it ran the handlers, so those checks failed about one run in
+// forty on lavapipe; a handler slower than the wakeup shows it every time.
+// Vulkan only: the ordering is the reaper's; Metal's is waitUntilCompleted's.
+static void test_wait_covers_completion_handlers() {
+    if (strcmp(POP_GPU_TEST_BACKEND, "vulkan") != 0)
+        return;
+    auto d = create_default_device();
+    if (!d)
+        return;
+    // Shared with the handlers: one wait() returned early leaves its handler
+    // running past this round, and past this function.
+    auto handled = std::make_shared<std::atomic<int>>(0);
+    for (int round = 1; round <= 3; ++round) {
+        CommandBuffer cb = d->begin();
+        d->on_complete(cb, [handled](CommandStatus, double) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            ++*handled;
+        });
+        d->commit(cb);
+        d->wait(cb);
+        CHECK(handled->load() == round);
+    }
+}
+
 // A completion handler can hold the last reference to GPU resources: the
 // presenter's handler holds its frame, and a frame dropped while in flight has
 // no other owner. Releasing the handler then destroys textures through the
@@ -257,6 +284,7 @@ int main() {
     test_upload_readback();
     test_clear_and_compositor_draw();
     test_commit_order();
+    test_wait_covers_completion_handlers();
     test_completion_handler_owns_resources();
     test_compute_readback_kernel();
     test_swapchain_from_surface();

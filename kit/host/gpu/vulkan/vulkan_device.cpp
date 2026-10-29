@@ -1005,11 +1005,16 @@ void VulkanDevice::submit_cmd(uint64_t id, std::unique_ptr<Cmd> c) {
         retired_order_.push_back(cb.id);
         retire_graves(cb.id);
         free_cmds_.push_back(std::move(c));
+        completing_.push_back(cb.id);
         retired_cv_.notify_all();
         // As in reap_loop: callbacks run, and what they hold is released, unlocked.
         lock.unlock();
         for (auto &fn : callbacks)
             fn(CommandStatus::Error, 0);
+        callbacks.clear();
+        presented = nullptr;
+        lock.lock();
+        end_completing(cb.id);
         return;
     }
     if (trace_)
@@ -1063,6 +1068,7 @@ void VulkanDevice::reap_loop() {
             retired_order_.pop_front();
         }
         free_cmds_.push_back(std::move(s.cmd));
+        completing_.push_back(s.id);
         retired_cv_.notify_all();
         lock.unlock();
         for (auto &fn : callbacks)
@@ -1077,7 +1083,19 @@ void VulkanDevice::reap_loop() {
         callbacks.clear();
         presented = nullptr;
         lock.lock();
+        end_completing(s.id);
     }
+}
+
+// The buffer's on_complete callbacks have run (and what they held is released):
+// wait() on it may return now.
+void VulkanDevice::end_completing(uint64_t id) {
+    for (auto it = completing_.begin(); it != completing_.end(); ++it)
+        if (*it == id) {
+            completing_.erase(it);
+            break;
+        }
+    retired_cv_.notify_all();
 }
 
 void VulkanDevice::wait(CommandBuffer cb) {
@@ -1094,6 +1112,9 @@ void VulkanDevice::wait(CommandBuffer cb) {
         }
     } done{this, t0};
     retired_cv_.wait(lock, [&] {
+        for (uint64_t id : completing_)
+            if (id == cb.id)
+                return false; // retired, its callbacks still running
         if (retired_.count(cb.id))
             return true;
         for (auto &s : submitted_)
@@ -1116,7 +1137,7 @@ CommandStatus VulkanDevice::status(CommandBuffer cb) {
 
 void VulkanDevice::wait_all_submitted() {
     std::unique_lock lock(mutex_);
-    retired_cv_.wait(lock, [&] { return submitted_.empty(); });
+    retired_cv_.wait(lock, [&] { return submitted_.empty() && completing_.empty(); });
 }
 
 uint64_t VulkanDevice::submission_watermark() {
