@@ -200,6 +200,16 @@ def load(game_dir):
         raise ValueError("%s: [media] cd_tracks must be a list of strings" % source)
     cfg.setdefault("hooks", {})
     cfg.setdefault("bundle", {}).setdefault("exclude", [])
+    # [net] movable_udp_ports: UDP ports the game binds exclusively that a
+    # second copy on the same machine moves off instead of failing to bind
+    # (runtime/winsock.cpp). Empty: every bind fails as it would on Windows.
+    net = cfg.setdefault("net", {})
+    net.setdefault("movable_udp_ports", [])
+    if not isinstance(net["movable_udp_ports"], list) or any(
+            not isinstance(p, int) or isinstance(p, bool) or not 0 < p < 65536
+            for p in net["movable_udp_ports"]):
+        raise ValueError("%s: [net] movable_udp_ports must be a list of ports, not %r"
+                         % (source, net["movable_udp_ports"]))
     touch = cfg.setdefault("touch", {})
     touch.setdefault("keypad", "auto")
     if touch["keypad"] not in ("auto", "hidden"):
@@ -279,6 +289,24 @@ def load(game_dir):
             any(c in s for s in [*texts["files"], *texts["replace"], *texts["replace"].values()] for c in "|;"):
         raise ValueError('%s: [texts] takes pak = "path", files = ["path", ...] and '
                          'replace = { "old words" = "new words" }' % source)
+    # [online]: a Ubisoft Game Service title's server list. gsconnect_host is
+    # the host its libcurl asks (runtime/curl_http.cpp sends that request to a
+    # community server the player names instead); prompt_title and prompt_text
+    # are what the host's question says (host/server_prompt.cpp); default_server
+    # ("host" or "host:port") is the one it offers while the player has used
+    # none. No host: the game stays offline, as every other request does.
+    online = cfg.setdefault("online", {})
+    online.setdefault("gsconnect_host", "")
+    online.setdefault("prompt_title", "")
+    online.setdefault("prompt_text", "")
+    online.setdefault("default_server", "")
+    keys = ("gsconnect_host", "prompt_title", "prompt_text", "default_server")
+    if not all(isinstance(online[k], str) for k in keys) or \
+            any(c in online["gsconnect_host"] for c in "/:@ \t\n") or \
+            (online["default_server"] and not re.fullmatch(
+                r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9_][A-Za-z0-9._-]*)(:[0-9]{1,5})?", online["default_server"])):
+        raise ValueError('%s: [online] takes gsconnect_host = "host.name", prompt_title = "...", '
+                         'prompt_text = "..." and default_server = "host" or "host:port"' % source)
     touch.setdefault("gestures", "classic")
     if touch["gestures"] not in ("classic", "hover"):
         raise ValueError('%s: [touch] gestures must be "classic" or "hover", not %r' % (source, touch["gestures"]))

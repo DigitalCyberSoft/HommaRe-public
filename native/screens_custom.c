@@ -299,18 +299,32 @@ static int g_hs;
 #ifndef NS_MPO_COMBAT
 #define NS_MPO_COMBAT 0x40
 #endif
+/* An expansion's options (research notes lan/mp-create-wait-expansions.md):
+ * no «Закрытая игра» (NS_MPO_LOCKED 0: a non-empty password makes the game
+ * private, so the password is always open), «Одновременные ходы», and its own
+ * words for two boxes. 0 is "the game has no such widget". */
+#ifndef NS_MPO_SIMULTANEOUS
+#define NS_MPO_SIMULTANEOUS 0
+#endif
+#ifndef NS_MPO_QUICK_LABEL
+#define NS_MPO_QUICK_LABEL "Быстрый бой", "Quick combat"
+#endif
+#ifndef NS_MPO_AUTOSAVE_LABEL
+#define NS_MPO_AUTOSAVE_LABEL "Автосохранение", "Autosave"
+#endif
 #ifndef NS_MPC_SPEED_NAME
 #define NS_MPC_SPEED_NAME 0x00b97ca0 /* fastcall ECX speed 0..3: const wstr* */
 #endif
 
 /* The LAN game's settings, as the view's fields (FormField ids). */
-enum { MP_NAME, MP_LOCKED, MP_PASSWORD, MP_GHOST, MP_QUICK, MP_AUTOSAVE };
-static const uint32_t MP_WIDGET[6] = {NS_MPO_NAME, NS_MPO_LOCKED, NS_MPO_PASSWORD,
-                                      NS_MPO_GHOST, NS_MPO_QUICK, NS_MPO_AUTOSAVE};
+enum { MP_NAME, MP_LOCKED, MP_PASSWORD, MP_GHOST, MP_QUICK, MP_AUTOSAVE, MP_SIMULTANEOUS, MP_FIELDS };
+static const uint32_t MP_WIDGET[MP_FIELDS] = {NS_MPO_NAME,  NS_MPO_LOCKED, NS_MPO_PASSWORD,    NS_MPO_GHOST,
+                                              NS_MPO_QUICK, NS_MPO_AUTOSAVE, NS_MPO_SIMULTANEOUS};
 
+/* An options widget; 0 for one the game does not have (offset 0). */
 static uint32_t mp_widget(uint32_t screen, uint32_t off) {
     const uint32_t opts = rd32(screen + NS_MPC_OPTIONS);
-    return ns_ptr(opts) ? rd32(opts + off) : 0;
+    return off && ns_ptr(opts) ? rd32(opts + off) : 0;
 }
 
 /* A hot seat handler: thiscall (screen, the message: none), RET 4. */
@@ -505,7 +519,7 @@ static void create_command(Scratch *s, uint32_t screen, const char *cmd) {
         }
     } else if (strcmp(verb, "set") == 0 && g_hs == 2) {
         const int id = ns_cmd_int(cmd, "id", -1), value = ns_cmd_int(cmd, "value", -1);
-        if (id == MP_LOCKED || id == MP_GHOST || id == MP_QUICK || id == MP_AUTOSAVE) {
+        if (id == MP_LOCKED || id == MP_GHOST || id == MP_QUICK || id == MP_AUTOSAVE || id == MP_SIMULTANEOUS) {
             const uint32_t b = mp_widget(screen, MP_WIDGET[id]), state = value ? 0 : 1; /* 0 is on */
             if (ns_ptr(b))
                 ns_vcall(s, b, 0x0c, &state, 1); /* SetState: runs its commands */
@@ -520,6 +534,9 @@ static void create_command(Scratch *s, uint32_t screen, const char *cmd) {
             hs_handler(s, screen, strcmp(name, "create") == 0 ? NS_MPC_CREATE
                                   : strcmp(name, "load") == 0 ? NS_MPC_LOAD
                                   : strcmp(name, "back") == 0 ? NS_MPC_BACK
+#ifdef NS_MPC_RMG /* the random map generator: the game's own screen over this one */
+                                  : strcmp(name, "rmg") == 0 ? NS_MPC_RMG
+#endif
                                                               : 0);
         else if (g_hs)
             hs_handler(s, screen, strcmp(name, "create") == 0 ? NS_HS_CREATE
@@ -607,20 +624,21 @@ static void mp_options(Json *j, Scratch *s, uint32_t screen) {
 /* A LAN game's own settings, as the view's fields, and whether it is being
  * created (the game's wait box, in its undrawn root, says so). */
 static void mp_fields(Json *j, Scratch *s, uint32_t screen) {
-    static const char *const ru[6] = {"Название игры", "Закрытая игра", "Пароль", "Режим призрака", "Быстрый бой",
-                                      "Автосохранение"};
-    static const char *const en[6] = {"Game name", "Private game", "Password", "Ghost mode", "Quick combat",
-                                      "Autosave"};
+    static const char *const words[MP_FIELDS][2] = {
+        {"Название игры", "Game name"}, {"Закрытая игра", "Private game"},     {"Пароль", "Password"},
+        {"Режим призрака", "Ghost mode"}, {NS_MPO_QUICK_LABEL},                {NS_MPO_AUTOSAVE_LABEL},
+        {"Одновременные ходы", "Simultaneous turns"}};
     const uint32_t locked = mp_widget(screen, NS_MPO_LOCKED);
-    const int is_locked = ns_ptr(locked) && ns_vcall(s, locked, 0x14, NULL, 0) == 0;
+    /* Without the box a password is always open (and makes the game private). */
+    const int is_locked = !NS_MPO_LOCKED || (ns_ptr(locked) && ns_vcall(s, locked, 0x14, NULL, 0) == 0);
     j_lit(j, ",\"fields\":[");
-    for (int id = 0, first = 1; id < 6; ++id) {
+    for (int id = 0, first = 1; id < MP_FIELDS; ++id) {
         const uint32_t w = mp_widget(screen, MP_WIDGET[id]);
         if (!ns_ptr(w))
             continue;
         j_printf(j, "%s{\"id\":%d,", first ? "" : ",", id);
         first = 0;
-        j_kv_str(j, "label", ns_tr(ru[id], en[id]));
+        j_kv_str(j, "label", ns_tr(words[id][0], words[id][1]));
         if (id == MP_NAME || id == MP_PASSWORD) {
             char text[64];
             ns_wstr_utf8(w + 0x3c, text, sizeof text);
@@ -775,6 +793,10 @@ static void create_document(Json *j, Scratch *s, uint32_t screen) {
     j_button(j, 1, "create", ns_label(s, g_hs ? "/UI/HotSeat/Menu/create.txt" : "/UI/CustomGameCreate/Create.txt", "Создать", "Create"),
              ns_ptr(chosen));
     j_button(j, 0, "load", ns_label(s, g_hs ? "/UI/HotSeat/Menu/load.txt" : "/UI/CustomGameCreate/Load.txt", "Загрузить", "Load"), 1);
+#ifdef NS_MPC_RMG
+    if (g_hs == 2)
+        j_button(j, 0, "rmg", ns_tr("Создать карту", "Generate a Map"), 1);
+#endif
     j_button(j, 0, "back", ns_label(s, g_hs ? "/UI/HotSeat/Menu/back.txt" : "/UI/CustomGameCreate/Back.txt", "Назад", "Back"), 1);
     j_lit(j, "]}");
 }
@@ -1032,6 +1054,9 @@ static Want g_wants[WANTS];
 #ifndef NS_MPW_STARTING
 #define NS_MPW_STARTING 0x18c /* CStartGameListener while the game starts */
 #endif
+#ifndef NS_MPW_ML_ACCEPTING
+#define NS_MPW_ML_ACCEPTING 0x108 /* the host logic's "changes taken" byte */
+#endif
 enum {
     MW_HOST = NS_MPW_HOST,
     MW_LOGIC = NS_MPW_LOGIC,
@@ -1045,7 +1070,7 @@ enum {
     ML_ROWS = 0x38,          /* vector<IMPWaitItem*>, a row per slot */
     ML_GOT_ID = 0x60,        /* client: byte, its slot heard of */
     ML_MODEL = 0x74,         /* host only: CPlayersStartInfo */
-    ML_ACCEPTING = 0x108,    /* host only: byte, changes taken */
+    ML_ACCEPTING = NS_MPW_ML_ACCEPTING, /* host only: byte, changes taken */
     ML_CAN_START = 0x18,     /* vtable slot */
     /* a row */
     MR_STATE = 0x28,         /* 0 a person not ready, 1 computer, 2 closed, 3 ready, 4 open */
@@ -1507,14 +1532,28 @@ static void mp_info(Json *j, Scratch *s) {
         ns_call(s, NS_MPW_INFO_CTOR, info, 0, NULL, 0);
         if (ns_vcall(s, mm, NS_MPW_MM_GAME, &info, 1) & 0xff) {
             ns_text_of(s, NS_MAP_NAME, info + NS_LAN_GI_MAP, name, sizeof name);
+#ifdef NS_MAP_GOAL_OUT /* ToE's formatter builds an out string, as map_goal says */
+            {
+                const uint32_t g = ns_alloc(s, 12);
+                wr32(g, 0);
+                ns_call(s, NS_MAP_GOAL, g, info + NS_MPW_GI_GOAL, NULL, 0);
+                ns_wstr_utf8(g, goal, sizeof goal);
+                ns_free(s, rd32(g));
+            }
+#else
             ns_text_of(s, NS_MAP_GOAL, info + NS_MPW_GI_GOAL, goal, sizeof goal);
+#endif
             const uint32_t w = ns_alloc(s, 12);
             wr32(w, 0);
             ns_call(s, NS_MAP_SIZE, w, rd32(info + NS_LAN_GI_SIZE), NULL, 0);
             ns_wstr_utf8(w, size, sizeof size);
             ns_free(s, rd32(w));
-            snprintf(players, sizeof players, "%u/%u", ns_call(s, NS_MPW_PLAYERS_NOW, info, 0, NULL, 0),
-                     rd32(info + NS_LAN_GI_MAX));
+#ifdef NS_MPW_GI_PLAYERS /* no "players in" function: the field the game's own list reads */
+            const uint32_t now = rd32(info + NS_MPW_GI_PLAYERS);
+#else
+            const uint32_t now = ns_call(s, NS_MPW_PLAYERS_NOW, info, 0, NULL, 0);
+#endif
+            snprintf(players, sizeof players, "%u/%u", now, rd32(info + NS_LAN_GI_MAX));
             ns_difficulty_name(s, (int)rd32(info + NS_MPW_GI_DIFFICULTY), dname, sizeof dname);
             const int minutes = (int)rd32(info + NS_MPW_GI_TIME);
             if (minutes > 0)

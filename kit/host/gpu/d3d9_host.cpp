@@ -867,18 +867,27 @@ void host_d9_query_drop(uint32_t id) {
     push(Op::QueryDrop, id);
 }
 
+// Only a backend with a GPU timeline (D9Backend::events) marks events: on the
+// others every event is done at once, without a round trip to the render
+// thread on each of the game's polls.
+static bool backend_events() {
+    D9Backend *b = backend();
+    return b && b->events();
+}
 void host_d9_event_end(uint32_t id) {
-    push(Op::EventEnd, id);
+    if (backend_events())
+        push(Op::EventEnd, id);
 }
 int host_d9_event_done(uint32_t id) {
     RenderThread *t = render_thread();
-    return !t || t->sync([&] {
+    return !t || !backend_events() || t->sync([&] {
         auto it = g_event_marks.find(id);
         return it == g_event_marks.end() || backend()->event_done(it->second);
     });
 }
 void host_d9_event_drop(uint32_t id) {
-    push(Op::EventDrop, id);
+    if (backend_events())
+        push(Op::EventDrop, id);
 }
 
 bool host_d9_use_device_for_test(gpu::Device *device) {

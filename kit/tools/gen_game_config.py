@@ -76,12 +76,21 @@ def render_header(cfg):
         "%s|%s|%s;" % (f, k, v)
         for f, kv in sorted(cfg["ios"]["cfg_defaults"].items()) for k, v in sorted(kv.items()))))
     lines.append("#define RECOMP_TOUCH_PAN_GAIN %r" % float(cfg["touch"]["pan_gain"]))
+    # [net] movable_udp_ports as "port," records.
+    lines.append("#define RECOMP_NET_MOVABLE_UDP_PORTS %s" % c_string(
+        "".join("%d," % p for p in cfg["net"]["movable_udp_ports"])))
     # [texts] as a pak path, "file;" records and "old|new;" records.
     texts = cfg["texts"]
     lines.append("#define RECOMP_TEXTS_PAK %s" % c_string(texts["pak"]))
     lines.append("#define RECOMP_TEXTS_FILES %s" % c_string("".join(f + ";" for f in texts["files"])))
     lines.append("#define RECOMP_TEXTS_REPLACE %s" % c_string(
         "".join("%s|%s;" % (k, v) for k, v in texts["replace"].items())))
+    # [online]: the GS server-list host and the host's question about it.
+    online = cfg["online"]
+    lines.append("#define RECOMP_ONLINE_GSCONNECT_HOST %s" % c_string(online["gsconnect_host"]))
+    lines.append("#define RECOMP_ONLINE_PROMPT_TITLE %s" % c_string(online["prompt_title"]))
+    lines.append("#define RECOMP_ONLINE_PROMPT_TEXT %s" % c_string(online["prompt_text"]).replace("\n", "\\n"))
+    lines.append("#define RECOMP_ONLINE_DEFAULT_SERVER %s" % c_string(online["default_server"]))
     lines.append("#define RECOMP_TOUCH_INVERT %s" % c_string(",".join(cfg["touch"]["invert"])))
     lines.append("#define RECOMP_CONTROLS_PAD %d" % ("off", "mapped", "native").index(controls["pad"]))
     lines.append("#define RECOMP_CONTROLS_MAPPED %s" % c_string(
@@ -225,10 +234,11 @@ def render_cmake(cfg):
 
 
 def write_if_changed(path, text):
+    """UTF-8 whatever the locale: game.toml's strings are (Windows' would be cp1252)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.is_file() or path.read_text() != text:
-        path.write_text(text)
+    if not path.is_file() or path.read_text(encoding="utf-8") != text:
+        path.write_text(text, encoding="utf-8")
 
 
 def main():

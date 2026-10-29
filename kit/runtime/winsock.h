@@ -6,6 +6,9 @@
 #include "x86.h"
 
 bool winsock_real();
+// Logs a call that answered SOCKET_ERROR (the first few of each kind, then
+// every thousandth); `call` is the winsock_* function's name.
+void winsock_log_failure(X86 *c, const char *call);
 
 void winsock_socket(X86 *c);
 void winsock_closesocket(X86 *c);

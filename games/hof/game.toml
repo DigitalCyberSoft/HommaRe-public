@@ -55,7 +55,7 @@ entry_points = []
 # (native/overrides.h) holds the FN_<addr> replacements every translated chunk
 # includes; addresses (native/addresses.h) this game's addresses, which only
 # these sources include.
-native = { header = "native/overrides.h", addresses = "native/addresses.h", sources = ["../../native/overrides.c", "../../native/scene.c", "../../native/granny.c", "../../native/lighting.c", "../../native/gpu_skin.cpp", "../../native/touch.c", "../../native/save.cpp", "../../native/camera.c", "../../native/phone_hud.c", "../../native/hof_screen.c", "../../native/horplus.c", "../../native/ui_bounds.c", "../../native/hof_paks.c", "../../native/phone_layout.c", "../../native/render_split.c", "../../native/tap_attack.c", "../../native/native_screens.c", "../../native/screens_custom.c", "../../native/screens_menu.c", "../../native/screens_load.c", "../../native/screens_hof.c", "../../native/screens_options.c", "../../native/screens_duel.c", "../../native/screens_question.c", "../../native/screens_escmenu.c", "../../native/screens_lan.c"] }
+native = { header = "native/overrides.h", addresses = "native/addresses.h", sources = ["../../native/overrides.c", "../../native/scene.c", "../../native/granny.c", "../../native/lighting.c", "../../native/gpu_skin.cpp", "../../native/touch.c", "../../native/save.cpp", "../../native/camera.c", "../../native/phone_hud.c", "../../native/hof_screen.c", "../../native/horplus.c", "../../native/ui_bounds.c", "../../native/hof_paks.c", "../../native/phone_layout.c", "../../native/render_split.c", "../../native/tap_attack.c", "../../native/native_screens.c", "../../native/screens_custom.c", "../../native/screens_menu.c", "../../native/screens_load.c", "../../native/screens_hof.c", "../../native/screens_options.c", "../../native/screens_duel.c", "../../native/screens_question.c", "../../native/screens_escmenu.c", "../../native/screens_lan.c", "../../native/screens_ubi.c"] }
 # A Direct3D 9 game: no DirectDraw lock to track, so stores skip the watch/dirty check.
 store_hooks = false
 # As in the base game: flags are followed over the jumps inside a function
@@ -104,8 +104,8 @@ sprites = []
 [mods]
 builtin = "none"
 
-# "Exit to Windows" is not where a Mac or an iPad goes (see the base game's
-# game.toml [texts]).
+# "Exit to Windows" is not where a Mac or an iPad goes, and Ubi.com is ubi-gs
+# (see the base game's game.toml [texts] and [online]).
 [texts]
 pak = "data/zz-port-texts.pak"
 files = [
@@ -118,8 +118,66 @@ files = [
     # The buttons' click, at a quarter of its volume.
     "Sounds/_(Sound)/Interface/General/standart_click.xdb",
     "Sounds/_(Sound)/Interface/General/standart_disabled_click.xdb",
+    # Ubi.com is ubi-gs now ([online] below): the Multi Player menu's entry,
+    # its tooltip, and every message that names the service.
+    "UI/MainMenu2/MultiPlayer/UbiCom.txt",
+    "UI/MainMenu2/MultiPlayer/TTUbiCom.txt",
+    "UI/MPRegister/connecting.txt",
+    "UI/MPRegister/cant-connect.txt",
+    "UI/MPRegiter/TTAccount.txt",
+    "UI/MPRegiter/TTOk.txt",
+    "UI/EscMenu/ExitToUbiLobbyQuestion.txt",
+    "UI/EscMenu/ExitToUbiLobbyTitle.txt",
+    "UI/Lobby/Texts/UbiComError.txt",
+    "UI/MPChangeChannel/mode_tooltip.txt",
+    "UI/MPDMCreate/cannot-create.txt",
+    "UI/MPDMWait/ubi-com-error.txt",
+    "UI/MPProfile/AcquireProfileFailedText.txt",
+    "UI/MPProfile/TTLosses.txt",
+    "UI/MPProfile/TTWins.txt",
+    "UI/MatchMakerErrors/UCLE_GS_ERROR.txt",
+    "UI/MatchMakerErrors/UCLE_GS_SEND_FAILED.txt",
+    "UI/Common/game_type_1.txt",
+    "UI/Common/MsgBoxAdventureMapDisconnectedFromUbiComText.txt",
+    "UI/Common/MsgBoxAdventureMapOtherPlayerDisconnectedFromUbiComText.txt",
+    "UI/Common/MsgBoxDisconnectedFromChatForFloodText.txt",
+    "UI/Common/MsgBoxMPInterfacesDisconnectedFromUbiComText.txt",
+    "UI/Texts/ubi_send_results_success.txt",
+    "UI/Texts/ubi_send_results_wait.txt",
 ]
-replace = { "в Windows" = "в систему", "to Windows" = "to Desktop", "<VolumeBase>1</VolumeBase>" = "<VolumeBase>0.25</VolumeBase>" }
+
+# Made in this order, in every listed file. The tooltip's sentence comes before
+# the service's bare name, which would otherwise leave it "via ubi-gs website".
+# Another language that writes the name as Ubi.com gets ubi-gs in its own words.
+[texts.replace]
+"в Windows" = "в систему"
+"to Windows" = "to Desktop"
+"<VolumeBase>1</VolumeBase>" = "<VolumeBase>0.25</VolumeBase>"
+"via ubi.com website" = "through a ubi-gs community server"
+"Ubi.com" = "ubi-gs"
+"ubi.com" = "ubi-gs"
+"UBI.com" = "ubi-gs"
+
+# Multi Player > Ubi.com against a community server: Ubisoft shut the game's
+# online services down on 6 October 2015, and ubi-gs
+# (github.com/michal-kapala/ubi-gs) answers the same requests. The game asks
+# gsconnect_host for the addresses of its other servers when Ubi.com is
+# clicked, never at start; kit/runtime/curl_http.cpp sends that one request to
+# the server the player names in the host's prompt (kit/host/server_prompt.cpp),
+# which keeps the servers that answered, most recent first, in the profile's
+# ubi-gs-servers.txt.
+[online]
+gsconnect_host = "gsconnect.ubisoft.com"
+prompt_title = "ubi-gs server"
+prompt_text = """Ubisoft closed the official Heroes of Might and Magic V servers in 2015. \
+ubi-gs is a community re-implementation of them (github.com/michal-kapala/ubi-gs).
+Someone has to run it, and every player who wants to play together must use the same \
+server.
+ubigs.wayofharm.com is the default community server; type another address to use a different one.
+The server sees the CD key and password you log in with: any CD key works, so don't type your real \
+one or a password you use elsewhere."""
+# Offered in the prompt while the player has used no server yet.
+default_server = "ubigs.wayofharm.com"
 
 [controls]
 pad = "off"
@@ -183,3 +241,11 @@ exclude = ["__redist", "commonappdata", "tmp", "Editor", "Editor Documentation",
 rows = ["window", "frame_limit", "performance_overlay", "filtering"]
 page = "tabs"
 scaling = "smooth"
+
+# A second copy on the same machine (two players trying LAN play on one
+# computer): the game binds net_game_port (8888) and net_lan_match_maker_port
+# (8889) without SO_REUSEADDR, so on Windows the second copy cannot bind them.
+# The kit moves its binds to 8988/8989 (+100 per further copy) instead
+# (kit/runtime/winsock.cpp); a port changed in user.cfg is not covered.
+[net]
+movable_udp_ports = [8888, 8889]

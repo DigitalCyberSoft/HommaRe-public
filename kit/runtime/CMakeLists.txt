@@ -7,6 +7,16 @@ set(POP_RUNTIME_SOURCES
   media_foundation.cpp layout.cpp interp.cpp discovery.cpp)
 # zlib1.dll on the host's zlib, and the offline stand-ins (legacy_dlls.cpp).
 list(APPEND POP_RUNTIME_SOURCES legacy_dlls.cpp winsock.cpp)
+# libcurl.dll's one useful request, a GS game's server list, over plain HTTP
+# (curl_http.cpp); the sockets are POSIX's, and a Windows build fails it.
+list(APPEND POP_RUNTIME_SOURCES curl_http.cpp)
+if(WIN32)
+  list(APPEND POP_RUNTIME_SOURCES http_get_none.cpp)
+else()
+  list(APPEND POP_RUNTIME_SOURCES http_get_posix.cpp)
+endif()
+# The pages the host draws over the game, in the kit's Open Sans.
+list(APPEND POP_RUNTIME_SOURCES gdi32_canvas.cpp)
 find_package(ZLIB REQUIRED)
 
 # The faces the runtime's GDI draws Windows' own UI fonts with
@@ -56,6 +66,18 @@ add_test(NAME interp_tests COMMAND interp_tests WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(interp_tests PROPERTIES LABELS nogame TIMEOUT 120)
 endif()
 
+# libcurl's stand-in and its HTTP GET against a server on 127.0.0.1, which the
+# suite runs itself over POSIX sockets, as the stand-in does.
+if(NOT IOS AND NOT ANDROID AND NOT WIN32)
+add_executable(curl_http_tests tests/curl_http_tests.cpp tests/stub_recomp_call.cpp)
+target_link_libraries(curl_http_tests PRIVATE recomp_platform recomp_runtime)
+target_compile_options(curl_http_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(curl_http_tests 1)
+pop_test_binary(curl_http_tests)
+add_test(NAME curl_http_tests COMMAND curl_http_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(curl_http_tests PROPERTIES LABELS nogame TIMEOUT 120)
+endif()
+
 # Linked by the hosts, the fixture and the mod tests, not by the unit tests.
 add_library(recomp_snapshot OBJECT snapshot.cpp)
 target_link_libraries(recomp_snapshot PUBLIC recomp_runtime)
@@ -93,6 +115,15 @@ add_test(NAME gdi_model_tests COMMAND gdi_tests model WORKING_DIRECTORY ${POP_RO
 set_tests_properties(gdi_model_tests PROPERTIES LABELS nogame)
 add_test(NAME gdi_draw_tests COMMAND gdi_tests draw WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(gdi_draw_tests PROPERTIES LABELS nogame)
+# WSOCK32 on loopback sockets. TIMEOUT because a blocking shim that never
+# yields or never times out is a hang, not a failure.
+add_executable(winsock_tests tests/winsock_tests.cpp tests/stub_recomp_call.cpp)
+target_link_libraries(winsock_tests PRIVATE recomp_platform recomp_runtime)
+target_compile_options(winsock_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(winsock_tests 1)
+pop_test_binary(winsock_tests)
+add_test(NAME winsock_tests COMMAND winsock_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(winsock_tests PROPERTIES LABELS nogame TIMEOUT 60)
 
 endif()
 

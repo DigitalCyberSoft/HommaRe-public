@@ -698,7 +698,7 @@ struct SkinWideLayout: View {
 
     private var footer: some View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let tagline = [model.config.tagline?.text, version].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        let tagline = [model.config.platformTagline?.text, version].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return HStack(alignment: .lastTextBaseline, spacing: 24) {
             Text(tagline)
                 .font(SkinFont.menu(19))
@@ -820,7 +820,7 @@ struct SkinTallLayout: View {
 
     private var footer: some View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let tagline = [model.config.tagline?.text, version].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        let tagline = [model.config.platformTagline?.text, version].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return VStack(spacing: 10) {
             if !tagline.isEmpty {
                 Text(tagline)

@@ -35,6 +35,22 @@ class LoadTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "cd_tracks"):
                     game_config.load(game)
 
+    def test_net_movable_udp_ports_render_and_reject_non_ports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp)
+            stub = (ROOT / "games/stub/game.toml").read_text()
+            (game / "globals.toml").write_text("")
+            (game / "game.toml").write_text(stub)
+            self.assertIn('#define RECOMP_NET_MOVABLE_UDP_PORTS ""',
+                          gen_game_config.render_header(game_config.load(game)))
+            (game / "game.toml").write_text(stub + '\n[net]\nmovable_udp_ports = [8888, 8889]\n')
+            self.assertIn('#define RECOMP_NET_MOVABLE_UDP_PORTS "8888,8889,"',
+                          gen_game_config.render_header(game_config.load(game)))
+            for bad in ('[0]', '[70000]', '["8888"]', '8888'):
+                (game / "game.toml").write_text(stub + '\n[net]\nmovable_udp_ports = ' + bad + '\n')
+                with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "movable_udp_ports"):
+                    game_config.load(game)
+
     def test_macos_profile_files_render_and_reject_escapes(self):
         with tempfile.TemporaryDirectory() as tmp:
             game = Path(tmp)
@@ -65,6 +81,30 @@ class LoadTests(unittest.TestCase):
             for bad in ('ui_mods = ["../W"]', 'profile_files = { "../W.h5u" = "build/w.h5u" }'):
                 (game / "game.toml").write_text(stub + '\n[linux]\n' + bad + '\n')
                 with self.assertRaisesRegex(ValueError, r"\[linux\]"):
+                    game_config.load(game)
+
+    def test_online_section_defaults_renders_and_rejects_a_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp)
+            stub = (ROOT / "games/stub/game.toml").read_text()
+            (game / "globals.toml").write_text("")
+            (game / "game.toml").write_text(stub)
+            header = gen_game_config.render_header(game_config.load(game))
+            self.assertIn('#define RECOMP_ONLINE_GSCONNECT_HOST ""', header)  # off: offline as before
+            self.assertIn('#define RECOMP_ONLINE_DEFAULT_SERVER ""', header)
+            (game / "game.toml").write_text(
+                stub + '\n[online]\ngsconnect_host = "gs.example.org"\nprompt_title = "Server"\n'
+                'prompt_text = """One "line".\nTwo."""\ndefault_server = "ubi-gs.example.net:8080"\n')
+            header = gen_game_config.render_header(game_config.load(game))
+            self.assertIn('#define RECOMP_ONLINE_GSCONNECT_HOST "gs.example.org"', header)
+            self.assertIn('#define RECOMP_ONLINE_PROMPT_TITLE "Server"', header)
+            self.assertIn('#define RECOMP_ONLINE_PROMPT_TEXT "One \\"line\\".\\nTwo."', header)
+            self.assertIn('#define RECOMP_ONLINE_DEFAULT_SERVER "ubi-gs.example.net:8080"', header)
+            for bad in ('gsconnect_host = "http://gs.example.org/"', 'gsconnect_host = 1', 'prompt_text = []',
+                        'default_server = "http://gs.example.org/"', 'default_server = "a b"',
+                        'default_server = 80'):
+                (game / "game.toml").write_text(stub + '\n[online]\n' + bad + '\n')
+                with self.assertRaisesRegex(ValueError, r"\[online\]"):
                     game_config.load(game)
 
     def test_windows_version_defaults_and_optional_build(self):
