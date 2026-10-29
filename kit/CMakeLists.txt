@@ -47,6 +47,18 @@ if(EMSCRIPTEN)
   set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# The same arithmetic on every host, which network play depends on: each peer
+# computes the game from the commands they exchange, so a result one build
+# rounds differently from another is a desync. Clang's default,
+# -ffp-contract=on, fuses a * b + c within an expression into one FMA (a
+# single rounding) wherever the target has one - every arm64 host, and x86_64
+# only with -mfma - so the arm64 builds of the native code and of the
+# runtime's float helpers rounded differently from the x86_64 ones. Off, each
+# operation rounds as the C says, as the x86 guest's own FMUL and FADD do.
+# Plain char is signed on x86, Apple's arm64 and wasm32 and unsigned in the
+# Linux and Android aarch64 ABIs; the kit and the native code are written for
+# a signed one.
+add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-ffp-contract=off;-fsigned-char>")
 if(ANDROID OR (RECOMP_GAME_MODULES AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
   # All static and object libraries feed the shared SDL application (Android)
   # or a game module (Linux; Apple's code is position independent already).
