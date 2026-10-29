@@ -52,6 +52,12 @@
 #define NS_LAN_TEXT 0x00a09de0          /* fastcall ECX a text ref: const wstr* */
 #define NS_LAN_MAP_NAME 0x009d9400      /* fastcall ECX info+0xcc: const wstr* */
 #define NS_LAN_MAP_SIZE 0x00729b30      /* fastcall ECX out wstr, EDX size */
+/* ubi.com mode (research notes lan/re-ubi-screens.md §5): the same lobbies. */
+#define NS_LAN_SERVICES 0x005e8050      /* fastcall ECX id: the matchmaker container */
+#define NS_LAN_MATCHMAKER_ID 0x8c348b00
+#define NS_LAN_CONTAINER_MODE 0x20      /* container vt+0x20: 0 LAN, 1 ubi.com */
+#define NS_LAN_L_PROFILE 0x1a8          /* MenuProfile IButton (ubi.com only) */
+#define NS_LAN_L_LEAVING 0x1b0          /* CLobbyLeaveListener while changing channel */
 #endif
 
 #if defined(NS_LAN_VT_LOBBY)
@@ -273,6 +279,30 @@ static uint32_t lobby_reaction(void) {
     return g_duel ? NS_LAN_DUEL_LOBBY_REACTION : NS_LAN_LOBBY_REACTION;
 }
 
+/* The lobby is ubi.com's (ubi-gs): its Menu panel instead of MenuLan, no
+ * name, duel or standard button (the channel decides), profile and channel. */
+static int lobby_ubi(Scratch *s) {
+#ifdef NS_LAN_SERVICES
+    const uint32_t container = ns_call(s, NS_LAN_SERVICES, NS_LAN_MATCHMAKER_ID, 0, NULL, 0);
+    return ns_ptr(container) && ns_vcall(s, container, NS_LAN_CONTAINER_MODE, NULL, 0) == 1;
+#else
+    (void)s;
+    return 0;
+#endif
+}
+
+/* The players list's selected row, as its index in `players`, or -1. */
+static int selected_player(Scratch *s, uint32_t list, const uint32_t *players, int n) {
+    const uint32_t item = ns_ptr(list) ? ns_vcall(s, list, 0x24, NULL, 0) : 0; /* GetSelected */
+    const uint32_t data = ns_ptr(item) ? cast(s, ns_vcall(s, item, NS_LAN_ITEM_DATA, NULL, 0), NS_LAN_RTTI_OBJECT,
+                                              NS_LAN_RTTI_PLAYER_DATA)
+                                       : 0;
+    for (int i = 0; data && i < n; ++i)
+        if (players[i] == data)
+            return i;
+    return -1;
+}
+
 static void lobby_command(Scratch *s, uint32_t screen, const char *cmd) {
     char verb[16], name[32], text[256];
     ns_cmd_str(cmd, "do", verb, sizeof verb);
@@ -286,10 +316,24 @@ static void lobby_command(Scratch *s, uint32_t screen, const char *cmd) {
             const uint32_t data = games[i];
             ns_vcall(s, rd32(gv + NS_LAN_GV_LIST), NS_LAN_LIST_SELECT, &data, 1);
         }
+    } else if (strcmp(verb, "select_player") == 0) {
+        static uint32_t players[64];
+        const uint32_t ctrl = rd32(screen + NS_LAN_L_PLAYERS);
+        const uint32_t list = ns_ptr(ctrl) ? rd32(ctrl + NS_LAN_PLAYERS_LIST) : 0;
+        const int n = list_data(s, list, NS_LAN_RTTI_PLAYER_DATA, players, 64);
+        const int i = ns_cmd_int(cmd, "index", -1);
+        if (i >= 0 && i < n) {
+            const uint32_t data = players[i];
+            ns_vcall(s, list, NS_LAN_LIST_SELECT, &data, 1);
+        }
     } else if (strcmp(verb, "press") == 0) {
         ns_cmd_str(cmd, "name", name, sizeof name);
-        static const char *const ok[] = {"join", "create", "changename", "duelmode", "standardmode", "disconnect"};
-        for (size_t k = 0; k < sizeof ok / sizeof ok[0]; ++k)
+        static const char *const lan[] = {"join", "create", "changename", "duelmode", "standardmode", "disconnect"};
+        static const char *const ubi[] = {"join", "create", "profile", "channel", "disconnect"};
+        const int is_ubi = lobby_ubi(s);
+        const char *const *ok = is_ubi ? ubi : lan;
+        const size_t count = is_ubi ? sizeof ubi / sizeof ubi[0] : sizeof lan / sizeof lan[0];
+        for (size_t k = 0; k < count; ++k)
             if (strcmp(name, ok[k]) == 0)
                 ns_react(s, reactions, lobby_reaction(), name);
         if (strcmp(name, "back") == 0)
@@ -394,10 +438,13 @@ static void lobby_document(Json *j, Scratch *s, uint32_t screen) {
     j_lit(j, "],");
     j_kv_str(j, "players_title", ns_tr("Игроки", "Players"));
     j_lit(j, ",\"players\":[");
+    const int ubi = lobby_ubi(s);
+    int player = -1;
     {
         static uint32_t players[64];
         const uint32_t ctrl = rd32(screen + NS_LAN_L_PLAYERS);
-        const int m = ns_ptr(ctrl) ? list_data(s, rd32(ctrl + NS_LAN_PLAYERS_LIST), NS_LAN_RTTI_PLAYER_DATA, players, 64) : 0;
+        const uint32_t list = ns_ptr(ctrl) ? rd32(ctrl + NS_LAN_PLAYERS_LIST) : 0;
+        const int m = list_data(s, list, NS_LAN_RTTI_PLAYER_DATA, players, 64);
         for (int i = 0; i < m; ++i) {
             char who[64];
             read_narrow(players[i] + NS_LAN_PLAYER_NAME, who, sizeof who);
@@ -405,23 +452,45 @@ static void lobby_document(Json *j, Scratch *s, uint32_t screen) {
                 j_lit(j, ",");
             j_str(j, who);
         }
+        /* ubi.com: a player is picked for their profile. */
+        if (ubi)
+            player = selected_player(s, list, players, m);
     }
     j_lit(j, "]");
+    if (ubi) {
+        j_printf(j, ",\"player_selected\":%d,", player);
+        j_kv_str(j, "empty", ns_tr("На этом канале пока нет игр", "No games on this channel yet"));
+    }
     j_chat(j, rd32(screen + NS_LAN_L_CHAT), 1);
     const int joining = ns_ptr(rd32(screen + NS_LAN_L_JOINING));
-    if (joining) {
+#ifdef NS_LAN_L_LEAVING
+    const int leaving = ubi && ns_ptr(rd32(screen + NS_LAN_L_LEAVING));
+#else
+    const int leaving = 0;
+#endif
+    if (joining || leaving) {
         j_lit(j, ",");
-        j_kv_str(j, "busy", ns_tr("Выполняется вход в игру...", "Joining the game..."));
+        j_kv_str(j, "busy", joining ? ns_tr("Выполняется вход в игру...", "Joining the game...")
+                                    : ns_tr("Смена канала...", "Changing the channel..."));
     }
+    const int idle = !joining && !leaving;
     const uint32_t join = ns_iwindow(rd32(screen + NS_LAN_L_JOIN));
     j_lit(j, ",\"buttons\":[");
-    j_button(j, 1, "join", ns_tr("Войти", "Join"), !joining && join && ns_enabled(s, join));
-    j_button(j, 0, "create", ns_tr("Создать", "Create"), !joining);
-    j_button(j, 0, "changename", ns_tr("Имя игрока", "Player Name"), !joining);
-    if (g_duel)
-        j_button(j, 0, "standardmode", ns_tr("Обычный режим", "Standard Mode"), !joining);
-    else
-        j_button(j, 0, "duelmode", ns_tr("Дуэль", "Duel"), !joining);
+    j_button(j, 1, "join", ns_tr("Войти", "Join"), idle && join && ns_enabled(s, join));
+    j_button(j, 0, "create", ns_tr("Создать", "Create"), idle);
+    if (ubi) {
+#ifdef NS_LAN_L_PROFILE
+        const uint32_t profile = ns_iwindow(rd32(screen + NS_LAN_L_PROFILE));
+        j_button(j, 0, "profile", ns_tr("Профиль", "Profile"), idle && player >= 0 && profile && ns_enabled(s, profile));
+#endif
+        j_button(j, 0, "channel", ns_tr("Канал", "Channel"), idle);
+    } else {
+        j_button(j, 0, "changename", ns_tr("Имя игрока", "Player Name"), idle);
+        if (g_duel)
+            j_button(j, 0, "standardmode", ns_tr("Обычный режим", "Standard Mode"), idle);
+        else
+            j_button(j, 0, "duelmode", ns_tr("Дуэль", "Duel"), idle);
+    }
     j_button(j, 0, "back", ns_tr("Выйти", "Leave"), 1);
     j_lit(j, "]}");
 }
