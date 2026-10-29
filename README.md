@@ -320,7 +320,8 @@ moves to ports 8988 and 8989.
 re-implementation of it that someone has to run; every player uses the same server, and
 its operator puts the server's public address in its `servers.ini`. Clicking *ubi-gs*
 asks for that server's address (`host` or `host:port`) and remembers the ones that
-answered, in `ubi-gs-servers.txt` in the profile folder. The game gets the server list
+answered, in `ubi-gs-servers.txt` in the profile folder; until one has, it suggests the
+community server `ubigs.wayofharm.com`. The game gets the server list
 from it; the lobby itself does not work yet.
 
 ## What's next

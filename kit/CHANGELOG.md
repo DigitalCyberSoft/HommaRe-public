@@ -39,6 +39,8 @@
   `HostPagePrompt`). A game asking from the thread that presents its frames gets it on
   the presenter's repeated frames, so a blocked main thread still shows it; text input
   (a phone's keyboard) is raised while it is open.
+- `[online] default_server` ("host" or "host:port") is offered in the field and the list
+  while the profile's list is empty; once a server answered, the most recent one is.
 - `RECOMP_AUTO_KEYS` takes `text:...`, typed into such a prompt.
 - The settings menu's TrueType canvas moved to `runtime/gdi32_canvas.h`, shared with it.
 

@@ -67,6 +67,8 @@ struct Hit {
 struct State {
     std::mutex mu;
     std::string path, title, text; // the list's file, game.toml's words
+    std::string default_server;    // canonical; offered while the list is empty
+    bool suggested = false;        // the list is that default alone
     bool open = false;
     bool busy = false; // a chosen server is being tried
     int answer = 0;    // 1 chosen and not yet polled, -1 cancelled
@@ -268,7 +270,10 @@ void draw(int w, int h, std::vector<uint8_t> *page) {
 
     // The servers that answered before.
     if (rows) {
-        text(c, l.small, left, y, "Servers used before (Up and Down choose)", kFaint, right);
+        text(c, l.small, left, y,
+             g.suggested ? "Suggested server (none used yet)"
+                         : "Servers used before (Up and Down choose)",
+             kFaint, right);
         y += l.small.height + u(8);
         const int rh = u(50);
         for (size_t i = 0; i < rows; ++i) {
@@ -400,12 +405,18 @@ bool server_list_save(const std::string &path, const std::vector<std::string> &l
     return true;
 }
 
-void server_prompt_install(const std::string &profile_dir, const char *title, const char *text) {
+void server_prompt_install(const std::string &profile_dir, const char *title, const char *text,
+                           const char *default_server) {
     {
         std::lock_guard lock(g.mu);
         g.path = server_list_path(profile_dir);
         g.title = title ? title : "";
         g.text = text ? text : "";
+        g.default_server.clear();
+        if (default_server && *default_server &&
+            !curl_http_parse_server(default_server, nullptr, &g.default_server))
+            fprintf(stderr, "[host] ubi-gs: the default server \"%s\" is not an address\n",
+                    default_server);
     }
     curl_http_set_chooser(&kChooser);
     host_page_set_prompt(&kPage);
@@ -419,12 +430,17 @@ bool begin(const char *error) {
     std::lock_guard lock(g.mu);
     if (!g.open) {
         g.list = server_list_load(g.path, kMaxServers);
+        const size_t used = g.list.size();
+        if (g.list.empty() && !g.default_server.empty())
+            g.list.push_back(g.default_server); // nothing used yet: the game's own suggestion
+        g.suggested = used == 0 && !g.list.empty();
         g.selected = g.list.empty() ? -1 : 0;
         g.field = g.list.empty() ? "" : g.list[0];
         g.caret = g.field.size();
         g.hover_kind = g.hover_index = -1;
-        fprintf(stderr, "[host] ubi-gs: asking for a server (%zu used before%s%s)\n", g.list.size(),
-                g.list.empty() ? "" : ", preselected ", g.list.empty() ? "" : g.list[0].c_str());
+        fprintf(stderr, "[host] ubi-gs: asking for a server (%zu used before%s%s%s)\n", used,
+                g.list.empty() ? "" : ", preselected ", g.list.empty() ? "" : g.list[0].c_str(),
+                used == 0 && !g.list.empty() ? ", the default" : "");
     }
     g.open = true;
     g.busy = false;

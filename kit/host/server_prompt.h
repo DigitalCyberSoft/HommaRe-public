@@ -33,9 +33,12 @@ void server_list_remember(std::vector<std::string> *list, const std::string &ser
 bool server_list_save(const std::string &path, const std::vector<std::string> &list);
 
 // Makes this host the one that asks (curl_http_set_chooser) and shows the
-// prompt (host_page_set_prompt). `title` and `text` are game.toml [online]'s.
-// Call before the guest starts.
-void server_prompt_install(const std::string &profile_dir, const char *title, const char *text);
+// prompt (host_page_set_prompt). `title`, `text` and `default_server` are
+// game.toml [online]'s: the default is offered, in the field and the list,
+// while the profile's list is empty; once a server answered, the list's most
+// recent one is. Call before the guest starts.
+void server_prompt_install(const std::string &profile_dir, const char *title, const char *text,
+                           const char *default_server = nullptr);
 
 // The prompt's model, apart from the runtime and the presenter, for tests:
 // what curl_http's chooser and the page's hooks call.

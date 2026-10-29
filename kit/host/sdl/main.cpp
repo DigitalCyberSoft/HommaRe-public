@@ -3429,7 +3429,7 @@ int main(int argc, char **argv) {
     // player names when its online mode asks (server_prompt.h).
     if (*RECOMP_ONLINE_GSCONNECT_HOST)
         server_prompt_install(host_layout().profile_dir, RECOMP_ONLINE_PROMPT_TITLE,
-                              RECOMP_ONLINE_PROMPT_TEXT);
+                              RECOMP_ONLINE_PROMPT_TEXT, RECOMP_ONLINE_DEFAULT_SERVER);
 
     // The renderer first: the presenter shares its device, so a present
     // cannot run ahead of the scene it is showing.

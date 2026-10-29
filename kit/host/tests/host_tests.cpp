@@ -1317,6 +1317,33 @@ static void test_server_prompt() {
     host_page_prompt_cancel();
     CHECK(server_prompt::poll(buf, sizeof buf) == -1);
     server_prompt::end();
+
+    // game.toml's default server: offered, in the field and the list, while
+    // nothing was used; the list's own servers once one answered.
+    os_unlink(path.c_str());
+    server_prompt_install(profile, "ubi-gs server", "Why this is asked.", "UBIGS.Example.NET");
+    CHECK(server_prompt::begin("") && server_prompt::field() == "ubigs.example.net" &&
+          server_prompt::selected() == 0 && server_prompt::servers().size() == 1);
+    CHECK(server_prompt::poll(buf, sizeof buf) == 0);
+    host_page_prompt_key(0x1c, true); // Enter takes it
+    host_page_prompt_key(0x1c, false);
+    CHECK(server_prompt::poll(buf, sizeof buf) == 1 && std::string(buf) == "ubigs.example.net");
+    server_prompt::end();
+    OsStat none;
+    CHECK(os_stat(path.c_str(), &none) != 0); // offered, not saved: only a server that answers is
+    write_file(path, "mine.example.org:7000\n");
+    CHECK(server_prompt::begin("") && server_prompt::field() == "mine.example.org:7000" &&
+          server_prompt::servers() == std::vector<std::string>{"mine.example.org:7000"});
+    host_page_prompt_cancel();
+    server_prompt::end();
+    // Not an address: no default.
+    os_unlink(path.c_str());
+    server_prompt_install(profile, "ubi-gs server", "Why this is asked.", "http://bad host/");
+    CHECK(server_prompt::begin("") && server_prompt::field().empty() &&
+          server_prompt::servers().empty());
+    host_page_prompt_cancel();
+    server_prompt::end();
+
     host_page_set_prompt(nullptr);
     curl_http_set_chooser(nullptr);
     os_unlink(deeper.c_str());
