@@ -21,6 +21,11 @@
   a unicast datagram to one of its sockets only.
 - Failed socket calls go to the log; `RECOMP_TRACE_SOCKETS=1` also shows each
   datagram's first bytes.
+- `GetLastError`/`WSAGetLastError` are per thread, as on Windows: a call into
+  the runtime may run another guest thread, whose error then replaced the
+  caller's. Heroes V's Ubi.com thread took the main thread's
+  `ERROR_FILE_NOT_FOUND` for its lobby connection's error after a `recv` that
+  would block, closed the connection, and creating a game failed.
 
 ## A GS game's server list from a community server (ubi-gs)
 

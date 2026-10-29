@@ -323,7 +323,7 @@ re-implementation of it that someone has to run; every player uses the same serv
 Clicking *ubi-gs* asks for that server's address (`host` or `host:port`) and remembers the
 ones that answered, in `ubi-gs-servers.txt` in the profile folder; until one has, it
 suggests the community server `ubigs.wayofharm.com`. The game gets the server list from
-it, logs in and joins the lobby's channels; creating a game there doesn't work yet.
+it, logs in, joins the lobby's channels, and creates and joins games there.
 
 ## What's next
 
