@@ -5,9 +5,10 @@ name: Builds
 # which are never in the repository, so everything here links against the
 # kit's stub translation (kit/tools/gen_stub_translation.py): HommaRe's
 # game.toml (its launcher, native screens and settings) with no game code,
-# and native/ compiled but not linked (recomp_native_check). Nothing of the
-# game is built, run or uploaded; the one artifact is the Windows test
-# binaries, made here from the kit and the stub.
+# and native/ compiled but not linked (recomp_native_check). pop_smoke, the
+# kit's Populous smoke host, is left out: it reads globals Heroes V does not
+# have. Nothing of the game is built, run or uploaded; the one artifact is
+# the Windows test binaries, made here from the kit and the stub.
 
 on:
   push:
@@ -54,7 +55,7 @@ jobs:
       - name: Every test binary, the headless hosts, and native/ compiled
         run: |
           python kit/tools/test.py --game-dir "$PWD" --preset linux-stub --compile-only
-          cmake --build build/cmake/linux-stub --target pop_headless pop_smoke
+          cmake --build build/cmake/linux-stub --target pop_headless
           ccache -s
       - name: The suites that need no game; the GPU ones on lavapipe
         env:
@@ -89,7 +90,7 @@ jobs:
       - name: Every test binary, the headless hosts, and native/ compiled
         run: |
           python kit/tools/test.py --game-dir "$PWD" --preset macos-stub --compile-only
-          cmake --build build/cmake/macos-stub --target pop_headless pop_smoke
+          cmake --build build/cmake/macos-stub --target pop_headless
           ccache -s
       - name: The suites that need no game; the GPU ones on Metal
         run: ctest --test-dir build/cmake/macos-stub -L "nogame|game|gpu" --output-on-failure
@@ -225,7 +226,7 @@ jobs:
             "-DPOP_BUILD_ROOT=$ws/build" "-DPython3_EXECUTABLE=$ws/.ci/Scripts/python.exe" `
             -DRECOMP_FFMPEG_MAKE=C:/msys64/usr/bin/make.exe
       - name: The app, every test binary, the headless hosts, and native/ compiled
-        run: cmake --build build/cmake/windows-stub --target recomp_app check_binaries pop_headless pop_smoke
+        run: cmake --build build/cmake/windows-stub --target recomp_app check_binaries pop_headless
       - name: The suites that need no game and no GPU
         run: ctest --test-dir build/cmake/windows-stub -L "nogame|game" --output-on-failure
 
