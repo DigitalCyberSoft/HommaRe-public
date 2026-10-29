@@ -1026,28 +1026,28 @@ enum LauncherCatalog {
    "zh-Hans": "从 {setup} 进行的安装中途停止了。请继续安装：已解压的文件会保留。"
   },
   "notFoundDetail.ios": {
-   "en": "Add the game folder from your GOG installation: copy it to this device with the Files app or Finder, then choose it here.",
-   "ru": "Добавьте папку игры из вашей GOG-установки: скопируйте её на устройство через «Файлы» или Finder и выберите здесь.",
-   "cs": "Přidejte složku hry ze své instalace GOG: zkopírujte ji do zařízení přes aplikaci Soubory nebo Finder a pak ji vyberte zde.",
-   "de": "Füge den Spielordner deiner GOG-Installation hinzu: Kopiere ihn mit der App „Dateien“ oder dem Finder auf dieses Gerät und wähle ihn dann hier aus.",
-   "es": "Añade la carpeta del juego de tu instalación de GOG: cópiala a este dispositivo con la app Archivos o el Finder y luego elígela aquí.",
-   "fr": "Ajoutez le dossier du jeu de votre installation GOG : copiez-le sur cet appareil avec l’app Fichiers ou le Finder, puis choisissez-le ici.",
-   "it": "Aggiungi la cartella del gioco della tua installazione GOG: copiala su questo dispositivo con l’app File o il Finder, poi sceglila qui.",
-   "hu": "Add hozzá a játék mappáját a GOG-telepítésedből: másold erre az eszközre a Fájlok appal vagy a Finderrel, majd válaszd ki itt.",
-   "pl": "Dodaj folder gry ze swojej instalacji GOG: skopiuj go na to urządzenie przez aplikację Pliki lub Findera, a potem wybierz go tutaj.",
-   "zh-Hans": "添加你 GOG 安装中的游戏文件夹：用“文件”App 或访达将其拷贝到本设备，然后在这里选择它。"
+   "en": "Install it from GOG.com: sign in, and the app downloads the games you own. Have the files already? Add the game folder from your GOG installation: copy it to this device with the Files app or Finder, then choose it here.",
+   "ru": "Установите игру из GOG.com: войдите, и приложение скачает купленные игры. Файлы уже есть? Добавьте папку игры из вашей GOG-установки: скопируйте её на устройство через «Файлы» или Finder и выберите здесь.",
+   "cs": "Nainstalujte ji z GOG.com: přihlaste se a aplikace stáhne hry, které vlastníte. Soubory už máte? Přidejte složku hry ze své instalace GOG: zkopírujte ji do zařízení přes aplikaci Soubory nebo Finder a pak ji vyberte zde.",
+   "de": "Installiere es von GOG.com: Melde dich an, und die App lädt die Spiele herunter, die du besitzt. Hast du die Dateien schon? Füge den Spielordner deiner GOG-Installation hinzu: Kopiere ihn mit der App „Dateien“ oder dem Finder auf dieses Gerät und wähle ihn dann hier aus.",
+   "es": "Instálalo desde GOG.com: inicia sesión y la app descargará los juegos que tienes. ¿Ya tienes los archivos? Añade la carpeta del juego de tu instalación de GOG: cópiala a este dispositivo con la app Archivos o el Finder y luego elígela aquí.",
+   "fr": "Installez-le depuis GOG.com : connectez-vous et l’app télécharge les jeux que vous possédez. Vous avez déjà les fichiers ? Ajoutez le dossier du jeu de votre installation GOG : copiez-le sur cet appareil avec l’app Fichiers ou le Finder, puis choisissez-le ici.",
+   "it": "Installalo da GOG.com: accedi e l’app scarica i giochi che possiedi. Hai già i file? Aggiungi la cartella del gioco della tua installazione GOG: copiala su questo dispositivo con l’app File o il Finder, poi sceglila qui.",
+   "hu": "Telepítsd a GOG.com-ról: jelentkezz be, és az alkalmazás letölti a megvásárolt játékaidat. Már megvannak a fájlok? Add hozzá a játék mappáját a GOG-telepítésedből: másold erre az eszközre a Fájlok appal vagy a Finderrel, majd válaszd ki itt.",
+   "pl": "Zainstaluj ją z GOG.com: zaloguj się, a aplikacja pobierze posiadane gry. Masz już pliki? Dodaj folder gry ze swojej instalacji GOG: skopiuj go na to urządzenie przez aplikację Pliki lub Findera, a potem wybierz go tutaj.",
+   "zh-Hans": "从 GOG.com 安装：登录后，应用会下载你拥有的游戏。已经有文件了？添加你 GOG 安装中的游戏文件夹：用“文件”App 或访达将其拷贝到本设备，然后在这里选择它。"
   },
   "notFoundDetail.mac": {
-   "en": "Install the game from your GOG offline installer (setup_….exe with its .bin), or point the launcher at the folder where the GOG version is installed.",
-   "ru": "Установите игру из офлайн-инсталлятора GOG (setup_….exe и его .bin) или укажите папку, куда установлена GOG-версия.",
-   "cs": "Nainstalujte hru z offline instalátoru GOG (setup_….exe s jeho .bin), nebo spouštěči ukažte složku, kde je nainstalována verze z GOG.",
-   "de": "Installiere das Spiel aus deinem GOG-Offline-Installer (setup_….exe mit der zugehörigen .bin) oder zeige dem Launcher den Ordner, in dem die GOG-Version installiert ist.",
-   "es": "Instala el juego desde tu instalador sin conexión de GOG (setup_….exe con su .bin) o indica al launcher la carpeta donde está instalada la versión de GOG.",
-   "fr": "Installez le jeu depuis votre installeur hors ligne GOG (setup_….exe avec son .bin), ou indiquez au lanceur le dossier où la version GOG est installée.",
-   "it": "Installa il gioco dall’installer offline di GOG (setup_….exe con il suo .bin) o indica al launcher la cartella in cui è installata la versione GOG.",
-   "hu": "Telepítsd a játékot a GOG offline telepítőjéből (setup_….exe a hozzá tartozó .bin fájllal), vagy add meg az indítónak a mappát, ahová a GOG-verzió telepítve van.",
-   "pl": "Zainstaluj grę z instalatora offline GOG (setup_….exe z jego plikiem .bin) albo wskaż launcherowi folder, w którym zainstalowana jest wersja z GOG.",
-   "zh-Hans": "用你的 GOG 离线安装程序（setup_….exe 及其 .bin）安装游戏，或为启动器指定 GOG 版本的安装文件夹。"
+   "en": "Install it from GOG.com: sign in, and the app downloads the games you own. Have the files already? Install the game from your GOG offline installer (setup_….exe with its .bin), or point the launcher at the folder where the GOG version is installed.",
+   "ru": "Установите игру из GOG.com: войдите, и приложение скачает купленные игры. Файлы уже есть? Установите игру из офлайн-инсталлятора GOG (setup_….exe и его .bin) или укажите папку, куда установлена GOG-версия.",
+   "cs": "Nainstalujte ji z GOG.com: přihlaste se a aplikace stáhne hry, které vlastníte. Soubory už máte? Nainstalujte hru z offline instalátoru GOG (setup_….exe s jeho .bin), nebo spouštěči ukažte složku, kde je nainstalována verze z GOG.",
+   "de": "Installiere es von GOG.com: Melde dich an, und die App lädt die Spiele herunter, die du besitzt. Hast du die Dateien schon? Installiere das Spiel aus deinem GOG-Offline-Installer (setup_….exe mit der zugehörigen .bin) oder zeige dem Launcher den Ordner, in dem die GOG-Version installiert ist.",
+   "es": "Instálalo desde GOG.com: inicia sesión y la app descargará los juegos que tienes. ¿Ya tienes los archivos? Instala el juego desde tu instalador sin conexión de GOG (setup_….exe con su .bin) o indica al launcher la carpeta donde está instalada la versión de GOG.",
+   "fr": "Installez-le depuis GOG.com : connectez-vous et l’app télécharge les jeux que vous possédez. Vous avez déjà les fichiers ? Installez le jeu depuis votre installeur hors ligne GOG (setup_….exe avec son .bin), ou indiquez au lanceur le dossier où la version GOG est installée.",
+   "it": "Installalo da GOG.com: accedi e l’app scarica i giochi che possiedi. Hai già i file? Installa il gioco dall’installer offline di GOG (setup_….exe con il suo .bin) o indica al launcher la cartella in cui è installata la versione GOG.",
+   "hu": "Telepítsd a GOG.com-ról: jelentkezz be, és az alkalmazás letölti a megvásárolt játékaidat. Már megvannak a fájlok? Telepítsd a játékot a GOG offline telepítőjéből (setup_….exe a hozzá tartozó .bin fájllal), vagy add meg az indítónak a mappát, ahová a GOG-verzió telepítve van.",
+   "pl": "Zainstaluj ją z GOG.com: zaloguj się, a aplikacja pobierze posiadane gry. Masz już pliki? Zainstaluj grę z instalatora offline GOG (setup_….exe z jego plikiem .bin) albo wskaż launcherowi folder, w którym zainstalowana jest wersja z GOG.",
+   "zh-Hans": "从 GOG.com 安装：登录后，应用会下载你拥有的游戏。已经有文件了？用你的 GOG 离线安装程序（setup_….exe 及其 .bin）安装游戏，或为启动器指定 GOG 版本的安装文件夹。"
   },
   "wrongVersionDetail": {
    "args": [
@@ -1555,16 +1555,16 @@ enum LauncherCatalog {
    "zh-Hans": "请同时选择 {other} 和 {picked}（勾选两个文件），或选择它们所在的文件夹。"
   },
   "notFoundDetail.iosInstaller": {
-   "en": "Copy your GOG offline installer (setup_….exe with its …-1.bin) to this device with the Files app or Finder, then choose both files or their folder here. A folder with the installed game works too.",
-   "ru": "Скопируйте офлайн-инсталлятор GOG (setup_….exe и его …-1.bin) на устройство через «Файлы» или Finder и выберите здесь оба файла или их папку. Подойдёт и папка установленной игры.",
-   "cs": "Zkopírujte offline instalátor GOG (setup_….exe s jeho …-1.bin) do zařízení přes aplikaci Soubory nebo Finder a pak zde vyberte oba soubory nebo jejich složku. Poslouží i složka s nainstalovanou hrou.",
-   "de": "Kopiere deinen GOG-Offline-Installer (setup_….exe mit der zugehörigen …-1.bin) mit der App „Dateien“ oder dem Finder auf dieses Gerät und wähle hier beide Dateien oder ihren Ordner aus. Ein Ordner mit dem installierten Spiel geht auch.",
-   "es": "Copia tu instalador offline de GOG (setup_….exe con su …-1.bin) a este dispositivo con la app Archivos o el Finder y luego elige aquí ambos archivos o su carpeta. También sirve una carpeta con el juego instalado.",
-   "fr": "Copiez votre installeur hors ligne GOG (setup_….exe avec son …-1.bin) sur cet appareil avec l’app Fichiers ou le Finder, puis choisissez ici les deux fichiers ou leur dossier. Un dossier contenant le jeu installé convient aussi.",
-   "it": "Copia l’installer offline GOG (setup_….exe con il relativo …-1.bin) su questo dispositivo con l’app File o il Finder, poi scegli qui entrambi i file o la loro cartella. Va bene anche una cartella con il gioco installato.",
-   "hu": "Másold a GOG offline telepítőt (setup_….exe a hozzá tartozó …-1.bin fájllal) erre az eszközre a Fájlok appal vagy a Finderrel, majd válaszd ki itt mindkét fájlt vagy a mappájukat. A telepített játék mappája is megfelel.",
-   "pl": "Skopiuj instalator offline GOG (setup_….exe z jego …-1.bin) na to urządzenie przez aplikację Pliki lub Findera, a potem wybierz tutaj oba pliki albo ich folder. Folder z zainstalowaną grą też się nada.",
-   "zh-Hans": "用“文件”App 或访达将你的 GOG 离线安装程序（setup_….exe 及其 …-1.bin）拷贝到本设备，然后在这里选择这两个文件或它们所在的文件夹。已安装游戏的文件夹也可以。"
+   "en": "Install it from GOG.com: sign in, and the app downloads the games you own. Have the files already? Copy your GOG offline installer (setup_….exe with its …-1.bin) to this device with the Files app or Finder, then choose both files or their folder here. A folder with the installed game works too.",
+   "ru": "Установите игру из GOG.com: войдите, и приложение скачает купленные игры. Файлы уже есть? Скопируйте офлайн-инсталлятор GOG (setup_….exe и его …-1.bin) на устройство через «Файлы» или Finder и выберите здесь оба файла или их папку. Подойдёт и папка установленной игры.",
+   "cs": "Nainstalujte ji z GOG.com: přihlaste se a aplikace stáhne hry, které vlastníte. Soubory už máte? Zkopírujte offline instalátor GOG (setup_….exe s jeho …-1.bin) do zařízení přes aplikaci Soubory nebo Finder a pak zde vyberte oba soubory nebo jejich složku. Poslouží i složka s nainstalovanou hrou.",
+   "de": "Installiere es von GOG.com: Melde dich an, und die App lädt die Spiele herunter, die du besitzt. Hast du die Dateien schon? Kopiere deinen GOG-Offline-Installer (setup_….exe mit der zugehörigen …-1.bin) mit der App „Dateien“ oder dem Finder auf dieses Gerät und wähle hier beide Dateien oder ihren Ordner aus. Ein Ordner mit dem installierten Spiel geht auch.",
+   "es": "Instálalo desde GOG.com: inicia sesión y la app descargará los juegos que tienes. ¿Ya tienes los archivos? Copia tu instalador offline de GOG (setup_….exe con su …-1.bin) a este dispositivo con la app Archivos o el Finder y luego elige aquí ambos archivos o su carpeta. También sirve una carpeta con el juego instalado.",
+   "fr": "Installez-le depuis GOG.com : connectez-vous et l’app télécharge les jeux que vous possédez. Vous avez déjà les fichiers ? Copiez votre installeur hors ligne GOG (setup_….exe avec son …-1.bin) sur cet appareil avec l’app Fichiers ou le Finder, puis choisissez ici les deux fichiers ou leur dossier. Un dossier contenant le jeu installé convient aussi.",
+   "it": "Installalo da GOG.com: accedi e l’app scarica i giochi che possiedi. Hai già i file? Copia l’installer offline GOG (setup_….exe con il relativo …-1.bin) su questo dispositivo con l’app File o il Finder, poi scegli qui entrambi i file o la loro cartella. Va bene anche una cartella con il gioco installato.",
+   "hu": "Telepítsd a GOG.com-ról: jelentkezz be, és az alkalmazás letölti a megvásárolt játékaidat. Már megvannak a fájlok? Másold a GOG offline telepítőt (setup_….exe a hozzá tartozó …-1.bin fájllal) erre az eszközre a Fájlok appal vagy a Finderrel, majd válaszd ki itt mindkét fájlt vagy a mappájukat. A telepített játék mappája is megfelel.",
+   "pl": "Zainstaluj ją z GOG.com: zaloguj się, a aplikacja pobierze posiadane gry. Masz już pliki? Skopiuj instalator offline GOG (setup_….exe z jego …-1.bin) na to urządzenie przez aplikację Pliki lub Findera, a potem wybierz tutaj oba pliki albo ich folder. Folder z zainstalowaną grą też się nada.",
+   "zh-Hans": "从 GOG.com 安装：登录后，应用会下载你拥有的游戏。已经有文件了？用“文件”App 或访达将你的 GOG 离线安装程序（setup_….exe 及其 …-1.bin）拷贝到本设备，然后在这里选择这两个文件或它们所在的文件夹。已安装游戏的文件夹也可以。"
   },
   "phasePatching": {
    "en": "Applying the update",
@@ -2021,6 +2021,30 @@ enum LauncherCatalog {
    "hu": "{count} GOG-fájl nem egyezik az alkalmazás jegyzékével ({list}). Indítsd újra a letöltést: újra letöltődnek.",
    "pl": "Plików z GOG niezgodnych z manifestem aplikacji: {count} ({list}). Uruchom pobieranie ponownie — zostaną pobrane od nowa.",
    "zh-Hans": "有 {count} 个来自 GOG 的文件与应用的清单不符（{list}）。请重新开始下载：这些文件会重新下载。"
+  },
+  "gogInterruptedDetail": {
+   "en": "The download from GOG.com stopped before it was finished. Resume it: what is already downloaded is kept.",
+   "ru": "Загрузка из GOG.com прервалась. Продолжите её — уже скачанное останется.",
+   "cs": "Stahování z GOG.com se přerušilo. Pokračujte v něm – již stažené soubory zůstanou zachovány.",
+   "de": "Der Download von GOG.com wurde unterbrochen. Setze ihn fort: Bereits Heruntergeladenes bleibt erhalten.",
+   "es": "La descarga desde GOG.com se interrumpió. Reanúdala: lo ya descargado se conserva.",
+   "fr": "Le téléchargement depuis GOG.com s’est interrompu. Reprenez-le : ce qui est déjà téléchargé est conservé.",
+   "it": "Il download da GOG.com si è interrotto. Riprendilo: ciò che è già stato scaricato viene conservato.",
+   "hu": "A letöltés a GOG.com-ról félbeszakadt. Folytasd: a már letöltött fájlok megmaradnak.",
+   "pl": "Pobieranie z GOG.com zostało przerwane. Wznów je — już pobrane pliki zostaną zachowane.",
+   "zh-Hans": "从 GOG.com 的下载在完成前中断了。继续下载即可：已下载的内容会保留。"
+  },
+  "notFoundDetail.mac.linux": {
+   "en": "Install the game from your GOG offline installer (setup_….exe with its .bin), or point the launcher at the folder where the GOG version is installed.",
+   "ru": "Установите игру из офлайн-инсталлятора GOG (setup_….exe и его .bin) или укажите папку, куда установлена GOG-версия.",
+   "cs": "Nainstalujte hru z offline instalátoru GOG (setup_….exe s jeho .bin), nebo spouštěči ukažte složku, kde je nainstalována verze z GOG.",
+   "de": "Installiere das Spiel aus deinem GOG-Offline-Installer (setup_….exe mit der zugehörigen .bin) oder zeige dem Launcher den Ordner, in dem die GOG-Version installiert ist.",
+   "es": "Instala el juego desde tu instalador sin conexión de GOG (setup_….exe con su .bin) o indica al launcher la carpeta donde está instalada la versión de GOG.",
+   "fr": "Installez le jeu depuis votre installeur hors ligne GOG (setup_….exe avec son .bin), ou indiquez au lanceur le dossier où la version GOG est installée.",
+   "it": "Installa il gioco dall’installer offline di GOG (setup_….exe con il suo .bin) o indica al launcher la cartella in cui è installata la versione GOG.",
+   "hu": "Telepítsd a játékot a GOG offline telepítőjéből (setup_….exe a hozzá tartozó .bin fájllal), vagy add meg az indítónak a mappát, ahová a GOG-verzió telepítve van.",
+   "pl": "Zainstaluj grę z instalatora offline GOG (setup_….exe z jego plikiem .bin) albo wskaż launcherowi folder, w którym zainstalowana jest wersja z GOG.",
+   "zh-Hans": "用你的 GOG 离线安装程序（setup_….exe 及其 .bin）安装游戏，或为启动器指定 GOG 版本的安装文件夹。"
   }
  }
 }

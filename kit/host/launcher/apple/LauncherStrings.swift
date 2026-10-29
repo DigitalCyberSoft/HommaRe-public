@@ -174,7 +174,9 @@ enum L10n {
     static var interrupted: String { t("interrupted") }
 
     static func interruptedDetail(_ setup: String) -> String {
-        t("interruptedDetail", ["setup": (setup as NSString).lastPathComponent])
+        // A download from GOG.com (InstallMarker.setup "GOG.com") unpacks nothing.
+        if setup == "GOG.com" { return t("gogInterruptedDetail") }
+        return t("interruptedDetail", ["setup": (setup as NSString).lastPathComponent])
     }
 
     static var notFoundDetail: String {
