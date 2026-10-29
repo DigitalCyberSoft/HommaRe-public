@@ -307,8 +307,19 @@ normally. Leave with *Exit → OK* once after creating a profile.
 *Settings → Silent mode* to *Ignore*.
 
 **Is multiplayer supported?** Hot-seat on one device and games on your local network,
-yes. Ubisoft closed the game's Internet servers (Ubi.com) in 2015, so online play isn't.
+yes. Ubisoft closed the game's Internet servers (Ubi.com) in 2015; a community server
+can stand in for them (ubi-gs, below).
 Network games use UDP ports 8888 and 8889.
+
+**What is ubi-gs in the Multi Player menu?** Ubisoft closed the game's online service
+(Ubi.com) in 2015. [ubi-gs](https://github.com/michal-kapala/ubi-gs) is a community
+re-implementation of it that someone has to run; every player uses the same server.
+Clicking *ubi-gs* asks for that server's address (`host` or `host:port`) and remembers the
+ones that answered, in `ubi-gs-servers.txt` in the profile folder; until one has, it
+suggests the community server `ubigs.wayofharm.com`. The game gets the server list from
+it, logs in, joins the lobby's channels, and creates and joins games there. The server's
+operator sees the CD key and password you log in with: any CD key works, so don't type
+your real one or a password you use elsewhere.
 
 ## What's next
 

@@ -190,6 +190,10 @@ if(RECOMP_VIDEO)
       # FFmpeg's compat/windows/mslink finds the right link.exe when MSYS2's
       # coreutils link comes first on PATH.
       list(APPEND RECOMP_FFMPEG_CONFIGURE --toolchain=msvc --target-os=win64 --arch=x86_64)
+      # The AC-3 decoder's object carries E-AC-3's code too; gcc and clang
+      # drop it with CONFIG_EAC3_DECODER off, cl links it and wants E-AC-3's
+      # tables (eac3_data.o, ff_eac3_*), which only that decoder builds.
+      list(APPEND RECOMP_FFMPEG_CONFIGURE --enable-decoder=eac3)
     else()
       list(APPEND RECOMP_FFMPEG_CONFIGURE --cc=${CMAKE_C_COMPILER})
       if(WIN32)

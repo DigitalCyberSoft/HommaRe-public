@@ -1,5 +1,6 @@
 // input_gate.cpp - see input_gate.h.
 #include "input_gate.h"
+#include "page_overlay.h"
 #include "game_config.h"
 #include "../runtime/mods_seam.h"
 #include "../runtime/win32.h"
@@ -556,6 +557,10 @@ bool host_pointer_motion(int32_t dx, int32_t dy) {
 
 bool host_gate_key(uint16_t mac, bool down) {
     HostKeyMapping m = host_key_mapping(mac);
+    // A host prompt (page_overlay.h) is modal: it sees a key before the
+    // settings menu and the game do.
+    if (host_page_prompt_key(m.dik, down))
+        return true;
     return mods_input_key(m.dik, m.vk, down);
 }
 uint32_t host_input_batch_limit(const HostInputStep *steps, uint32_t count) {
@@ -595,7 +600,9 @@ bool host_gate_menu_pointer(int32_t x, int32_t y, int button, bool down, int32_t
         u = float(x - px) / float(pw);
         v = float(y - py) / float(ph);
     }
-    const bool taken = mods_menu_pointer(u, v, button, down ? 1 : 0, wheel) != 0;
+    // A prompt is drawn where the menu is, so the same fractions reach it.
+    const bool taken = host_page_prompt_pointer(u, v, button, down, wheel) ||
+                       mods_menu_pointer(u, v, button, down ? 1 : 0, wheel) != 0;
     if (button < 0 || button >= 8)
         return taken;
     const uint8_t bit = uint8_t(1u << button);
@@ -1032,7 +1039,7 @@ bool host_gate_pointer_place(int32_t x, int32_t y) {
     if (!g_mem)
         return false;
     const auto mapped = host_gate_hit_test(nullptr, x, y);
-    if (mapped.kind == HitResult::HIT_NONE || mods_page_visible() ||
+    if (mapped.kind == HitResult::HIT_NONE || host_page_visible() ||
         host_gate_motion(mapped.gx, mapped.gy, 0, 0))
         return false;
     if (recomp_pointer_place(mapped.gx, mapped.gy, g_layout.guest_w, g_layout.guest_h)) {
