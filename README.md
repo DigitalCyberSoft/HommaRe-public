@@ -326,8 +326,8 @@ online play puts you in touch with other players' copies. The 2006 client parses
 server or peer sends in old C++ that, in places, copied text into fixed stack buffers
 without a length check — a hostile server could send an over-long field and overflow one.
 HommaRe recompiles the game, so it replaces those copies with the game's own bounded
-reader: a field that is too long is cut to fit and the message is dropped, the way the
-game already drops a malformed one, rather than running off the end of a buffer. This
+reader: a field that is too long is cut to fit and the game carries on with the shortened
+text, rather than running off the end of a buffer. This
 covers every server-controlled string field the client reads into a fixed buffer: the
 player-info reply (the known overflow), the room member list and member-join, the proxy
 login reply, the module proxy list, the game-start and friend-update notifications, and

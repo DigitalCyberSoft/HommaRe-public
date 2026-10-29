@@ -15,9 +15,9 @@
  * list extraction, then strncpy(dst, src, size) with a forced terminator.
  * This replacement stands in for the unbounded reader and, for every read
  * whose destination size we know, forwards to the bounded one with that size.
- * An over-long field is truncated and the read reports failure, which the
- * deserializers already treat as a malformed message and drop - the game's
- * own handling of a bad message. A read we have not catalogued (the ones into
+ * An over-long field is cut to fit, terminated inside its buffer, and the
+ * message goes on with the shortened text (logged once per site); an absent
+ * field still fails as before. A read we have not catalogued (the ones into
  * heap std::strings that grow to fit) runs the original copy unchanged.
  *
  * A read's site is told apart by its return address on the guest stack: every
@@ -153,16 +153,31 @@ void homm5_gs_str_read(X86 *c) {
     wr32(nsp + 0xc, site->size);
     c->r[R_ESP] = nsp;
     c->ret_expect = ret;
+    if (dst)
+        wr8(dst, 0); /* an absent field then reads back empty */
     HOMM5_GS_STR_BOUNDED(c);
 
-    /* The bounded reader returns 0 when the field did not fit (truncated) or
-     * was absent; either way the deserializer drops the message, which is how
-     * the game answers a malformed one. Normal play keeps every field short
-     * and present, so a drop here is a hostile or broken message: log the
-     * first per site (or every one under RECOMP_TRACE_NET). */
-    if (c->r[R_EAX] == 0 && (trace_net() || !gs_logged[site_i])) {
+    /* The result is a bool in AL (SETcc AL); EAX's upper bytes are left over.
+     * The bounded reader answers 0 both for an absent field and for one that
+     * did not fit. An absent field stays a failure, as it was. A field that
+     * did not fit was cut to size - 1 characters and terminated inside the
+     * buffer; report it read, as the unbounded reader would have, so the
+     * message goes on with the shortened text. Dropping it instead leaves the
+     * game waiting forever (a dropped PLAYERINFO hangs the login at "Logging
+     * in..."). Normal play keeps every field short, so a cut is a hostile or
+     * broken message: log the first per site (every one under
+     * RECOMP_TRACE_NET). */
+    if ((c->r[R_EAX] & 0xffu) != 0 || !dst)
+        return;
+    uint32_t len = 0;
+    while (len < site->size && rd8(dst + len) != 0)
+        ++len;
+    if (len + 1 != site->size)
+        return; /* absent: the game's own failure path */
+    c->r[R_EAX] = (c->r[R_EAX] & 0xffffff00u) | 1u;
+    if (trace_net() || !gs_logged[site_i]) {
         gs_logged[site_i] = 1;
-        fprintf(stderr, "[net_guard] GS string at %08x capped to %u bytes; message dropped\n", ret,
+        fprintf(stderr, "[net_guard] over-long GS string at %08x cut to %u bytes\n", ret,
                 site->size);
     }
 }

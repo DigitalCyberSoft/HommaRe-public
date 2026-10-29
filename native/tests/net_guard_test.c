@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "x86.h"
 
@@ -34,6 +35,12 @@ void recomp_watch_hit(uint32_t a, uint32_t n, uint64_t v) { (void)a; (void)n; (v
 /* ---- the field the mock readers serve, and the guard under test ---- */
 void homm5_gs_str_read(X86 *c);
 static const char *g_field[8]; /* NULL = the element is absent */
+
+/* The readers return a bool the way the game's do: SETcc AL, the rest of EAX
+ * left as it was. */
+static void set_al(X86 *c, uint32_t v) {
+    c->r[R_EAX] = (c->r[R_EAX] & 0xffffff00u) | (v & 0xffu);
+}
 
 /* Common reader entry: list in ECX (ignored), [esp+4]=dst, [esp+8]=index.
  * Returns 1 in EAX when the element is present (and, bounded, when it fit). */
@@ -55,7 +62,7 @@ void fn_004432d0(X86 *c) {
     reader_begin(c, &dst, &index);
     const char *s = index < 8 ? g_field[index] : NULL;
     if (!s) {
-        c->r[R_EAX] = 0;
+        set_al(c, 0);
         reader_ret(c, 8);
         return;
     }
@@ -64,7 +71,7 @@ void fn_004432d0(X86 *c) {
         if (!*p)
             break;
     }
-    c->r[R_EAX] = 1;
+    set_al(c, 1);
     reader_ret(c, 8);
 }
 
@@ -76,7 +83,7 @@ void fn_00443390(X86 *c) {
     const uint32_t size = rd32(c->r[R_ESP] + 0xc);
     const char *s = index < 8 ? g_field[index] : NULL;
     if (!s || size == 0) {
-        c->r[R_EAX] = 0;
+        set_al(c, 0);
         reader_ret(c, 0xc);
         return;
     }
@@ -87,7 +94,7 @@ void fn_00443390(X86 *c) {
     if (i >= size)
         i = size - 1;
     wr8(dst + i, 0);
-    c->r[R_EAX] = (uint32_t)fit;
+    set_al(c, (uint32_t)fit);
     reader_ret(c, 0xc);
 }
 
@@ -101,6 +108,7 @@ static int failures;
 static uint32_t call_guard(uint32_t ret, uint32_t dst, uint32_t index, uint32_t canary_at) {
     X86 c;
     memset(&c, 0, sizeof c);
+    c.r[R_EAX] = 0xdeadbe00u; /* the game leaves junk above AL */
     uint32_t esp = STACK_TOP;
     esp -= 4; wr32(esp, index);
     esp -= 4; wr32(esp, dst);
@@ -120,7 +128,7 @@ static uint32_t call_guard(uint32_t ret, uint32_t dst, uint32_t index, uint32_t 
         printf("  FAIL: esp %08x, expected %08x\n", c.r[R_ESP], entry + 12);
         failures++;
     }
-    return c.r[R_EAX];
+    return c.r[R_EAX] & 0xffu;
 }
 
 static void expect(const char *name, int cond) {
@@ -175,9 +183,23 @@ int main(void) {
     printf("over-long (attack: 40 chars into 12):\n");
     g_field[0] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     memset(g_mem + DST, 0xCC, DST_CAP);
+    /* The drop must be logged: catch stderr in a file around the call. */
+    char logpath[] = "/tmp/net_guard_test.XXXXXX";
+    const int logfd = mkstemp(logpath);
+    fflush(stderr);
+    const int saved = dup(2);
+    dup2(logfd, 2);
     r = call_guard(SITE_12, DST, 0, DST + 12);
+    fflush(stderr);
+    dup2(saved, 2);
+    close(saved);
+    char logged[256] = {0};
+    pread(logfd, logged, sizeof logged - 1, 0);
+    close(logfd);
+    unlink(logpath);
     guest_str(DST, got, sizeof got);
-    expect("result is failure (message dropped)", r == 0);
+    expect("cut logged once", strstr(logged, "cut to 12 bytes") != NULL);
+    expect("result is success (message goes on, shortened)", r == 1);
     expect("truncated to 11 chars", strlen(got) == 11);
     expect("terminated inside the buffer", rd8(DST + 11) == 0);
     expect("canary past buffer intact (no overflow)", rd8(DST + 12) == 0xAA);
