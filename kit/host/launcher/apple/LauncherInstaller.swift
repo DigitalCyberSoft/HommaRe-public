@@ -30,6 +30,9 @@ struct InstallerSpec: Decodable, Identifiable, Hashable {
     var manifests: [String]
     /// The games it installs (GameSpec.id).
     var games: [String]
+    /// The GOG Galaxy build the manifests describe, which an install from
+    /// GOG.com downloads (LauncherGog.swift); the newest when unset.
+    var gogBuild: String?
 }
 
 /// Every file an install keeps, with its size and SHA-256 (no game data).
@@ -58,6 +61,9 @@ struct InstallMarker: Codable {
     /// Bookmarks to what the player picked in the Files app that holds the
     /// installer (iOS), so a later launch may read it again to resume.
     var access: [Data]?
+    /// An install downloaded from GOG.com rather than unpacked from an
+    /// installer (`setup` is then "GOG.com"): resumed by downloading again.
+    var gog: GogSource?
 
     static func read(_ root: URL) -> InstallMarker? {
         guard let data = FileManager.default.contents(atPath: root.appendingPathComponent(name).path) else { return nil }

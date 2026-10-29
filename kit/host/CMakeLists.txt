@@ -226,6 +226,8 @@ set(POP_LAUNCHER_SOURCES $<TARGET_OBJECTS:launcher_core> $<TARGET_OBJECTS:recomp
 if(APPLE AND RECOMP_NATIVE_LAUNCHER)
   add_library(launcher_native STATIC ${HOST}/launcher/apple/LauncherBridge.swift
                                      ${HOST}/launcher/apple/LauncherCatalog.swift
+                                     ${HOST}/launcher/apple/LauncherGog.swift
+                                     ${HOST}/launcher/apple/LauncherGogView.swift
                                      ${HOST}/launcher/apple/LauncherInstaller.swift
                                      ${HOST}/launcher/apple/LauncherModel.swift
                                      ${HOST}/launcher/apple/LauncherSkin.swift
