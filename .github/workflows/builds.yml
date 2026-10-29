@@ -237,34 +237,42 @@ jobs:
       - name: TEMPORARY diagnostic, UDP ports
         shell: bash
         run: |
-          netsh int ipv4 show dynamicport udp
           netsh int ipv4 show excludedportrange protocol=udp
           python - <<'EOF'
-          import socket, collections
-          errs = collections.Counter(); bad = {}
-          for p in range(49152, 65536):
-              s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-              try:
-                  s.bind(("0.0.0.0", p))
-              except OSError as e:
-                  errs[e.winerror] += 1; bad[p] = e.winerror
-              s.close()
-          print("binds failing in 49152-65535:", dict(errs))
-          runs = []
-          for p in sorted(bad):
-              if runs and runs[-1][1] == p - 1 and runs[-1][2] == bad[p]: runs[-1][1] = p
-              else: runs.append([p, p, bad[p]])
-          for a, b, e in runs: print("  %d-%d: %d" % (a, b, e))
-          free = [p for p in range(49152, 65536 - 400) if p not in bad]
-          hit = [p for p in free if bad.get(p + 100) == 10013]
-          dead = [p for p in free if all(p + k * 100 in bad for k in range(1, 5))]
-          print("free ports whose +100 is WSAEACCES: %d of %d" % (len(hit), len(free)))
-          print("free ports with +100..+400 all unbindable: %d" % len(dead))
+          import socket, subprocess, time, csv, io, getpass
+          print("this process runs as", getpass.getuser())
+          def scan():
+              bad = {}
+              for p in range(49152, 65536):
+                  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                  try:
+                      s.bind(("0.0.0.0", p))
+                  except OSError as e:
+                      bad[p] = e.winerror
+                  s.close()
+              return bad
+          def owners():
+              out = subprocess.run(["netstat", "-ano", "-p", "UDP"], capture_output=True, text=True).stdout
+              own = {}
+              for line in out.splitlines():
+                  f = line.split()
+                  if len(f) >= 4 and f[0] == "UDP" and ":" in f[1]:
+                      own.setdefault(int(f[1].rsplit(":", 1)[1]), set()).add(int(f[-1]))
+              return own
+          tl = subprocess.run(["tasklist", "/svc", "/fo", "csv"], capture_output=True, text=True).stdout
+          names = {int(r["PID"]): "%s [%s]" % (r["Image Name"], r["Services"]) for r in csv.DictReader(io.StringIO(tl))}
+          seen = {}
+          for i in range(10):
+              bad, own = scan(), owners()
+              print("scan %d: %d refused (10013), %d in use (10048), %d other" % (i, sum(e == 10013 for e in bad.values()),
+                    sum(e == 10048 for e in bad.values()), sum(e not in (10013, 10048) for e in bad.values())))
+              for p, e in sorted(bad.items()):
+                  if p not in seen:
+                      seen[p] = e
+                      print("  %d: %d, held by %s" % (p, e, ", ".join(names.get(pid, str(pid)) for pid in own.get(p, ())) or "nobody in netstat"))
+              time.sleep(2)
+          print("distinct refused or taken ports over 10 scans:", len(seen))
           EOF
-          for i in 1 2 3 4 5 6 7 8; do
-            RECOMP_TRACE_SOCKETS=1 build/windows-stub/*/winsock_tests.exe 2>&1 | grep -a "FAIL\|moves\|reaches the copy\|bind(0x110\|bound" || true
-          done
-          find build/windows-stub -name winsock_tests.exe
       - name: The suites that need no game and no GPU
         shell: bash
         env:
