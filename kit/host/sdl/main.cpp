@@ -1263,6 +1263,8 @@ void push_touch_action_now(const TouchAction &a) {
             e.wheel.y = (float)a.wheel;
             // handle_event() flips a FLIPPED wheel's sign; NORMAL passes a.wheel through as-is.
             e.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+            // Not a mouse's wheel: handle_event() passes its fractions through.
+            e.wheel.which = SDL_TOUCH_MOUSEID;
             break;
         }
         SDL_PushEvent(&e);
@@ -1581,8 +1583,30 @@ void handle_event(const SDL_Event &event) {
         if (event.wheel.windowID == ours) {
             PendingInput e;
             e.kind = PendingInput::WHEEL;
-            const double steps =
+            double steps =
                 event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
+            // A high-resolution wheel (libinput's on Linux, some mice on
+            // Windows) reports a notch as several fractions of one, which a
+            // game written for whole notches (WHEEL_DELTA, 120) handles badly.
+            // The fractions add up here and only whole notches go on, to
+            // WM_MOUSEWHEEL and DirectInput's lZ alike; turning back drops
+            // what was left the other way.
+            if (event.wheel.which != SDL_TOUCH_MOUSEID) {
+                static double left = 0;
+                if ((left > 0 && steps < 0) || (left < 0 && steps > 0))
+                    left = 0;
+                left += steps;
+                steps = std::trunc(left + (left > 0 ? 1e-6 : -1e-6));
+                left -= steps;
+            }
+            static const bool trace_wheel = recomp_env("TRACE_WHEEL") != nullptr;
+            if (trace_wheel)
+                fprintf(stderr, "[wheel %.3f] sdl y %+.4f (mouse %u%s) -> %+d notch(es)\n",
+                        double(os_monotonic_ns()) / 1e9, event.wheel.y, (unsigned)event.wheel.which,
+                        event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? ", flipped" : "",
+                        (int)steps);
+            if (steps == 0)
+                break;
             e.dz = (int32_t)lround(steps * 120.0);
             // WM_MOUSEWHEEL carries the position of the wheel event itself.
             view_point_to_drawable(event.wheel.mouse_x, event.wheel.mouse_y, &e.x, &e.y,
