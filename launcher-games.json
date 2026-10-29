@@ -12,6 +12,44 @@
     "pl": "Natywny port na macOS, iOS i Linuksa",
     "zh-Hans": "适用于 macOS、iOS 和 Linux 的原生移植版"
   },
+  "taglines": {
+    "macos": {
+      "en": "Native port for macOS",
+      "ru": "Нативный порт для macOS",
+      "cs": "Nativní port pro macOS",
+      "de": "Nativer Port für macOS",
+      "es": "Port nativo para macOS",
+      "fr": "Portage natif pour macOS",
+      "it": "Port nativo per macOS",
+      "hu": "Natív port macOS-re",
+      "pl": "Natywny port na macOS",
+      "zh-Hans": "适用于 macOS 的原生移植版"
+    },
+    "ios": {
+      "en": "Native port for iPad and iPhone",
+      "ru": "Нативный порт для iPad и iPhone",
+      "cs": "Nativní port pro iPad a iPhone",
+      "de": "Nativer Port für iPad und iPhone",
+      "es": "Port nativo para iPad y iPhone",
+      "fr": "Portage natif pour iPad et iPhone",
+      "it": "Port nativo per iPad e iPhone",
+      "hu": "Natív port iPadre és iPhone-ra",
+      "pl": "Natywny port na iPada i iPhone’a",
+      "zh-Hans": "适用于 iPad 和 iPhone 的原生移植版"
+    },
+    "linux": {
+      "en": "Native port for Linux",
+      "ru": "Нативный порт для Linux",
+      "cs": "Nativní port pro Linux",
+      "de": "Nativer Port für Linux",
+      "es": "Port nativo para Linux",
+      "fr": "Portage natif pour Linux",
+      "it": "Port nativo per Linux",
+      "hu": "Natív port Linuxra",
+      "pl": "Natywny port na Linuksa",
+      "zh-Hans": "适用于 Linux 的原生移植版"
+    }
+  },
   "legal": {
     "en": "An unofficial fan port, not affiliated with Ubisoft. No game files are included: play your own GOG copy.",
     "ru": "Неофициальный фанатский порт, не связан с Ubisoft. Файлы игры не входят в приложение — нужна ваша копия с GOG.",
