@@ -278,6 +278,15 @@ void note_screen_size() {
     g_fullscreen_w.store(w);
     g_fullscreen_h.store(fh);
 }
+// The app left the foreground or came back (platform_ui_ios.mm, from the
+// lifecycle watcher: SDL3 never queues those events, so handle_event never
+// sees them). Inactive counts as away: a pulled-down Control Center on a
+// foldable hands the scene sizes as transient as a lock does.
+extern "C" void host_note_app_active(int active) {
+    if (active)
+        g_foreground_ns.store(os_monotonic_ns());
+    g_app_active.store(active != 0);
+}
 extern "C" int host_display_fullscreen_size(int *w, int *h) {
     const int fw = g_fullscreen_w.load(), fh = g_fullscreen_h.load();
     if (!w || !h || fw <= 0 || fh <= 0)
@@ -1194,6 +1203,35 @@ void push_touch_actions(const std::vector<TouchAction> &actions) {
         push_touch_action_now(a);
 }
 
+// The modifiers the touch path holds itself (a resting drag's Shift, a pad
+// button bound to one). A pushed key event carries no modifier state of its
+// own, and handle_key takes a modifier's state from the event's mod alone, so
+// every key the touch path pushes carries these along with the keyboard's.
+SDL_Keymod g_touch_mods = SDL_KMOD_NONE;
+
+SDL_Keymod touch_modifier_bit(SDL_Scancode sc) {
+    switch (sc) {
+    case SDL_SCANCODE_LSHIFT:
+        return SDL_KMOD_LSHIFT;
+    case SDL_SCANCODE_RSHIFT:
+        return SDL_KMOD_RSHIFT;
+    case SDL_SCANCODE_LCTRL:
+        return SDL_KMOD_LCTRL;
+    case SDL_SCANCODE_RCTRL:
+        return SDL_KMOD_RCTRL;
+    case SDL_SCANCODE_LALT:
+        return SDL_KMOD_LALT;
+    case SDL_SCANCODE_RALT:
+        return SDL_KMOD_RALT;
+    case SDL_SCANCODE_LGUI:
+        return SDL_KMOD_LGUI;
+    case SDL_SCANCODE_RGUI:
+        return SDL_KMOD_RGUI;
+    default:
+        return SDL_KMOD_NONE;
+    }
+}
+
 void push_touch_action_now(const TouchAction &a) {
     const SDL_WindowID ours = g_window ? SDL_GetWindowID(g_window) : 0;
     {
@@ -1230,13 +1268,18 @@ void push_touch_action_now(const TouchAction &a) {
             e.button.x = (float)a.x;
             e.button.y = (float)a.y;
             break;
-        case TouchAction::Key:
+        case TouchAction::Key: {
+            const SDL_Keymod bit = touch_modifier_bit((SDL_Scancode)a.scancode);
+            g_touch_mods =
+                a.down ? SDL_Keymod(g_touch_mods | bit) : SDL_Keymod(g_touch_mods & ~bit);
             e.type = a.down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
             e.key.windowID = ours;
             e.key.scancode = (SDL_Scancode)a.scancode;
             e.key.key = SDL_GetKeyFromScancode((SDL_Scancode)a.scancode, SDL_KMOD_NONE, false);
+            e.key.mod = SDL_Keymod(SDL_GetModState() | g_touch_mods);
             e.key.down = a.down;
             break;
+        }
         case TouchAction::Camera: {
             // In order with the clicks around it, mapped as a placement is.
             PendingInput p;
@@ -1513,12 +1556,6 @@ void audio_service_restarted() {
 // One SDL event, translated into both of the input paths the game reads: the
 // DirectInput device state, and the Win32 message queue.
 void handle_event(const SDL_Event &event) {
-    if (event.type == SDL_EVENT_WILL_ENTER_BACKGROUND || event.type == SDL_EVENT_DID_ENTER_BACKGROUND) {
-        g_app_active.store(false);
-    } else if (event.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
-        g_foreground_ns.store(os_monotonic_ns());
-        g_app_active.store(true);
-    }
     if (platform_ui_handle_lifecycle(event))
         return;
     if (handle_editor_event(event))
@@ -2277,9 +2314,16 @@ void after_events() {
         g_touch.frames_presented(host_present_count());
         const int context = recomp_touch_context();
         g_touch.set_context(context);
-        g_touch.tick(SDL_GetTicksNS(), &actions);
+        const uint64_t now = SDL_GetTicksNS();
+        g_touch.tick(now, &actions);
         push_touch_actions(actions);
         sync_touch_hover();
+        {
+            // A stack dragged and held still: the ring counting down to a split.
+            double rx = 0, ry = 0, progress = 0;
+            const bool ring = g_touch.split_ring(now, &rx, &ry, &progress);
+            platform_ui_split_ring(g_window, ring, rx, ry, progress);
+        }
         // The system keyboard: four fingers toggle it, and it comes up by
         // itself while the cursor rests on one of the game's text fields
         // (RECOMP_TOUCH_TEXT), going once it leaves. The field's line is the
@@ -2722,6 +2766,7 @@ static int run_game_module(const launcher::NativeChoice &choice, const char *arg
     os_setenv("RECOMP_LAUNCHER_SETTINGS", settings.c_str());
     os_setenv("RECOMP_LAUNCHER_SKIP_INTRO", intro_skipped(host_layout().profile_dir) ? "1" : "0");
     fprintf(stderr, "[host] %s goes to module %s\n", choice.game.c_str(), path.c_str());
+    platform_ui_hand_over_lifecycle(); // the module's own copy takes the app's lifecycle
     std::string exe = choice.exe;
     char flag[] = "--exe";
     char *args[] = {const_cast<char *>(argv0), flag, exe.data(), nullptr};
