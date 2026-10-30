@@ -27,6 +27,26 @@
 extern "C" {
 #endif
 
+/* The guest's transcendental functions - FSIN, FCOS, FPTAN, FPATAN, FYL2X,
+ * FYL2XP1, F2XM1 and the CRT's math imports - from one implementation on every
+ * host (third_party/musl-libm/recomp_libm.h, which declares the same): each
+ * host C library rounds these its own way in the last bit, and peers in a
+ * network game must compute the same. */
+double recomp_libm_sin(double x);
+double recomp_libm_cos(double x);
+double recomp_libm_tan(double x);
+double recomp_libm_asin(double x);
+double recomp_libm_acos(double x);
+double recomp_libm_atan(double x);
+double recomp_libm_atan2(double y, double x);
+double recomp_libm_exp(double x);
+double recomp_libm_log(double x);
+double recomp_libm_log10(double x);
+double recomp_libm_log2(double x);
+double recomp_libm_log1p(double x);
+double recomp_libm_expm1(double x);
+double recomp_libm_pow(double x, double y);
+
 /* The hot guest-memory and x87 helpers below are large enough that the
  * compiler stops inlining them on its own, which costs a call per guest
  * memory access, so these insist. */
@@ -1814,9 +1834,26 @@ static inline double fprem_common(X86 *c, double a, double b, int ieee) {
     return a < 0 ? -r : r;
 }
 
-/* FSCALE: ST(0) *= 2 ** trunc(ST(1)) */
+/* FSCALE: ST(0) *= 2 ** trunc(ST(1)). The scale goes to ldexp as an int, and
+ * a C conversion of a double outside int's range is undefined: x86_64 gives
+ * INT_MIN (so 1 scaled by 2^1e10 came out 0) and arm64 saturates (inf). Any
+ * scale past +-2^16 overflows or underflows every double anyway, so it is
+ * clamped there; the infinities and NaNs get the x87's answers. */
 static inline double fscale(double a, double b) {
-    return ldexp(a, (int)trunc(b));
+    double t;
+    if (isnan(a) || isnan(b))
+        return a + b;
+    if (isinf(b)) {
+        if ((b > 0 && a == 0.0) || (b < 0 && isinf(a)))
+            return (double)NAN; /* 0 * 2^+inf, inf * 2^-inf: invalid */
+        return b > 0 ? a * (double)INFINITY : a * 0.0;
+    }
+    t = trunc(b);
+    if (t > 65536.0)
+        t = 65536.0;
+    else if (t < -65536.0)
+        t = -65536.0;
+    return ldexp(a, (int)t);
 }
 
 /* ----------------------------------------------------------------- MMX ---

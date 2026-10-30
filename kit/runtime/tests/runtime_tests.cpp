@@ -3778,6 +3778,48 @@ static void test_callbacks(X86 *c) {
 }
 
 // _setjmp / _longjmp, driven the way generated code will drive them.
+// The CRT's transcendental imports are the bundled libm's on every host, and a
+// NaN result is the x86 CRT's, not the host's default NaN.
+static double bits_f64(uint64_t b) {
+    double v;
+    memcpy(&v, &b, 8);
+    return v;
+}
+static uint64_t f64_bits(double v) {
+    uint64_t b;
+    memcpy(&b, &v, 8);
+    return b;
+}
+static void test_math_imports(X86 *c) {
+    section("math imports: the bundled libm, x86's NaNs");
+    const char *math = "api-ms-win-crt-math-l1-1-0.dll";
+    xmm_set_f64(c, 0, 1e22);
+    call_import(c, math, "_libm_sse2_sin_precise", {});
+    check(f64_bits(xmm_f64(c, 0)) == f64_bits(recomp_libm_sin(1e22)), "sin(1e22) is the bundled libm's");
+    xmm_set_f64(c, 0, 7.5);
+    xmm_set_f64(c, 1, -2.25);
+    call_import(c, math, "_libm_sse2_pow_precise", {});
+    check(f64_bits(xmm_f64(c, 0)) == f64_bits(recomp_libm_pow(7.5, -2.25)), "pow(7.5, -2.25)");
+    xmm_set_f64(c, 0, (double)INFINITY);
+    call_import(c, math, "_libm_sse2_sin_precise", {});
+    check(f64_bits(xmm_f64(c, 0)) == 0xfff8000000000000ull, "sin(inf) is -nan(ind): %016llx",
+          (unsigned long long)f64_bits(xmm_f64(c, 0)));
+    xmm_set_f64(c, 0, bits_f64(0x7ff4000000000123ull));
+    call_import(c, math, "_libm_sse2_log_precise", {});
+    check(f64_bits(xmm_f64(c, 0)) == 0x7ffc000000000123ull, "log(a signalling NaN) is that NaN, quieted");
+    const uint32_t top = c->fpu_top;
+    fpush(c, 2.0);
+    fpush(c, 0.5);
+    call_import(c, math, "_CIpow", {});
+    check(f64_bits(ST(c, 0)) == f64_bits(recomp_libm_pow(2.0, 0.5)), "_CIpow(2, 0.5): ST(1) to the ST(0)");
+    fdrop(c);
+    fpush(c, 2.0);
+    call_import(c, math, "_CIacos", {});
+    check(f64_bits(ST(c, 0)) == 0xfff8000000000000ull, "_CIacos(2) is -nan(ind)");
+    fdrop(c);
+    check(c->fpu_top == top, "the x87 stack is as it was");
+}
+
 static void test_intrinsics(X86 *c) {
     section("_setjmp / _longjmp intrinsics");
     uint32_t buf = scratch_block(64);
@@ -7248,6 +7290,7 @@ int main(int argc, char **argv) {
     test_mod_seams(c);
     test_input_wakes_a_parked_thread(c);
     test_intrinsics(c);
+    test_math_imports(c);
     test_undeliverable_calls(c);
     test_registry(c);
     test_import_coverage(c);

@@ -37,9 +37,19 @@ add_custom_command(
   VERBATIM)
 list(APPEND POP_RUNTIME_SOURCES ${POP_BUNDLED_FONTS_CPP})
 
+# The guest's transcendental math (recomp_libm_*, x86.h), one implementation on
+# every host: a subset of musl's libm (third_party/musl-libm/README.md), its
+# names prefixed by a forced include so the host's own libm is untouched.
+# Static, so the translated code (cmake/Translate.cmake) can link it too.
+set(POP_LIBM_DIR ${POP_ROOT}/third_party/musl-libm)
+file(GLOB POP_LIBM_SOURCES CONFIGURE_DEPENDS ${POP_LIBM_DIR}/*.c)
+add_library(recomp_libm STATIC ${POP_LIBM_SOURCES})
+target_compile_options(recomp_libm PRIVATE -w "SHELL:-include ${POP_LIBM_DIR}/recomp_libm_names.h")
+pop_optimize(recomp_libm 2)
+
 add_library(recomp_runtime OBJECT ${POP_RUNTIME_SOURCES})
 target_include_directories(recomp_runtime PUBLIC ${POP_ROOT} ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(recomp_runtime PUBLIC recomp_platform ZLIB::ZLIB)
+target_link_libraries(recomp_runtime PUBLIC recomp_platform recomp_libm ZLIB::ZLIB)
 target_compile_options(recomp_runtime PRIVATE ${POP_WARN_HOST})
 pop_optimize(recomp_runtime 2)
 
@@ -48,7 +58,7 @@ pop_optimize(recomp_runtime 2)
 if(NOT IOS AND NOT ANDROID)
 add_library(recomp_runtime_testing OBJECT ${POP_RUNTIME_SOURCES})
 target_include_directories(recomp_runtime_testing PUBLIC ${POP_ROOT} ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(recomp_runtime_testing PUBLIC recomp_platform ZLIB::ZLIB)
+target_link_libraries(recomp_runtime_testing PUBLIC recomp_platform recomp_libm ZLIB::ZLIB)
 target_compile_definitions(recomp_runtime_testing PUBLIC POPM_TESTING=1)
 target_compile_options(recomp_runtime_testing PRIVATE ${POP_WARN_HOST})
 pop_optimize(recomp_runtime_testing 1)
@@ -135,6 +145,18 @@ pop_optimize(winsock_tests 1)
 pop_test_binary(winsock_tests)
 add_test(NAME winsock_tests COMMAND winsock_tests WORKING_DIRECTORY ${POP_ROOT})
 set_tests_properties(winsock_tests PROPERTIES LABELS nogame TIMEOUT 60)
+# Floating point network play depends on: x86's answers for the conversions
+# and rounding, no FMA contraction, and the bundled libm's results, which must
+# hash the same on every host. Standalone (x86.h and the libm), so it also
+# builds for a cross target by hand (see the file).
+add_executable(fp_determinism_tests tests/fp_determinism_tests.cpp)
+target_include_directories(fp_determinism_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(fp_determinism_tests PRIVATE recomp_libm)
+target_compile_options(fp_determinism_tests PRIVATE ${POP_WARN_HOST})
+pop_optimize(fp_determinism_tests 2)
+pop_test_binary(fp_determinism_tests)
+add_test(NAME fp_determinism_tests COMMAND fp_determinism_tests WORKING_DIRECTORY ${POP_ROOT})
+set_tests_properties(fp_determinism_tests PROPERTIES LABELS nogame TIMEOUT 60)
 
 endif()
 
