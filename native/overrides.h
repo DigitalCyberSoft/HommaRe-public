@@ -176,9 +176,10 @@ void homm5_tap_grid(X86 *c);
 #define FN_0080bac0 homm5_tap_grid
 
 /* 004432d0: the GameSpy clDataList unbounded string reader. native/net_guard.c
- * stands in for it and forwards the player-info and other fixed-buffer reads
- * to the bounded reader (00443390), so a hostile ubi-gs server or peer cannot
- * overflow a buffer with an over-long field (README "Playing online safely"). */
+ * stands in for it and forwards every read, each into a fixed buffer, to the
+ * bounded reader (00443390) with that buffer's size, so a hostile ubi-gs
+ * server or peer cannot overflow a buffer with an over-long field (README
+ * "Playing online safely"). */
 void homm5_gs_str_read(X86 *c);
 #define FN_004432d0 homm5_gs_str_read
 

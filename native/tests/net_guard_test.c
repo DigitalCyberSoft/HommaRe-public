@@ -139,8 +139,16 @@ static void expect(const char *name, int cond) {
 
 /* PLAYERINFO field 0 -> a 12-byte buffer: return address 0x0042a6a8. */
 #define SITE_12 0x0042a6a8u
-/* An uncatalogued site: the guard must leave it to the unbounded reader. */
+/* An unlisted site: the guard bounds it to 16 bytes (GS_UNLISTED_SIZE). */
 #define SITE_UNKNOWN 0x00401234u
+#define SITE_UNKNOWN2 0x00405678u
+
+/* A few of the sites added from the review, with their buffer sizes: the
+ * room info's host address (field 0x12), message 0x17's 129-byte field,
+ * message 0xc9's 33-byte one, and message 0x98's 1024-byte one. */
+static const struct {
+    uint32_t ret, size;
+} new_sites[] = {{0x0041fcddu, 128}, {0x00421f6du, 129}, {0x00427e47u, 33}, {0x0042985au, 1024}};
 
 static void guest_str(uint32_t at, char *out, uint32_t cap) {
     uint32_t i = 0;
@@ -211,14 +219,64 @@ int main(void) {
     expect("result is failure", r == 0);
     expect("canary intact", rd8(DST + 12) == 0xAA);
 
-    printf("uncatalogued site (growable string): unbounded reader runs:\n");
-    g_field[0] = "a-very-long-value-into-a-big-buffer";
-    memset(g_mem + DST, 0xCC, DST_CAP);
-    r = call_guard(SITE_UNKNOWN, DST, 0, 0);
-    guest_str(DST, got, sizeof got);
-    expect("result is success", r == 1);
-    expect("string copied whole (unchanged behaviour)",
-           strcmp(got, "a-very-long-value-into-a-big-buffer") == 0);
+    printf("sites from the review: cut at their own size:\n");
+    {
+        static char longf[2048];
+        memset(longf, 'R', sizeof longf - 1);
+        g_field[1] = longf;
+        for (size_t i = 0; i < sizeof new_sites / sizeof new_sites[0]; ++i) {
+            const uint32_t n = new_sites[i].size;
+            char name[96];
+            memset(g_mem + DST, 0xCC, 0x800);
+            r = call_guard(new_sites[i].ret, DST, 1, DST + n);
+            snprintf(name, sizeof name, "%08x: cut to %u chars, terminated, canary intact",
+                     new_sites[i].ret, n - 1);
+            expect(name, r == 1 && rd8(DST + n - 2) == 'R' && rd8(DST + n - 1) == 0 &&
+                             rd8(DST + n) == 0xAA);
+        }
+        /* A field that fits the biggest buffer goes through whole. */
+        longf[1000] = 0;
+        memset(g_mem + DST, 0xCC, 0x800);
+        r = call_guard(0x0042985au, DST, 1, DST + 1024);
+        guest_str(DST, got, sizeof got);
+        expect("0042985a: a 1000-char field fits whole",
+               r == 1 && rd8(DST + 999) == 'R' && rd8(DST + 1000) == 0);
+        g_field[1] = NULL;
+    }
+
+    printf("unlisted site: bounded to 16, logged once per address:\n");
+    {
+        char lp[] = "/tmp/net_guard_test.XXXXXX";
+        const int fd = mkstemp(lp);
+        fflush(stderr);
+        const int sv = dup(2);
+        dup2(fd, 2);
+        g_field[0] = "a-value-longer-than-sixteen-bytes";
+        memset(g_mem + DST, 0xCC, DST_CAP);
+        r = call_guard(SITE_UNKNOWN, DST, 0, DST + 16);
+        guest_str(DST, got, sizeof got);
+        const int cut_ok = r == 1 && strlen(got) == 15 && rd8(DST + 16) == 0xAA;
+        g_field[0] = "short";
+        memset(g_mem + DST, 0xCC, DST_CAP);
+        r = call_guard(SITE_UNKNOWN, DST, 0, DST + 16);
+        guest_str(DST, got, sizeof got);
+        const int short_ok = r == 1 && strcmp(got, "short") == 0;
+        r = call_guard(SITE_UNKNOWN2, DST, 0, DST + 16);
+        fflush(stderr);
+        dup2(sv, 2);
+        close(sv);
+        char lg[1024] = {0};
+        pread(fd, lg, sizeof lg - 1, 0);
+        close(fd);
+        unlink(lp);
+        expect("over-long field cut to 15 chars, canary at 16 intact", cut_ok);
+        expect("short field copied whole", short_ok);
+        const char *first = strstr(lg, "unlisted call site 00401234");
+        expect("unlisted address logged", first != NULL);
+        expect("... once", first && !strstr(first + 1, "unlisted call site 00401234"));
+        expect("a second unlisted address logged too",
+               strstr(lg, "unlisted call site 00405678") != NULL);
+    }
 
     printf("the unguarded copy really overflows (the vulnerability):\n");
     /* The raw reader the guard stands in for: a 32-char field into the same
