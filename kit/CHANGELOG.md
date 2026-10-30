@@ -1,5 +1,53 @@
 # Changelog
 
+## The same arithmetic on every host
+
+- Every target compiles with `-ffp-contract=off` (no FMA contraction, which
+  arm64 did and x86_64 did not) and `-fsigned-char`.
+- The guest's transcendental functions (FSIN, FCOS, FPTAN, FPATAN, FYL2X,
+  FYL2XP1, F2XM1 and the CRT's `_CI*` and `_libm_sse2_*` imports) are a
+  bundled subset of musl's libm (`third_party/musl-libm`), not the host C
+  library's; a NaN they return is the x86 CRT's. FSCALE of an out-of-range
+  scale gives x86's answer on arm64 too.
+- `fp_determinism_tests` hashes the conversions, rounding and libm results and
+  fails where a host computes differently.
+- A translation made before this keeps calling the host's libm until it is
+  regenerated (`tools/build.py --regenerate`).
+
+## iOS: inactive is not background
+
+- SDL3 reports "will resign active" (Control Center, Notification Center, a call
+  banner, the app switcher) as `SDL_EVENT_WILL_ENTER_BACKGROUND`, often twice.
+  The lifecycle watcher now tells inactive from background: inactive pauses the
+  sound only; the game's settings are saved after 2 s inactive or at once in the
+  background, where presentation stops too. Repeated notifications are no-ops,
+  and save requests that pile up are answered by one save.
+- `host_note_app_active`: SDL3 never queues lifecycle events, so the host's
+  "away / just back" state, which keeps a foldable's transient scene sizes from
+  resizing the game, was never set. The watcher sets it now.
+- A multi-game app's launcher hands the lifecycle over to the game module it
+  starts (`platform_ui_hand_over_lifecycle`).
+- The run before's log is also kept in `Documents/Logs` (the newest ten), where
+  the Files app shows it.
+- `RECOMP_IOS_LIFECYCLE_STRESS=<ms>` posts the inactive/active (and every fourth
+  time background) notifications in a loop, for a lifecycle test with nobody at
+  the device.
+
+## Touch: a stack dragged and held still splits
+
+- Hover gestures: a finger that rests ~0.7 s during a drag the game marks
+  `RECOMP_TOUCH_DRAG_SPLIT` (256 in `recomp_touch_context`) holds Shift until the
+  drop, and a little past it, so the game's own "Shift + drop" (a split window)
+  sees it. Moving the finger 40 points on lets Shift go. `TouchMapper::split_ring`
+  reports the count-down; iOS draws it as a ring around the finger
+  (`platform_ui_split_ring`), with a tick once Shift is down.
+- A hover drag of the interface is no longer snapped onto the window's edges: a
+  dragged item near the bottom edge stayed glued to the last row instead of
+  following the finger.
+- Key events the touch path pushes carry the modifiers it holds. They carried
+  none, and the host takes a modifier's state from an event's `mod`, so a
+  touch-held Shift (or a pad button bound to one) never reached the game.
+
 ## SSE arithmetic in the guest's rounding mode
 
 - `X86.mxcsr` holds the guest's MXCSR. The CRT's `_control87`/`_controlfp_s`

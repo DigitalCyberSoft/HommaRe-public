@@ -166,6 +166,9 @@ enum {
                                          clicks at once, no preview first (the game
                                          confirms in its own way, e.g. choose a target,
                                          then the cell to strike it from) */
+    RECOMP_TOUCH_DRAG_SPLIT = 256, /* the game drags something that a Shift held at
+                                      the drop splits (an army's stack): a finger that
+                                      rests during the drag holds Shift */
 };
 void recomp_touch_hover(int state);
 int recomp_touch_context(void);
