@@ -94,6 +94,11 @@ class FakeDevice final : public Device {
         manual_completion_ = manual;
     }
     void complete_all();
+    // Runs inside every commit, unlocked, before the commit counts as made: time
+    // passing there is a commit that takes long (a synchronous present).
+    void set_commit_hook(std::function<void()> hook) {
+        commit_hook_ = std::move(hook);
+    }
     // The status complete_all() reports for every pending command buffer.
     void set_completion_status(CommandStatus status) {
         completion_status_ = status;
@@ -148,6 +153,7 @@ class FakeDevice final : public Device {
     std::thread::id held_thread_{};
     int held_ = 0;
     std::function<void(double)> last_presented_;
+    std::function<void()> commit_hook_;
 };
 
 } // namespace gpu

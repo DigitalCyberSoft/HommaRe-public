@@ -270,6 +270,8 @@ void FakeDevice::on_complete(CommandBuffer cb, std::function<void(CommandStatus,
 void FakeDevice::commit(CommandBuffer cb) {
     std::vector<std::function<void(CommandStatus, double)>> run;
     std::function<void()> present;
+    if (commit_hook_)
+        commit_hook_();
     {
         std::lock_guard lock(mutex_);
         auto &c = commands_[cb.id];

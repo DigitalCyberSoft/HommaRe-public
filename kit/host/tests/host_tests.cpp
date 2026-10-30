@@ -6078,8 +6078,13 @@ struct PresentFake {
         host_present_stop();
         host_present_set_device(g_gpu.get());
     }
-    void commit() {
+    // Commit the frame in flight. With `returns_at`, the commit returns at that
+    // time on the presenter's clock, having started at the last wake's.
+    void commit(double returns_at = -1) {
+        if (returns_at >= 0)
+            device.set_commit_hook([returns_at] { host_present_test_set_clock(returns_at); });
         host_present_test_commit_swapchain(chain);
+        device.set_commit_hook(nullptr);
     }
     void complete(bool success = true) {
         device.set_completion_status(success ? gpu::CommandStatus::Completed
@@ -6197,62 +6202,95 @@ static void test_windowed_drawable_handler_and_completion_fallback() {
         host_present_stop();
     }
 }
-// A slow GPU is slow frames, not lost ones. Age runs from the commit, so a
-// commit that itself took 3 s (lavapipe presents synchronously) does not count;
-// a frame is lost after 2 s only once a later frame has completed before it,
-// and otherwise after kStuckGpuSeconds (30 s).
+// A slow GPU is slow frames, not lost ones. Age runs from the commit's return.
+// On a device whose commits take long (lavapipe presents synchronously) a frame
+// is lost after 2 s only once a later frame has completed before it, and
+// otherwise after kStuckGpuSeconds (30 s).
 static void test_slow_gpu_is_not_a_lost_frame() {
     {
         PresentFake fake;
         host_present_test_begin(false, false);
         host_present_test_seal(1, HOST_SCREEN_MENU, false);
         CHECK(host_present_test_window_wake(0));
-        // The worker is still committing frame 1 three seconds on.
+        // The worker is still composing frame 1 three seconds on: no age yet.
         CHECK(host_present_test_window_wake(3.0, false, true));
-        fake.commit(); // returns at 3 s
-        CHECK(host_present_test_window_wake(3.5, false, true));
-        CHECK(host_present_test_window_wake(29.0, false, true));
-        CHECK_EQ(host_present_drops(), 0u);
-        CHECK_EQ(host_present_test_in_flight(), 1u);
+        fake.commit(6.0); // took 3 s
         fake.complete();
-        fake.presented(29.1);
-        CHECK_EQ(host_present_unique_completed(), 1u);
+        fake.presented(6.1);
+        CHECK_EQ(host_present_drops(), 0u);
         CHECK(host_present_test_released(1));
-        // Nothing completes for 30 s after its commit: lost, its storage retained.
+        // A second 3 s commit: the device presents synchronously. Frame 2 is still
+        // running 29 s after its commit returned.
         host_present_test_seal(2, HOST_SCREEN_MENU, false);
-        CHECK(host_present_test_window_wake(30.0));
-        fake.commit();
-        CHECK(host_present_test_window_wake(59.9, false, true));
+        CHECK(host_present_test_window_wake(6.2));
+        fake.commit(9.2);
+        CHECK(host_present_test_window_wake(9.5, false, true));
+        CHECK(host_present_test_window_wake(38.1, false, true));
         CHECK_EQ(host_present_drops(), 0u);
-        CHECK(host_present_test_window_wake(60.0, false, true));
-        CHECK_EQ(host_present_drops(), 1u);
-        CHECK_EQ(host_present_test_in_flight(), 1u); // a repeat of frame 1 took its place
-        CHECK(!host_present_test_released(2));
+        CHECK_EQ(host_present_test_in_flight(), 2u);
         fake.complete();
+        fake.presented(38.2);
+        CHECK_EQ(host_present_unique_completed(), 2u);
         CHECK(host_present_test_released(2));
-        CHECK_EQ(host_present_unique_completed(), 1u);
+        // Nothing completes for 30 s after its commit: lost, its storage retained.
+        host_present_test_seal(3, HOST_SCREEN_MENU, false);
+        CHECK(host_present_test_window_wake(39.0));
+        fake.commit(42.0);
+        CHECK(host_present_test_window_wake(71.9, false, true));
+        CHECK_EQ(host_present_drops(), 0u);
+        CHECK(host_present_test_window_wake(72.0, false, true));
+        CHECK_EQ(host_present_drops(), 1u);
+        CHECK_EQ(host_present_test_in_flight(), 2u); // a repeat of frame 2 took its place
+        CHECK(!host_present_test_released(3));
+        fake.complete();
+        CHECK(host_present_test_released(3));
+        CHECK_EQ(host_present_unique_completed(), 2u);
     }
     {
-        // Overtaken: frame 2 completed and frame 1, committed before it, did not.
+        // Overtaken on that device: frame 2 completed and frame 1, committed before
+        // it, did not.
         PresentFake fake;
         host_present_test_begin(false, false, 3);
         host_present_test_seal(1, HOST_SCREEN_MENU, false);
         CHECK(host_present_test_window_wake(0));
-        fake.commit();
+        fake.commit(0.5);
         host_present_test_seal(2, HOST_SCREEN_MENU, false);
-        CHECK(host_present_test_window_wake(0.1));
-        fake.commit();
+        CHECK(host_present_test_window_wake(0.6));
+        fake.commit(1.1);
         CHECK_EQ(host_present_test_flight_count(), 2u);
         host_present_test_command_done(2);
-        CHECK(host_present_test_window_wake(1.9, false, true));
+        CHECK(host_present_test_window_wake(2.4, false, true));
         CHECK_EQ(host_present_drops(), 0u);
-        CHECK(host_present_test_window_wake(2.0, false, true));
+        CHECK(host_present_test_window_wake(2.5, false, true));
         CHECK_EQ(host_present_drops(), 2u);
         CHECK_EQ(host_present_test_flight_count(), 0u);
         CHECK(!host_present_test_released(1));
         fake.complete();
         CHECK(host_present_test_released(1));
         CHECK(host_present_test_released(2));
+        CHECK_EQ(host_present_unique_completed(), 0u);
+    }
+}
+// A device whose commits return at once (Metal, a Vulkan GPU) runs a frame's work
+// after its commit, in order, so a frame that never completes holds back every
+// frame behind it and nothing overtakes it. It is lost 2 s after its commit, as
+// is one whose commit alone took long (the worker suspended mid-commit while the
+// window was hidden): one slow commit does not make the device a synchronous one.
+static void test_stuck_frame_on_an_asynchronous_device_is_lost_after_2s() {
+    for (double commit_seconds : {0.0, 5.0}) {
+        PresentFake fake;
+        host_present_test_begin(false, false);
+        host_present_test_seal(1, HOST_SCREEN_MENU, false);
+        CHECK(host_present_test_window_wake(0));
+        fake.commit(commit_seconds);
+        CHECK(host_present_test_window_wake(commit_seconds + 1.9, false, true));
+        CHECK_EQ(host_present_drops(), 0u);
+        CHECK_EQ(host_present_test_in_flight(), 1u);
+        CHECK(host_present_test_window_wake(commit_seconds + 2.0, false, true));
+        CHECK_EQ(host_present_drops(), 1u);
+        CHECK(!host_present_test_released(1));
+        fake.complete();
+        CHECK(host_present_test_released(1));
         CHECK_EQ(host_present_unique_completed(), 0u);
     }
 }
@@ -7521,6 +7559,7 @@ static void test_presentation_service() {
     test_windowed_drawable_handler_and_completion_fallback();
     test_windowed_duration_pacing_selector();
     test_slow_gpu_is_not_a_lost_frame();
+    test_stuck_frame_on_an_asynchronous_device_is_lost_after_2s();
     test_guest_allocation_outside_presenter_lock();
     test_presenter_menu_ui_and_movie_pixels();
     test_newest_sealed_wins_and_oldest_drops();

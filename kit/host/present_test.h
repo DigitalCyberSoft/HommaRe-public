@@ -32,3 +32,6 @@ bool host_present_test_input_legacy();
 // completion acknowledgement) through the installed gpu::Device - a
 // gpu::FakeDevice in tests - with a drawable from `chain`.
 void host_present_test_commit_swapchain(gpu::Swapchain chain);
+// Set the fake presenter's clock as a tick would, without ticking: time that
+// passes while the worker is inside a commit.
+void host_present_test_set_clock(double ts);
