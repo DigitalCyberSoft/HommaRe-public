@@ -123,7 +123,7 @@ struct GameEntry: Identifiable {
 
 struct ImportProgress: Equatable {
     enum Phase {
-        case copying, checking, extracting, verifying, patching
+        case copying, checking, extracting, verifying, patching, downloading
     }
 
     var name: String
@@ -163,6 +163,34 @@ final class LauncherModel {
     /// The choice in Settings: a code of L10n.languages, or nil for the system's.
     private(set) var languageChoice = L10n.chosen
     var settingsShown = false
+    /// The GOG.com panel (LauncherGogView.swift): sign in, the account's
+    /// games, download one straight into the app.
+    var gogShown = false
+    /// GOG's sign-in page is up.
+    var gogLoginShown = false
+    /// The signed-in GOG account's name ("" when GOG gave none), nil when no one is.
+    private(set) var gogAccount: String? = GogSession.account
+    /// The GOG ids of the account's games, nil until known.
+    private(set) var gogOwned: Set<String>?
+    /// A sign-in or a look at the library is under way.
+    private(set) var gogBusy = false
+    /// What went wrong in the GOG panel, shown there.
+    var gogError: String?
+    /// The language of the game's files a download brings (a code of `gogLanguages`).
+    var gogLanguage = L10n.language {
+        didSet { if gogLanguage != oldValue { refreshGogSizes() } }
+    }
+    /// The languages a download from GOG.com is offered in: those every
+    /// installer has a manifest for ("gog-<id>-<code>.json"), whose files are
+    /// checked against it. GOG has all ten; the others wait for manifests.
+    var gogLanguages: [L10n.Language] {
+        let installers = config.installers ?? []
+        return L10n.languages.filter { language in
+            !installers.isEmpty && installers.allSatisfy { $0.manifests.contains { $0.hasSuffix("-\(language.code).json") } }
+        }
+    }
+    /// About how much each installer's download is in `gogLanguage` (InstallerSpec.id).
+    private(set) var gogSizes: [String: Int64] = [:]
     /// The game's frame and energy choices (mods/settings_file.h): stored in
     /// the profile's mod-settings.json, read by the game when it starts.
     private(set) var frameLimit = LauncherModel.displaySetting(LauncherModel.frameLimitKey, 2)
@@ -818,6 +846,179 @@ final class LauncherModel {
     }
     #endif
 
+    // MARK: GOG.com
+
+    func showGog() {
+        guard importing == nil else { return }
+        let offered = gogLanguages.map(\.code)
+        if !offered.contains(gogLanguage) {
+            gogLanguage = offered.contains(L10n.language) ? L10n.language : offered.contains("en") ? "en" : offered.first ?? "en"
+        }
+        gogError = nil
+        settingsShown = false
+        gogShown = true
+        refreshGogLibrary()
+        refreshGogSizes()
+    }
+
+    /// GOG's sign-in page came back with `code`.
+    func gogSignedIn(code: String) {
+        gogLoginShown = false
+        gogBusy = true
+        gogError = nil
+        Task { [weak self] in
+            do {
+                let name = try await GogSession.shared.signIn(code: code)
+                self?.gogAccount = name
+                self?.gogBusy = false
+                self?.refreshGogLibrary()
+            } catch {
+                self?.gogBusy = false
+                self?.gogError = L10n.gogSignInFailed(error.localizedDescription)
+            }
+        }
+    }
+
+    func gogSignOut() {
+        GogSession.signOut()
+        gogAccount = nil
+        gogOwned = nil
+    }
+
+    /// Which of the installers' products the signed-in account owns.
+    func refreshGogLibrary() {
+        guard gogAccount != nil, !gogBusy else { return }
+        gogBusy = true
+        Task { [weak self] in
+            do {
+                let owned = try await GogSession.shared.owned()
+                self?.gogOwned = owned
+            } catch let e as GogFailure where e.signedOut {
+                self?.gogAccount = nil
+                self?.gogOwned = nil
+                self?.gogError = e.errorDescription
+            } catch {
+                self?.gogError = error.localizedDescription
+            }
+            self?.gogBusy = false
+        }
+    }
+
+    /// The sizes of the downloads in the chosen language (GOG's public build data).
+    private func refreshGogSizes() {
+        let language = gogLanguage
+        for installer in config.installers ?? [] {
+            Task { [weak self] in
+                guard let built = try? await GogDepots.build(for: installer), self?.gogLanguage == language else { return }
+                self?.gogSizes[installer.id] = GogDepots.estimate(built.1, language: language)
+            }
+        }
+    }
+
+    /// Downloads `installer`'s games from GOG.com into the Games folder;
+    /// `source` resumes an unfinished download (its build and language).
+    func downloadFromGog(_ installer: InstallerSpec, source: GogSource? = nil) {
+        guard importing == nil, let base = Self.importBase() else { return }
+        let config = self.config
+        let manifestDir = self.manifestDir
+        let language = source?.language ?? gogLanguage
+        gogShown = false
+        importing = ImportProgress(name: installer.title?.text ?? installer.folder, phase: .checking, current: "GOG.com")
+        let update = { @MainActor [weak self] (p: ImportProgress) in
+            if self?.importing != nil { self?.importing = p }
+        }
+        let done = { @MainActor [weak self] (result: Result<Void, Error>) in
+            guard let self else { return }
+            self.importing = nil
+            switch result {
+            case .success:
+                if let id = installer.games.first(where: { id in self.entries.contains { $0.id == id && $0.playableHere } })
+                    ?? installer.games.first {
+                    self.selectedID = id
+                }
+            case .failure(let error as GogFailure) where error.signedOut:
+                self.gogAccount = nil
+                self.gogOwned = nil
+                self.gogError = error.errorDescription
+                self.gogShown = true
+            case .failure(let error) where !(error is CancellationError):
+                self.notice = L10n.installFailed(error.localizedDescription)
+            case .failure:
+                break
+            }
+            self.refresh()
+        }
+        importTask = Task.detached(priority: .userInitiated) {
+            let result = await Self.gogInstall(installer, language: language, buildID: source?.build, config: config,
+                                               manifestDir: manifestDir, base: base) { p in
+                Task { @MainActor in update(p) }
+                return !Task.isCancelled
+            }
+            await done(result)
+        }
+    }
+
+    nonisolated private static func gogInstall(_ installer: InstallerSpec, language: String, buildID: String?,
+                                               config: LauncherConfig, manifestDir: URL?, base: URL,
+                                               progress: (ImportProgress) -> Bool) async -> Result<Void, Error> {
+        do {
+            guard try await GogSession.shared.owned().contains(installer.gogId) else {
+                throw GogFailure(errorDescription: L10n.gogNotInLibrary(installer.title?.text ?? installer.folder))
+            }
+            let plan = try await GogDepots.plan(installer: installer, language: language, buildID: buildID, config: config,
+                                                manifestDir: manifestDir, base: base) { _ in !Task.isCancelled }
+            return await GogDownloader.run(plan, progress: progress)
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// What a download of `spec` ("<installer id>[:<language>]") would bring,
+    /// from GOG's public build data, in the log: no sign-in, nothing
+    /// downloaded (RECOMP_LAUNCHER_GOG_PLAN).
+    func logGogPlan(_ spec: String) {
+        let parts = spec.split(separator: ":").map(String.init)
+        let log = { (s: String) in FileHandle.standardError.write(Data("[launcher] gog plan: \(s)\n".utf8)) }
+        guard let id = parts.first, let installer = (config.installers ?? []).first(where: { $0.id == id }),
+              let base = Self.importBase() else { return log("no installer \(spec)") }
+        let language = parts.count > 1 ? parts[1] : gogLanguage
+        let config = self.config
+        let manifestDir = self.manifestDir
+        Task.detached {
+            do {
+                let plan = try await GogDepots.plan(installer: installer, language: language, config: config,
+                                                    manifestDir: manifestDir, base: base) { _ in true }
+                var lines = plan.files.map { f in
+                    "  \(f.path) \(f.size) \(f.chunks.count) \(f.sha256 == nil ? "md5" : "sha256") -> "
+                        + GogDownloader.place(f.path, in: plan.dest).path.dropFirst(plan.dest.path.count + 1)
+                }
+                lines.insert("\(installer.id) \(language): build \(plan.source.build), manifest \(plan.manifestName ?? "none"), "
+                             + "\(plan.files.count) files, \(plan.bytes) bytes, "
+                             + "\(plan.files.filter { $0.sha256 != nil }.count) with SHA-256, "
+                             + "\(plan.files.reduce(0) { $0 + $1.chunks.count }) chunks -> \(plan.dest.path)", at: 0)
+                lines.forEach(log)
+            } catch {
+                log("\(installer.id) \(language) failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Picks up an install the selected game's folder says is unfinished: a
+    /// download from GOG.com downloads on, an installer unpacks on.
+    func resumeInstall() {
+        guard let entry = selected, case .interrupted(let setup) = entry.state else { return }
+        if let root = entry.root, let marker = InstallMarker.read(root), let gog = marker.gog,
+           let installer = (config.installers ?? []).first(where: { $0.id == marker.installer }) {
+            downloadFromGog(installer, source: gog)
+            return
+        }
+        #if os(macOS) || RECOMP_INNOEXTRACT_LIB
+        resumeFromInstaller(setup, entry: entry)
+        #else
+        notice = L10n.installerOnPhone
+        #endif
+    }
+
     #if os(macOS) || RECOMP_INNOEXTRACT_LIB
     #if os(iOS)
     /// The GOG installers in what the player picked, installed one after
@@ -914,9 +1115,8 @@ final class LauncherModel {
         }
     }
 
-    /// Picks up an install the selected game's folder says is unfinished.
-    func resumeInstall() {
-        guard let entry = selected, case .interrupted(let setup) = entry.state else { return }
+    /// Unpacks on from the installer an unfinished install came from.
+    private func resumeFromInstaller(_ setup: String, entry: GameEntry) {
         #if os(iOS)
         if let root = entry.root, let marker = InstallMarker.read(root) { reopenAccess(marker) }
         #endif

@@ -181,3 +181,10 @@ void homm5_msgbox_setup(X86 *c);
  * the base game's 004432d0). */
 void homm5_gs_str_read(X86 *c);
 #define FN_00443240 homm5_gs_str_read
+
+/* 00419a30: the GS SDK's login and 00e06e30: ProcessLoginRouterResult (the
+ * base game's 00419ae0 and 00b31380); native/gs_login.c. */
+void homm5_gs_login(X86 *c);
+#define FN_00419a30 homm5_gs_login
+void homm5_gs_login_result(X86 *c);
+#define FN_00e06e30 homm5_gs_login_result

@@ -377,6 +377,12 @@ void fn_00557470(X86 *c);
         {0x00423a66u, 132}, {0x004224aau, 132}, {0x00428e9fu, 132}, {0x00430624u, 36}, \
         {0x004260fau, 16}, {0x004235d6u, 16}, {0x00425ba0u, 36}, {0x004262b7u, 16},
 
+/* The GS login (native/gs_login.c): the SDK's login entry, reached from
+ * ProcessLogin (00e0e0d0) through the thunk 00419530, and
+ * ProcessLoginRouterResult. */
+#define HOMM5_FN_GS_LOGIN fn_00419c20
+#define HOMM5_FN_GS_LOGIN_RESULT fn_00e0e500
+
 /* ---- ubi.com screens (native/screens_ubi.c): Tribes of the East 3.1 ----
  * research notes lan/ubi-screens-expansions.md. Inner offsets = base (no NS_UBI_UL_* etc. needed). */
 #define NS_UBI_VT_LOGIN         0x00f759b0  /* base 00fc2cb0; V RTTI CMPRegisterScreen IScreen */

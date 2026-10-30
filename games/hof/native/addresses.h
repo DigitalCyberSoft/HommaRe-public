@@ -219,6 +219,11 @@
 #define NS_MENU_REACTION 0x008b0a30     /* V hash; ECX = screen+0x168 */
 #define NS_MENU_SWITCH 0x008b0df0       /* V vt 00fbf4c0 slot 0; ECX = screen+0x170; RET 4; index 0..9 only */
 #define NS_MENU_CREDITS 0x00947150      /* V queues CCreateCreditsScreenCmd (vt 00fc8340) */
+/* V the main menu's "options" handler (registered by name in 008b1b90); ECX =
+ * screen, RET 4 (the argument unused): switch(3), which in HoF only hides the
+ * panel (no case 3, base 008ad570 opens Options there), then the options'
+ * setup and CCreateGameOptionsScreen queued (00878380). */
+#define NS_MENU_OPTIONS 0x008b1210
 #define NS_MENU_EXIT 0x00820030         /* V hash */
 #define NS_PROFILE_VALID 0x0093f940     /* V hash */
 #define NS_PROFILE_NAME 0x0093f990      /* V hash */
@@ -381,6 +386,12 @@
         {0x0042723au, 36}, {0x004272b4u, 36}, {0x0042733fu, 132}, {0x0042383eu, 132}, \
         {0x00423876u, 132}, {0x004222bau, 132}, {0x00428cafu, 132}, {0x00430434u, 36}, \
         {0x00425f0au, 16}, {0x004233e6u, 16}, {0x004259b0u, 36}, {0x004260c7u, 16},
+
+/* The GS login (native/gs_login.c): the SDK's login entry, reached from
+ * ProcessLogin (00e06a10) through the thunk 00419340, and
+ * ProcessLoginRouterResult. */
+#define HOMM5_FN_GS_LOGIN fn_00419a30
+#define HOMM5_FN_GS_LOGIN_RESULT fn_00e06e30
 
 /* ---- ubi.com screens (native/screens_ubi.c): Hammers of Fate 2.1 ----
  * research notes lan/ubi-screens-expansions.md. Base 1.60 value in the comment. */

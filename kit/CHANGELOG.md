@@ -49,6 +49,22 @@
 - `RECOMP_AUTO_KEYS` takes `text:...`, typed into such a prompt.
 - The settings menu's TrueType canvas moved to `runtime/gdi32_canvas.h`, shared with it.
 
+## A GS login without the password (ubi-gs)
+
+- `runtime/gs_login.cpp`: when a GS title's server list came from a server the player
+  chose, the password its router LOGIN carries is a token instead,
+  base64url(scrypt(password, "ubi-gs login v1\0" + server id + "\0" + lower(name),
+  N 2^13, r 8, p 1, 12 bytes)), 16 characters. The server id is servers.ini's
+  `[Servers] ServerID=<hex>`, else the chosen address (`host:port`), which the stand-in
+  reads from the body the game gets.
+- A server whose servers.ini carries `LoginNonce=<hex>` gets `~r:` + token once
+  (registration) and then `~1:` + base64url(HMAC-SHA256(V, nonce)[0..12]), V =
+  HMAC-SHA256(token, "ubi-gs verifier v1"); the profile's `ubi-gs-logins.txt` keeps
+  which server, name and token fingerprint registered (a refused `~1:` drops its line).
+- `native_seam.h`: `recomp_gs_login_password` and `recomp_gs_login_result`, for the
+  game's native hooks on its SDK's login and the router's answer.
+- `sha256.h` gives the raw digest (`Sha256::digest`).
+
 ## Linux
 
 - The kit builds and runs on Linux (x86-64): Vulkan for Direct3D 9, GPU skinning
