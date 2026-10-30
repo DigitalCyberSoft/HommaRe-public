@@ -6246,9 +6246,10 @@ static void test_slow_gpu_is_not_a_lost_frame() {
         CHECK(host_present_test_released(3));
         CHECK_EQ(host_present_unique_completed(), 2u);
     }
-    {
+    for (bool inside_commit : {false, true}) {
         // Overtaken on that device: frame 2 completed and frame 1, committed before
-        // it, did not.
+        // it, did not. Frame 2's handler may run before its commit returns (Metal's
+        // can); it still counts.
         PresentFake fake;
         host_present_test_begin(false, false, 3);
         host_present_test_seal(1, HOST_SCREEN_MENU, false);
@@ -6256,9 +6257,12 @@ static void test_slow_gpu_is_not_a_lost_frame() {
         fake.commit(0.5);
         host_present_test_seal(2, HOST_SCREEN_MENU, false);
         CHECK(host_present_test_window_wake(0.6));
+        fake.device.set_manual_completion(!inside_commit);
         fake.commit(1.1);
+        fake.device.set_manual_completion(true);
         CHECK_EQ(host_present_test_flight_count(), 2u);
-        host_present_test_command_done(2);
+        if (!inside_commit)
+            host_present_test_command_done(2);
         CHECK(host_present_test_window_wake(2.4, false, true));
         CHECK_EQ(host_present_drops(), 0u);
         CHECK(host_present_test_window_wake(2.5, false, true));

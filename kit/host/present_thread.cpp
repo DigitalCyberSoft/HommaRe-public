@@ -483,7 +483,9 @@ struct Service : std::enable_shared_from_this<Service> {
         f->gpu = true;
         f->success = f->success && success;
         f->gpu_ts = ts;
-        if (f->command_id)
+        // Not yet stamped when the handler runs before commit returns (Metal can):
+        // commit_present counts it then.
+        if (f->command_commit_ts >= 0)
             completed_commit_ts = std::max(completed_commit_ts, f->command_commit_ts);
         // Slow GPU work is not a lost display callback. Give the ready
         // drawable two more refreshes without releasing its target early.
@@ -555,15 +557,17 @@ struct Service : std::enable_shared_from_this<Service> {
         double commit_start;
         {
             std::lock_guard lock(mutex);
+            f->command_id = cb.id;
             commit_start = now();
         }
         device->commit(cb);
         {
             // Stamped once commit returns: the GPU has the work from here on (see tick).
             std::lock_guard lock(mutex);
-            f->command_id = cb.id;
             f->command_commit_ts = now();
             note_commit(f->command_commit_ts - commit_start);
+            if (f->gpu) // its completion handler ran inside commit
+                completed_commit_ts = std::max(completed_commit_ts, f->command_commit_ts);
         }
     }
     // The last kCommitHistory commits' durations, to tell a device that presents
@@ -942,7 +946,7 @@ struct Service : std::enable_shared_from_this<Service> {
                     // a slow frame read as lost before its completion handler could run. A
                     // frame still being committed has no age yet. How long it may take
                     // depends on whether the device presents synchronously (lost_after).
-                    const bool committed = pending->command_id != 0;
+                    const bool committed = pending->command_commit_ts >= 0;
                     const double gpu_age = committed ? ts - pending->command_commit_ts : 0.0;
                     if (!pending->gpu && committed && gpu_age >= lost_after(*pending))
                         lost = true;
